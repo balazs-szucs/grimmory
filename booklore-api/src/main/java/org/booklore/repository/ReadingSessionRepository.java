@@ -4,6 +4,7 @@ import org.booklore.model.dto.*;
 import org.booklore.model.entity.ReadingSessionEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -125,6 +126,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSessionEn
             """)
     List<GenreStatisticsDto> findGenreStatisticsByUser(@Param("userId") Long userId);
 
+    @EntityGraph(attributePaths = {"book", "book.metadata"})
     @Query("""
             SELECT rs
             FROM ReadingSessionEntity rs
