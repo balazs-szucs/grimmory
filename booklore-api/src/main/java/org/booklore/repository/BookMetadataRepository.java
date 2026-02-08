@@ -1,6 +1,7 @@
 package org.booklore.repository;
 
 import org.booklore.model.entity.*;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,7 @@ import java.util.List;
 
 public interface BookMetadataRepository extends JpaRepository<BookMetadataEntity, Long> {
 
+    @EntityGraph(attributePaths = {"authors", "categories", "moods", "tags"})
     @Query("SELECT m FROM BookMetadataEntity m WHERE m.bookId IN :bookIds")
     List<BookMetadataEntity> getMetadataForBookIds(@Param("bookIds") List<Long> bookIds);
 
