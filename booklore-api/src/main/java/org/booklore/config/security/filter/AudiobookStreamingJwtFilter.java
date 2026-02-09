@@ -1,5 +1,10 @@
 package org.booklore.config.security.filter;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
 import org.booklore.config.security.JwtUtils;
 import org.booklore.config.security.service.DynamicOidcJwtProcessor;
 import org.booklore.config.security.userdetails.UserAuthenticationDetails;
@@ -9,11 +14,6 @@ import org.booklore.model.dto.settings.OidcProviderDetails;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.repository.UserRepository;
 import org.booklore.service.appsettings.AppSettingService;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.AllArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -81,7 +81,7 @@ public class AudiobookStreamingJwtFilter extends OncePerRequestFilter {
 
     private void authenticateLocalUser(String token, HttpServletRequest request) {
         Long userId = jwtUtils.extractUserId(token);
-        BookLoreUserEntity entity = userRepository.findById(userId)
+        BookLoreUserEntity entity = userRepository.findByIdWithDetails(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));
         BookLoreUser user = bookLoreUserTransformer.toDTO(entity);
         UsernamePasswordAuthenticationToken authentication =
@@ -102,7 +102,7 @@ public class AudiobookStreamingJwtFilter extends OncePerRequestFilter {
         OidcProviderDetails providerDetails = appSettingService.getAppSettings().getOidcProviderDetails();
         OidcProviderDetails.ClaimMapping claimMapping = providerDetails.getClaimMapping();
         String username = claimsSet.getStringClaim(claimMapping.getUsername());
-        BookLoreUserEntity entity = userRepository.findByUsername(username)
+        BookLoreUserEntity entity = userRepository.findByUsernameWithDetails(username)
                 .orElseThrow(() -> new UsernameNotFoundException("OIDC user not found: " + username));
         BookLoreUser user = bookLoreUserTransformer.toDTO(entity);
 

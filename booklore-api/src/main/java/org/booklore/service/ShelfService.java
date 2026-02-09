@@ -1,5 +1,6 @@
 package org.booklore.service;
 
+import lombok.AllArgsConstructor;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.ApiError;
 import org.booklore.mapper.BookMapper;
@@ -14,15 +15,16 @@ import org.booklore.model.enums.ShelfType;
 import org.booklore.repository.BookRepository;
 import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserRepository;
-import lombok.AllArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 @AllArgsConstructor
 @Service
+@Transactional(readOnly = true)
 public class ShelfService {
 
     private final ShelfRepository shelfRepository;
@@ -32,6 +34,7 @@ public class ShelfService {
     private final AuthenticationService authenticationService;
     private final UserRepository userRepository;
 
+    @Transactional
     public Shelf createShelf(ShelfCreateRequest request) {
         Long userId = getAuthenticatedUserId();
         if (shelfRepository.existsByUserIdAndName(userId, request.getName())) {
@@ -50,6 +53,7 @@ public class ShelfService {
         return shelfMapper.toShelf(shelfRepository.save(shelfEntity));
     }
 
+    @Transactional
     public Shelf updateShelf(Long id, ShelfCreateRequest request) {
         ShelfEntity shelfEntity = findShelfByIdOrThrow(id);
         if (request.isPublicShelf() && !authenticationService.getAuthenticatedUser().getPermissions().isAdmin()) {
@@ -73,6 +77,7 @@ public class ShelfService {
         return shelfMapper.toShelf(findShelfByIdOrThrow(shelfId));
     }
 
+    @Transactional
     public void deleteShelf(Long shelfId) {
         shelfRepository.deleteById(shelfId);
     }

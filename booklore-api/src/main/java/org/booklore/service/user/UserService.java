@@ -18,9 +18,12 @@ import org.booklore.repository.LibraryRepository;
 import org.booklore.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,15 +37,17 @@ public class UserService {
     private final ObjectMapper objectMapper;
     private final BookLoreUserTransformer bookLoreUserTransformer;
 
+    @Transactional(readOnly = true)
     public List<BookLoreUser> getBookLoreUsers() {
-        return userRepository.findAll()
+        return userRepository.findAllWithDetails()
                 .stream()
                 .map(bookLoreUserTransformer::toDTO)
                 .collect(Collectors.toList());
     }
 
+    @Transactional
     public BookLoreUser updateUser(Long id, UserUpdateRequest updateRequest) {
-        BookLoreUserEntity user = userRepository.findById(id).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(id));
+        BookLoreUserEntity user = userRepository.findByIdWithDetails(id).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(id));
         user.setName(updateRequest.getName());
         user.setEmail(updateRequest.getEmail());
 
@@ -52,7 +57,7 @@ public class UserService {
 
         if (updateRequest.getAssignedLibraries() != null && getMyself().getPermissions().isAdmin()) {
             List<Long> libraryIds = updateRequest.getAssignedLibraries();
-            List<LibraryEntity> updatedLibraries = libraryRepository.findAllById(libraryIds);
+            Set<LibraryEntity> updatedLibraries = new HashSet<>(libraryRepository.findAllById(libraryIds));
             user.setLibraries(updatedLibraries);
         }
 
@@ -60,6 +65,7 @@ public class UserService {
         return bookLoreUserTransformer.toDTO(user);
     }
 
+    @Transactional
     public void deleteUser(Long id) {
         BookLoreUserEntity userToDelete = userRepository.findById(id).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(id));
         BookLoreUser currentUser = authenticationService.getAuthenticatedUser();
@@ -73,8 +79,9 @@ public class UserService {
         userRepository.delete(userToDelete);
     }
 
+    @Transactional(readOnly = true)
     public BookLoreUser getBookLoreUser(Long id) {
-        BookLoreUserEntity user = userRepository.findById(id).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(id));
+        BookLoreUserEntity user = userRepository.findByIdWithDetails(id).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(id));
         return bookLoreUserTransformer.toDTO(user);
     }
 
@@ -82,10 +89,11 @@ public class UserService {
         return authenticationService.getAuthenticatedUser();
     }
 
+    @Transactional
     public void changePassword(ChangePasswordRequest changePasswordRequest) {
         BookLoreUser bookLoreUser = authenticationService.getAuthenticatedUser();
 
-        BookLoreUserEntity bookLoreUserEntity = userRepository.findById(bookLoreUser.getId())
+        BookLoreUserEntity bookLoreUserEntity = userRepository.findByIdWithSettings(bookLoreUser.getId())
                 .orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(bookLoreUser.getId()));
 
         if (bookLoreUserEntity.getPermissions().isPermissionDemoUser()) {
@@ -109,8 +117,9 @@ public class UserService {
         userRepository.save(bookLoreUserEntity);
     }
 
+    @Transactional
     public void changeUserPassword(ChangeUserPasswordRequest request) {
-        BookLoreUserEntity userEntity = userRepository.findById(request.getUserId()).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(request.getUserId()));
+        BookLoreUserEntity userEntity = userRepository.findByIdWithSettings(request.getUserId()).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(request.getUserId()));
         if (!meetsMinimumPasswordRequirements(request.getNewPassword())) {
             throw ApiError.PASSWORD_TOO_SHORT.createException();
         }
@@ -118,8 +127,9 @@ public class UserService {
         userRepository.save(userEntity);
     }
 
+    @Transactional
     public void updateUserSetting(Long userId, UpdateUserSettingRequest request) {
-        BookLoreUserEntity user = userRepository.findById(userId).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(userId));
+        BookLoreUserEntity user = userRepository.findByIdWithSettings(userId).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(userId));
 
         String key = request.getKey();
         Object value = request.getValue();

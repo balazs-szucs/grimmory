@@ -1,5 +1,12 @@
 package org.booklore.config.security.filter;
 
+import com.nimbusds.jwt.JWTClaimsSet;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.security.JwtUtils;
 import org.booklore.config.security.service.DynamicOidcJwtProcessor;
 import org.booklore.config.security.userdetails.UserAuthenticationDetails;
@@ -12,13 +19,6 @@ import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.repository.UserRepository;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.user.UserProvisioningService;
-import com.nimbusds.jwt.JWTClaimsSet;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -89,7 +89,7 @@ public class DualJwtAuthenticationFilter extends OncePerRequestFilter {
 
     private void authenticateLocalUser(String token, HttpServletRequest request) {
         Long userId = jwtUtils.extractUserId(token);
-        BookLoreUserEntity entity = userRepository.findById(userId).orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));
+        BookLoreUserEntity entity = userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));
         BookLoreUser user = bookLoreUserTransformer.toDTO(entity);
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(user, null, null);
         authentication.setDetails(new UserAuthenticationDetails(request, user.getId()));
@@ -114,7 +114,7 @@ public class DualJwtAuthenticationFilter extends OncePerRequestFilter {
             OidcAutoProvisionDetails provisionDetails = appSettingService.getAppSettings().getOidcAutoProvisionDetails();
             boolean autoProvision = provisionDetails != null && provisionDetails.isEnableAutoProvisioning();
 
-            BookLoreUserEntity entity = userRepository.findByUsername(username)
+            BookLoreUserEntity entity = userRepository.findByUsernameWithDetails(username)
                     .orElseGet(() -> {
                         if (!autoProvision) {
                             log.warn("User '{}' not found and auto-provisioning is disabled.", username);
@@ -123,7 +123,7 @@ public class DualJwtAuthenticationFilter extends OncePerRequestFilter {
                         Object lock = userLocks.computeIfAbsent(username, k -> new Object());
                         try {
                             synchronized (lock) {
-                                return userRepository.findByUsername(username)
+                                return userRepository.findByUsernameWithDetails(username)
                                         .orElseGet(() -> {
                                             log.info("Provisioning new OIDC user '{}'", username);
                                             return userProvisioningService.provisionOidcUser(username, email, name, provisionDetails);

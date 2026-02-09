@@ -33,7 +33,7 @@ public class DefaultSettingInitializer {
         }
         synchronized (("user-init-" + bookLoreUser.getId()).intern()) {
             if (initializedUsers.contains(bookLoreUser.getId())) return;
-            BookLoreUserEntity user = userRepository.findById(bookLoreUser.getId()).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+            BookLoreUserEntity user = userRepository.findByIdWithSettings(bookLoreUser.getId()).orElseThrow(() -> new UsernameNotFoundException("User not found"));
             for (UserSettingKey key : settingsProvider.getAllKeys()) {
                 addSettingIfMissing(user, key, settingsProvider.getDefaultValue(key));
             }

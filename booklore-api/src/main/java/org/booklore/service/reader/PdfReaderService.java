@@ -1,13 +1,5 @@
 package org.booklore.service.reader;
 
-import org.booklore.exception.ApiError;
-import org.booklore.model.dto.response.PdfBookInfo;
-import org.booklore.model.dto.response.PdfOutlineItem;
-import org.booklore.model.entity.BookEntity;
-import org.booklore.model.entity.BookFileEntity;
-import org.booklore.model.enums.BookFileType;
-import org.booklore.repository.BookRepository;
-import org.booklore.util.FileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
@@ -18,6 +10,14 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocume
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.booklore.exception.ApiError;
+import org.booklore.model.dto.response.PdfBookInfo;
+import org.booklore.model.dto.response.PdfOutlineItem;
+import org.booklore.model.entity.BookEntity;
+import org.booklore.model.entity.BookFileEntity;
+import org.booklore.model.enums.BookFileType;
+import org.booklore.repository.BookRepository;
+import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
@@ -27,7 +27,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -104,7 +107,7 @@ public class PdfReaderService {
     }
 
     private Path getBookPath(Long bookId, String bookType) {
-        BookEntity bookEntity = bookRepository.findById(bookId)
+        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
         if (bookType != null) {
             BookFileType requestedType = BookFileType.valueOf(bookType.toUpperCase());

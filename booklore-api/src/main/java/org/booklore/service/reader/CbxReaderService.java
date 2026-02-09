@@ -1,12 +1,5 @@
 package org.booklore.service.reader;
 
-import org.booklore.exception.ApiError;
-import org.booklore.model.dto.response.CbxPageInfo;
-import org.booklore.model.entity.BookEntity;
-import org.booklore.model.entity.BookFileEntity;
-import org.booklore.model.enums.BookFileType;
-import org.booklore.repository.BookRepository;
-import org.booklore.util.FileUtils;
 import com.github.junrar.Archive;
 import com.github.junrar.rarfile.FileHeader;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +8,13 @@ import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.pdfbox.io.IOUtils;
+import org.booklore.exception.ApiError;
+import org.booklore.model.dto.response.CbxPageInfo;
+import org.booklore.model.entity.BookEntity;
+import org.booklore.model.entity.BookFileEntity;
+import org.booklore.model.enums.BookFileType;
+import org.booklore.repository.BookRepository;
+import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.FileNotFoundException;
@@ -134,7 +134,7 @@ public class CbxReaderService {
     }
 
     private Path getBookPath(Long bookId, String bookType) {
-        BookEntity bookEntity = bookRepository.findById(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
         if (bookType != null) {
             BookFileType requestedType = BookFileType.valueOf(bookType.toUpperCase());
             BookFileEntity bookFile = bookEntity.getBookFiles().stream()

@@ -77,15 +77,16 @@ class BookMetadataServiceConcurrencyTest {
         book2.setMetadata(new BookMetadataEntity());
 
         when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
-        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(getUserBook(1L));
-        when(bookRepository.findByIdWithBookFiles(2L)).thenReturn(getUserBook(2L));
+        when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(bookRepository.findByIdFull(1L)).thenReturn(getUserBook(1L));
+        when(bookRepository.findByIdFull(2L)).thenReturn(getUserBook(2L));
 
         bookMetadataService.bulkUpdateMetadata(request, false, false, false);
 
         verify(bookRepository, never()).findAllWithMetadataByIds(anySet());
 
-        verify(bookRepository, times(1)).findByIdWithBookFiles(1L);
-        verify(bookRepository, times(1)).findByIdWithBookFiles(2L);
+        verify(bookRepository, times(1)).findByIdFull(1L);
+        verify(bookRepository, times(1)).findByIdFull(2L);
     }
     
     private java.util.Optional<BookEntity> getUserBook(Long id) {

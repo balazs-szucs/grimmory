@@ -1,18 +1,19 @@
 package org.booklore.config.security.aspect;
 
-import org.booklore.config.security.service.AuthenticationService;
-import org.booklore.config.security.annotation.CheckBookAccess;
-import org.booklore.exception.ApiError;
-import org.booklore.model.dto.BookLoreUser;
-import org.booklore.model.entity.BookEntity;
-import org.booklore.repository.BookRepository;
-import org.booklore.service.restriction.ContentRestrictionService;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.booklore.config.security.annotation.CheckBookAccess;
+import org.booklore.config.security.service.AuthenticationService;
+import org.booklore.exception.ApiError;
+import org.booklore.model.dto.BookLoreUser;
+import org.booklore.model.entity.BookEntity;
+import org.booklore.repository.BookRepository;
+import org.booklore.service.restriction.ContentRestrictionService;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -29,6 +30,7 @@ public class BookAccessAspect {
     private final BookRepository bookRepository;
     private final ContentRestrictionService contentRestrictionService;
 
+    @Transactional(readOnly = true)
     @Before("@annotation(org.booklore.config.security.annotation.CheckBookAccess)")
     public void checkBookAccess(JoinPoint joinPoint) {
         MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();
@@ -44,7 +46,7 @@ public class BookAccessAspect {
             throw ApiError.GENERIC_BAD_REQUEST.createException("Missing or invalid book ID in method parameters.");
         }
 
-        BookEntity bookEntity = bookRepository.findById(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
         BookLoreUser user = authenticationService.getAuthenticatedUser();
 

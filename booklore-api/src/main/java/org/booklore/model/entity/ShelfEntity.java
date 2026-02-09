@@ -1,10 +1,11 @@
 package org.booklore.model.entity;
 
+import jakarta.persistence.*;
+import lombok.*;
 import org.booklore.convertor.SortConverter;
 import org.booklore.model.dto.Sort;
 import org.booklore.model.enums.IconType;
-import jakarta.persistence.*;
-import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -43,6 +44,7 @@ public class ShelfEntity {
     @Builder.Default
     private boolean isPublic = false;
 
+    @BatchSize(size = 20)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "book_shelf_mapping",

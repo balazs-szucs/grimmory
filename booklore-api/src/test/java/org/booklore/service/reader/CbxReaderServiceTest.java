@@ -1,15 +1,15 @@
 package org.booklore.service.reader;
 
-import org.booklore.exception.ApiError;
-import org.booklore.model.entity.BookEntity;
-import org.booklore.repository.BookRepository;
-import org.booklore.util.FileUtils;
 import com.github.junrar.Archive;
 import com.github.junrar.rarfile.FileHeader;
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.booklore.exception.ApiError;
+import org.booklore.model.entity.BookEntity;
+import org.booklore.repository.BookRepository;
+import org.booklore.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,7 +60,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testGetAvailablePages_CBZ_Success() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath.toString());
 
@@ -91,7 +91,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testStreamPageImage_CBZ_Success() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath.toString());
 
@@ -124,13 +124,13 @@ class CbxReaderServiceTest {
 
     @Test
     void testGetAvailablePages_CBZ_ThrowsOnMissingBook() {
-        when(bookRepository.findById(2L)).thenReturn(Optional.empty());
+        when(bookRepository.findByIdWithBookFiles(2L)).thenReturn(Optional.empty());
         assertThrows(ApiError.BOOK_NOT_FOUND.createException().getClass(), () -> cbxReaderService.getAvailablePages(2L));
     }
 
     @Test
     void testGetAvailablePages_CB7_Success() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cb7Path.toString());
 
@@ -159,7 +159,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testGetAvailablePages_CBR_Success() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbrPath.toString());
 
@@ -182,7 +182,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testStreamPageImage_CBR_Success() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbrPath.toString());
 
@@ -211,7 +211,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testStreamPageImage_PageOutOfRange_Throws() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath.toString());
 
@@ -242,7 +242,7 @@ class CbxReaderServiceTest {
     void testGetAvailablePages_UnsupportedArchive_Throws() throws Exception {
         Path unknownPath = Path.of("/tmp/test.unknown");
         Files.deleteIfExists(unknownPath);
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(unknownPath.toString());
 
@@ -255,7 +255,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testStreamPageImage_EntryNotFound_Throws() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath.toString());
 

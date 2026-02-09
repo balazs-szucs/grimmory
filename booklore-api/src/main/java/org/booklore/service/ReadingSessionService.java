@@ -1,18 +1,12 @@
 package org.booklore.service;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.ApiError;
 import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.dto.request.ReadingSessionRequest;
-import org.booklore.model.dto.response.BookCompletionHeatmapResponse;
-import org.booklore.model.dto.response.CompletionTimelineResponse;
-import org.booklore.model.dto.response.FavoriteReadingDaysResponse;
-import org.booklore.model.dto.response.GenreStatisticsResponse;
-import org.booklore.model.dto.response.PeakReadingHoursResponse;
-import org.booklore.model.dto.response.ReadingSessionHeatmapResponse;
-import org.booklore.model.dto.response.ReadingSessionResponse;
-import org.booklore.model.dto.response.ReadingSessionTimelineResponse;
-import org.booklore.model.dto.response.ReadingSpeedResponse;
+import org.booklore.model.dto.response.*;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.model.entity.ReadingSessionEntity;
@@ -21,8 +15,6 @@ import org.booklore.repository.BookRepository;
 import org.booklore.repository.ReadingSessionRepository;
 import org.booklore.repository.UserBookProgressRepository;
 import org.booklore.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -248,7 +240,9 @@ public class ReadingSessionService {
         BookLoreUser authenticatedUser = authenticationService.getAuthenticatedUser();
         Long userId = authenticatedUser.getId();
 
-        bookRepository.findById(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        if (!bookRepository.existsById(bookId)) {
+            throw ApiError.BOOK_NOT_FOUND.createException(bookId);
+        }
 
         Pageable pageable = PageRequest.of(page, 5);
         Page<ReadingSessionEntity> sessions = readingSessionRepository.findByUserIdAndBookId(userId, bookId, pageable);

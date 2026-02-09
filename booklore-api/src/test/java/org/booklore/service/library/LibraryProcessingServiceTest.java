@@ -1,5 +1,6 @@
 package org.booklore.service.library;
 
+import jakarta.persistence.EntityManager;
 import org.booklore.exception.APIException;
 import org.booklore.model.dto.settings.LibraryFile;
 import org.booklore.model.entity.BookEntity;
@@ -10,7 +11,6 @@ import org.booklore.repository.BookAdditionalFileRepository;
 import org.booklore.repository.LibraryRepository;
 import org.booklore.service.NotificationService;
 import org.booklore.task.options.RescanLibraryContext;
-import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -346,7 +346,7 @@ class LibraryProcessingServiceTest {
         book.setBookFiles(List.of(epub, pdf, image));
         libraryEntity.setBookEntities(List.of(book));
 
-        when(libraryRepository.findById(libraryId)).thenReturn(Optional.of(libraryEntity));
+        when(libraryRepository.findByIdWithBooks(libraryId)).thenReturn(Optional.of(libraryEntity));
 
         // Only epub exists on disk, pdf was removed
         LibraryFile epubOnDisk = LibraryFile.builder()
@@ -384,7 +384,7 @@ class LibraryProcessingServiceTest {
         libraryEntity.setLibraryPaths(List.of(pathEntity));
         libraryEntity.setBookEntities(Collections.emptyList());
 
-        when(libraryRepository.findById(libraryId)).thenReturn(Optional.of(libraryEntity));
+        when(libraryRepository.findByIdWithBooks(libraryId)).thenReturn(Optional.of(libraryEntity));
 
         RescanLibraryContext context = RescanLibraryContext.builder().libraryId(libraryId).build();
 
@@ -421,7 +421,7 @@ class LibraryProcessingServiceTest {
         existingBook.getPrimaryBookFile().setFileName("book1.epub");
         libraryEntity.setBookEntities(List.of(existingBook));
 
-        when(libraryRepository.findById(libraryId)).thenReturn(Optional.of(libraryEntity));
+        when(libraryRepository.findByIdWithBooks(libraryId)).thenReturn(Optional.of(libraryEntity));
         when(libraryFileHelper.getLibraryFiles(libraryEntity)).thenReturn(Collections.emptyList());
 
         RescanLibraryContext context = RescanLibraryContext.builder().libraryId(libraryId).build();
@@ -466,7 +466,7 @@ class LibraryProcessingServiceTest {
                 .fileName("book1.epub")
                 .build();
 
-        when(libraryRepository.findById(libraryId)).thenReturn(Optional.of(libraryEntity));
+        when(libraryRepository.findByIdWithBooks(libraryId)).thenReturn(Optional.of(libraryEntity));
         when(libraryFileHelper.getLibraryFiles(libraryEntity)).thenReturn(List.of(fileOnDisk));
         when(bookAdditionalFileRepository.findByLibraryId(libraryId)).thenReturn(Collections.emptyList());
         when(bookGroupingService.groupForRescan(anyList(), eq(libraryEntity)))
@@ -495,7 +495,7 @@ class LibraryProcessingServiceTest {
         libraryEntity.setLibraryPaths(List.of(pathEntity));
         libraryEntity.setBookEntities(Collections.emptyList());
 
-        when(libraryRepository.findById(libraryId)).thenReturn(Optional.of(libraryEntity));
+        when(libraryRepository.findByIdWithBooks(libraryId)).thenReturn(Optional.of(libraryEntity));
         when(libraryFileHelper.getLibraryFiles(libraryEntity)).thenReturn(Collections.emptyList());
         when(bookAdditionalFileRepository.findByLibraryId(libraryId)).thenReturn(Collections.emptyList());
         when(bookGroupingService.groupForRescan(anyList(), eq(libraryEntity)))
@@ -548,7 +548,7 @@ class LibraryProcessingServiceTest {
                 .fileName("book (with parens).epub")
                 .build();
 
-        when(libraryRepository.findById(libraryId))
+        when(libraryRepository.findByIdWithBooks(libraryId))
                 .thenReturn(Optional.of(libraryEntity))
                 .thenReturn(Optional.of(freshLibraryEntity)); // Second call returns fresh entity
         when(libraryFileHelper.getLibraryFiles(any(LibraryEntity.class))).thenReturn(List.of(fileOnDisk));
@@ -560,7 +560,7 @@ class LibraryProcessingServiceTest {
 
         libraryProcessingService.rescanLibrary(context);
 
-        verify(libraryRepository, times(2)).findById(libraryId);
+        verify(libraryRepository, times(2)).findByIdWithBooks(libraryId);
 
         verify(bookGroupingService).groupForRescan(eq(Collections.emptyList()), any(LibraryEntity.class));
     }

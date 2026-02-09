@@ -1,5 +1,10 @@
 package org.booklore.config.security.filter;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
 import org.booklore.config.security.JwtUtils;
 import org.booklore.config.security.userdetails.UserAuthenticationDetails;
 import org.booklore.mapper.custom.BookLoreUserTransformer;
@@ -7,11 +12,6 @@ import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.model.entity.UserPermissionsEntity;
 import org.booklore.repository.UserRepository;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.AllArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = getJwtFromRequest(request);
         if (token != null && jwtUtils.validateToken(token)) {
             Long userId = jwtUtils.extractUserId(token);
-            BookLoreUserEntity bookLoreUserEntity = userRepository.findById(userId).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+            BookLoreUserEntity bookLoreUserEntity = userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UsernameNotFoundException("User not found"));
             BookLoreUser bookLoreUser = bookLoreUserTransformer.toDTO(bookLoreUserEntity);
             List<GrantedAuthority> authorities = getAuthorities(bookLoreUserEntity.getPermissions());
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(bookLoreUser, null, authorities);

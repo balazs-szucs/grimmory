@@ -1,10 +1,10 @@
 package org.booklore.repository;
 
+import jakarta.transaction.Transactional;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.LibraryPathEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.projection.BookCoverUpdateProjection;
-import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -24,6 +24,32 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     @Query("SELECT b FROM BookEntity b LEFT JOIN FETCH b.bookFiles bf WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByIdWithBookFiles(@Param("id") Long id);
 
+    @Query("""
+        SELECT DISTINCT b FROM BookEntity b
+        LEFT JOIN FETCH b.metadata m
+        LEFT JOIN FETCH m.authors
+        LEFT JOIN FETCH m.categories
+        LEFT JOIN FETCH m.moods
+        LEFT JOIN FETCH m.tags
+        LEFT JOIN FETCH m.comicMetadata
+        WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)
+        """)
+    Optional<BookEntity> findByIdWithMetadata(@Param("id") Long id);
+
+    @Query("""
+        SELECT DISTINCT b FROM BookEntity b
+        LEFT JOIN FETCH b.metadata m
+        LEFT JOIN FETCH m.authors
+        LEFT JOIN FETCH m.categories
+        LEFT JOIN FETCH m.moods
+        LEFT JOIN FETCH m.tags
+        LEFT JOIN FETCH m.comicMetadata
+        LEFT JOIN FETCH b.bookFiles
+        WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)
+        """)
+    Optional<BookEntity> findByIdFull(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"bookFiles", "metadata", "library", "libraryPath"})
     @Query("SELECT b FROM BookEntity b JOIN b.bookFiles bf WHERE bf.currentHash = :currentHash AND bf.isBookFormat = true AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByCurrentHash(@Param("currentHash") String currentHash);
 
@@ -83,6 +109,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
                 LEFT JOIN FETCH b.metadata m
                 LEFT JOIN FETCH m.authors
                 LEFT JOIN FETCH m.categories
+                LEFT JOIN FETCH m.comicMetadata
                 LEFT JOIN FETCH b.shelves
                 WHERE (b.deleted IS NULL OR b.deleted = false)
             """)

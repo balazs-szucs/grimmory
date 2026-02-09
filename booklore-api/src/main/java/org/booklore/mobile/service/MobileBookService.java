@@ -1,5 +1,6 @@
 package org.booklore.mobile.service;
 
+import lombok.AllArgsConstructor;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.ApiError;
 import org.booklore.mobile.dto.MobileBookDetail;
@@ -17,7 +18,6 @@ import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserBookFileProgressRepository;
 import org.booklore.repository.UserBookProgressRepository;
 import org.booklore.service.opds.MagicShelfBookService;
-import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -320,7 +320,7 @@ public class MobileBookService {
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
-        BookEntity book = bookRepository.findById(bookId)
+        BookEntity book = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
         validateLibraryAccess(accessibleLibraryIds, book.getLibrary().getId());

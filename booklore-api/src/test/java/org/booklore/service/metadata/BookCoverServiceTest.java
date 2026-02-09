@@ -76,7 +76,7 @@ class BookCoverServiceTest {
     @Test
     void generateCustomCover_coverLocked_throws() {
         BookEntity book = mockBookEntity(2L, true);
-        when(bookRepository.findById(2L)).thenReturn(Optional.of(book));
+        when(bookRepository.findByIdWithBookFiles(2L)).thenReturn(Optional.of(book));
         when(bookRepository.findAllWithMetadataByIds(any())).thenReturn(List.of(book));
         when(appSettingService.getAppSettings()).thenReturn(mockAppSettings(true, false));
         assertThatThrownBy(() -> bookCoverService.generateCustomCover(2L))
@@ -88,7 +88,7 @@ class BookCoverServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         BookEntity book = spy(mockBookEntity(3L, false));
         doReturn(Path.of("/dummy/path")).when(book).getFullFilePath();
-        when(bookRepository.findById(3L)).thenReturn(Optional.of(book));
+        when(bookRepository.findByIdWithBookFiles(3L)).thenReturn(Optional.of(book));
         when(bookRepository.save(any())).thenReturn(book);
         when(appSettingService.getAppSettings()).thenReturn(mockAppSettings(true, false));
 
@@ -111,7 +111,7 @@ class BookCoverServiceTest {
         String url = "http://test.com/cover.jpg";
         BookEntity book = spy(mockBookEntity(4L, false));
         doReturn(Path.of("/dummy/path")).when(book).getFullFilePath();
-        when(bookRepository.findById(4L)).thenReturn(Optional.of(book));
+        when(bookRepository.findByIdWithBookFiles(4L)).thenReturn(Optional.of(book));
         when(bookRepository.save(any())).thenReturn(book);
         when(appSettingService.getAppSettings()).thenReturn(mockAppSettings(true, false));
 
@@ -139,7 +139,7 @@ class BookCoverServiceTest {
             BookEntity book = spy(mockBookEntity(5L, false));
             doReturn(Path.of("/dummy/path")).when(book).getFullFilePath();
             when(bookQueryService.findAllWithMetadataByIds(any())).thenReturn(List.of(book));
-            when(bookRepository.findById(5L)).thenReturn(Optional.of(book));
+            when(bookRepository.findByIdWithBookFiles(5L)).thenReturn(Optional.of(book));
             when(bookRepository.save(any())).thenReturn(book);
             when(appSettingService.getAppSettings()).thenReturn(mockAppSettings(true, false));
             doNothing().when(fileService).createThumbnailFromBytes(eq(5L), any());
@@ -213,7 +213,7 @@ class BookCoverServiceTest {
         try (MockedStatic<SecurityContextVirtualThread> ignored = mockStatic(SecurityContextVirtualThread.class)) {
             BookEntity book = mockBookEntity(9L, false);
             when(bookQueryService.findAllWithMetadataByIds(any())).thenReturn(List.of(book));
-            when(bookRepository.findById(9L)).thenReturn(Optional.of(book));
+            when(bookRepository.findByIdWithBookFiles(9L)).thenReturn(Optional.of(book));
             when(bookRepository.save(any())).thenReturn(book);
 
             BookFileProcessor processor = mock(BookFileProcessor.class);
@@ -250,7 +250,7 @@ class BookCoverServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         BookEntity book = spy(mockBookEntity(10L, false));
         doReturn(Path.of("/dummy/path")).when(book).getFullFilePath();
-        when(bookRepository.findById(10L)).thenReturn(Optional.of(book));
+        when(bookRepository.findByIdWithBookFiles(10L)).thenReturn(Optional.of(book));
         when(bookRepository.save(any())).thenReturn(book);
         when(appSettingService.getAppSettings()).thenReturn(mockAppSettings(true, false));
 
