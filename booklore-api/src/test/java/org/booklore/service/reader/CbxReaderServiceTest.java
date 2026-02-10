@@ -91,7 +91,7 @@ class CbxReaderServiceTest {
 
     @Test
     void testGetAvailablePages_CBZ_Fallback_Success() throws Exception {
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath.toString());
 
