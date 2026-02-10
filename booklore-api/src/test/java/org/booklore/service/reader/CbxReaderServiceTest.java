@@ -90,6 +90,53 @@ class CbxReaderServiceTest {
     }
 
     @Test
+    void testGetAvailablePages_CBZ_Fallback_Success() throws Exception {
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(bookEntity));
+        try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath.toString());
+
+            // Unicode enabled -> throws Exception
+            ZipFile zipFileFail = mock(ZipFile.class);
+            when(zipFileFail.getEntries()).thenThrow(new IllegalArgumentException("Corrupt extra fields"));
+
+            // Unicode disabled -> returns valid entries
+            ZipArchiveEntry entry1 = new ZipArchiveEntry("1.jpg");
+            Enumeration<ZipArchiveEntry> entries = Collections.enumeration(List.of(entry1));
+            ZipFile zipFileSuccess = mock(ZipFile.class);
+            when(zipFileSuccess.getEntries()).thenReturn(entries);
+
+            ZipFile.Builder builder = mock(ZipFile.Builder.class, RETURNS_DEEP_STUBS);
+            when(builder.setPath(any(Path.class))).thenReturn(builder);
+            when(builder.setCharset(any(Charset.class))).thenReturn(builder);
+            when(builder.setIgnoreLocalFileHeader(anyBoolean())).thenReturn(builder);
+            
+            // Mock builder behavior based on UseUnicodeExtraFields call
+            when(builder.setUseUnicodeExtraFields(anyBoolean())).thenAnswer(invocation -> {
+                return builder;
+            });
+            
+
+            when(builder.get())
+                .thenReturn(zipFileFail) // 1. Fast, Unicode=True
+                .thenReturn(zipFileFail) // 2. Slow, Unicode=True
+                .thenReturn(zipFileSuccess); // 3. Fast, Unicode=False
+
+            try (MockedStatic<ZipFile> zipFileStatic = mockStatic(ZipFile.class)) {
+                zipFileStatic.when(ZipFile::builder).thenReturn(builder);
+
+                Files.createFile(cbzPath);
+                Files.setLastModifiedTime(cbzPath, FileTime.fromMillis(System.currentTimeMillis()));
+
+                List<Integer> pages = cbxReaderService.getAvailablePages(1L);
+                assertEquals(List.of(1), pages);
+                
+                // Verify that we eventually called with useUnicode=false
+                verify(builder).setUseUnicodeExtraFields(eq(false));
+            }
+        }
+    }
+
+    @Test
     void testStreamPageImage_CBZ_Success() throws Exception {
         when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
