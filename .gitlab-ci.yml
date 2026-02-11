@@ -10,5 +10,5 @@ mirror_from_github:
     - apk add --no-cache git
   script:
     - git clone --mirror https://github.com/booklore-app/booklore.git
-    - cd booklore
+    - cd booklore.git
     - git push --mirror https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.theprivateserver.de/WorldTeacher/wt-booklore.git
