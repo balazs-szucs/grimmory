@@ -21,32 +21,15 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     Optional<BookEntity> findBookByIdAndLibraryId(long id, long libraryId);
 
     @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "shelves", "libraryPath", "library", "bookFiles" })
-    @Query("SELECT b FROM BookEntity b LEFT JOIN FETCH b.bookFiles bf WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+    @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByIdWithBookFiles(@Param("id") Long id);
 
-    @Query("""
-        SELECT DISTINCT b FROM BookEntity b
-        LEFT JOIN FETCH b.metadata m
-        LEFT JOIN FETCH m.authors
-        LEFT JOIN FETCH m.categories
-        LEFT JOIN FETCH m.moods
-        LEFT JOIN FETCH m.tags
-        LEFT JOIN FETCH m.comicMetadata
-        WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)
-        """)
+    @EntityGraph(attributePaths = { "metadata", "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags", "metadata.comicMetadata" })
+    @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByIdWithMetadata(@Param("id") Long id);
 
-    @Query("""
-        SELECT DISTINCT b FROM BookEntity b
-        LEFT JOIN FETCH b.metadata m
-        LEFT JOIN FETCH m.authors
-        LEFT JOIN FETCH m.categories
-        LEFT JOIN FETCH m.moods
-        LEFT JOIN FETCH m.tags
-        LEFT JOIN FETCH m.comicMetadata
-        LEFT JOIN FETCH b.bookFiles
-        WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)
-        """)
+    @EntityGraph(attributePaths = { "metadata", "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags", "metadata.comicMetadata", "bookFiles" })
+    @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByIdFull(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {"bookFiles", "metadata", "library", "libraryPath"})

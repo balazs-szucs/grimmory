@@ -44,6 +44,13 @@ public interface UserRepository extends JpaRepository<BookLoreUserEntity, Long> 
     Optional<BookLoreUserEntity> findByIdWithLibraries(@Param("id") Long id);
 
     /**
+     * Fetch a user with just permissions for security checks or simple profile updates.
+     */
+    @EntityGraph(attributePaths = {"permissions"})
+    @Query("SELECT u FROM BookLoreUserEntity u WHERE u.id = :id")
+    Optional<BookLoreUserEntity> findByIdWithPermissions(@Param("id") Long id);
+
+    /**
      * Fetch all users with their settings, libraries, and permissions in a single query.
      * Prevents N+1 when listing all users (admin panel).
      */

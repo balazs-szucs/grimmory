@@ -13,9 +13,11 @@ import org.booklore.model.dto.settings.UserSettingKey;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.model.entity.LibraryEntity;
 import org.booklore.model.entity.UserSettingEntity;
+import org.booklore.model.enums.AuditAction;
 import org.booklore.model.enums.UserPermission;
 import org.booklore.repository.LibraryRepository;
 import org.booklore.repository.UserRepository;
+import org.booklore.service.audit.AuditService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,8 +27,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.booklore.model.enums.AuditAction;
-import org.booklore.service.audit.AuditService;
 
 @Service
 @RequiredArgsConstructor
@@ -99,7 +99,7 @@ public class UserService {
     public void changePassword(ChangePasswordRequest changePasswordRequest) {
         BookLoreUser bookLoreUser = authenticationService.getAuthenticatedUser();
 
-        BookLoreUserEntity bookLoreUserEntity = userRepository.findByIdWithSettings(bookLoreUser.getId())
+        BookLoreUserEntity bookLoreUserEntity = userRepository.findByIdWithPermissions(bookLoreUser.getId())
                 .orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(bookLoreUser.getId()));
 
         if (bookLoreUserEntity.getPermissions().isPermissionDemoUser()) {
@@ -126,7 +126,7 @@ public class UserService {
 
     @Transactional
     public void changeUserPassword(ChangeUserPasswordRequest request) {
-        BookLoreUserEntity userEntity = userRepository.findByIdWithSettings(request.getUserId()).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(request.getUserId()));
+        BookLoreUserEntity userEntity = userRepository.findByIdWithPermissions(request.getUserId()).orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(request.getUserId()));
         if (!meetsMinimumPasswordRequirements(request.getNewPassword())) {
             throw ApiError.PASSWORD_TOO_SHORT.createException();
         }

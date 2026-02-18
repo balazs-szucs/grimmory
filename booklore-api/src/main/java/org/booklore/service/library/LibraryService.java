@@ -23,6 +23,7 @@ import org.booklore.repository.LibraryPathRepository;
 import org.booklore.repository.LibraryRepository;
 import org.booklore.repository.UserRepository;
 import org.booklore.service.NotificationService;
+import org.booklore.service.audit.AuditService;
 import org.booklore.service.monitoring.MonitoringService;
 import org.booklore.task.options.RescanLibraryContext;
 import org.booklore.util.FileService;
@@ -45,7 +46,6 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import org.booklore.service.audit.AuditService;
 
 @Slf4j
 @Service
@@ -148,16 +148,7 @@ public class LibraryService {
         }
 
         if (!newPaths.isEmpty()) {
-            if (TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        startBackgroundScan(libraryId);
-                    }
-                });
-            } else {
-                startBackgroundScan(libraryId);
-            }
+            scheduleBackgroundScanAfterCommit(libraryId);
         }
 
         auditService.log(AuditAction.LIBRARY_UPDATED, "Library", libraryId, "Updated library: " + library.getName());
@@ -197,16 +188,7 @@ public class LibraryService {
             }
         }
 
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    startBackgroundScan(libraryId);
-                }
-            });
-        } else {
-            startBackgroundScan(libraryId);
-        }
+        scheduleBackgroundScanAfterCommit(libraryId);
 
         auditService.log(AuditAction.LIBRARY_CREATED, "Library", libraryEntity.getId(), "Created library: " + libraryEntity.getName());
         return libraryMapper.toLibrary(libraryEntity);
@@ -364,6 +346,19 @@ public class LibraryService {
             }
         }
         return false;
+    }
+
+    private void scheduleBackgroundScanAfterCommit(long libraryId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    startBackgroundScan(libraryId);
+                }
+            });
+        } else {
+            startBackgroundScan(libraryId);
+        }
     }
 
     private void startBackgroundScan(long libraryId) {

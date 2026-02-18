@@ -46,7 +46,7 @@ public class BookAccessAspect {
             throw ApiError.GENERIC_BAD_REQUEST.createException("Missing or invalid book ID in method parameters.");
         }
 
-        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        BookEntity bookEntity = bookRepository.findByIdWithMetadata(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
         BookLoreUser user = authenticationService.getAuthenticatedUser();
 

@@ -33,6 +33,7 @@ public class BookRecommendationService {
 
     private static final int MAX_BOOKS_PER_AUTHOR = 3;
 
+    @Transactional
     public List<BookRecommendation> getRecommendations(Long bookId, int limit) {
         BookEntity book = bookRepository.findByIdWithMetadata(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 

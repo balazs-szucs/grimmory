@@ -80,7 +80,7 @@ public class HardcoverSyncService {
                 }
 
                 // Fetch book fresh within the async context to avoid lazy loading issues
-                BookEntity book = bookRepository.findByIdWithBookFiles(bookId).orElse(null);
+                BookEntity book = bookRepository.findByIdWithMetadata(bookId).orElse(null);
                 if (book == null) {
                     log.debug("Hardcover sync skipped: book {} not found", bookId);
                     return;
