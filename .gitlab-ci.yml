@@ -4,7 +4,6 @@ stages:
   - package-build
   - package-test
   - publish
-  - mirror
 
 workflow:
   rules:
@@ -80,101 +79,6 @@ frontend_tests:
     - when: on_success
 
 # -----------------------------
-# Mirror (schedule only)
-# -----------------------------
-mirror_from_github:
-  stage: mirror
-  image: alpine:latest
-  tags: [universal]
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_success
-    - when: never
-
-  variables:
-    UPSTREAM_BRANCH: "upstream/develop"
-    SOURCE_BRANCH: "upstream/develop"
-    TARGET_BRANCH: "develop"
-
-  before_script:
-    - apk add --no-cache git curl jq
-
-  script:
-    # 1) Mirror GitHub develop -> GitLab upstream/develop
-    - git clone --branch develop --single-branch https://github.com/booklore-app/booklore.git source
-    - cd source
-    - git remote add gitlab https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.theprivateserver.de/WorldTeacher/wt-booklore.git
-    - git push --force gitlab develop:refs/heads/${UPSTREAM_BRANCH}
-    - git push --force gitlab --tags
-
-    # 2) Only create/keep MR if upstream/develop is ahead of develop
-    - |
-      if [ -z "${GITLAB_TOKEN:-}" ]; then
-        echo "ERROR: GITLAB_TOKEN is not set. Create a Project Access Token with api scope and set CI/CD variable GITLAB_TOKEN."
-        exit 1
-      fi
-
-      # Compare target -> source (is source ahead?)
-      COMPARE_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/compare"
-      COMPARE_JSON="$(curl -sf \
-        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-        --get "${COMPARE_URL}" \
-        --data-urlencode "from=${TARGET_BRANCH}" \
-        --data-urlencode "to=${SOURCE_BRANCH}")"
-
-      AHEAD_COMMITS="$(echo "$COMPARE_JSON" | jq -r '.commits | length')"
-      echo "Compare ${TARGET_BRANCH}..${SOURCE_BRANCH}: commits ahead = ${AHEAD_COMMITS}"
-
-      MR_LIST_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?state=opened&source_branch=${SOURCE_BRANCH}&target_branch=${TARGET_BRANCH}"
-      EXISTING_IID="$(curl -sf --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${MR_LIST_URL}" | jq -r '.[0].iid // empty')"
-
-      if [ "${AHEAD_COMMITS}" = "0" ]; then
-        echo "No upstream changes to merge."
-
-        # Optional: close an existing sync MR if it exists (keeps things tidy)
-        if [ -n "${EXISTING_IID}" ]; then
-          echo "Closing existing sync MR IID ${EXISTING_IID} (nothing to merge)."
-          curl -sf -X PUT \
-            --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-            --data "state_event=close" \
-            "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${EXISTING_IID}" \
-          || true
-        fi
-
-        exit 0
-      fi
-
-      # 3) Create or reuse MR upstream/develop -> develop
-      if [ -n "${EXISTING_IID}" ]; then
-        echo "Found existing MR IID: ${EXISTING_IID}"
-        MR_IID="${EXISTING_IID}"
-      else
-        echo "Creating MR ${SOURCE_BRANCH} -> ${TARGET_BRANCH}"
-        CREATE_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests"
-        MR_IID="$(curl -sf -X POST \
-          --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-          --header "Content-Type: application/json" \
-          --data "$(jq -n \
-            --arg sb "${SOURCE_BRANCH}" \
-            --arg tb "${TARGET_BRANCH}" \
-            --arg title "Sync upstream: ${SOURCE_BRANCH} → ${TARGET_BRANCH}" \
-            --arg desc "Automated mirror from GitHub develop into ${SOURCE_BRANCH}. This MR keeps ${TARGET_BRANCH} up to date." \
-            '{source_branch:$sb,target_branch:$tb,title:$title,description:$desc,remove_source_branch:false,squash:false}')" \
-          "${CREATE_URL}" | jq -r '.iid')"
-        echo "Created MR IID: ${MR_IID}"
-      fi
-
-      # 4) Enable auto-merge when pipeline succeeds
-      echo "Enabling auto-merge for MR IID: ${MR_IID}"
-      MERGE_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/merge"
-      curl -sf -X PUT \
-        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-        --data "merge_when_pipeline_succeeds=true" \
-        --data "should_remove_source_branch=false" \
-        "${MERGE_URL}" \
-      || echo "Could not enable auto-merge (may require approvals, be unmergeable, have conflicts, or have no MR pipeline)."
-
-# -----------------------------
 # to-be-continuous overrides
 # -----------------------------
 
@@ -196,11 +100,37 @@ mirror_from_github:
       when: on_success
       variables:
         DOCKER_SNAPSHOT_IMAGE: "$CI_REGISTRY_IMAGE/mergerequests/mr-$CI_MERGE_REQUEST_IID:latest"
-        DOCKER_BUILD_ARGS: "--platform linux/amd64 --platform linux/arm64 --build-arg APP_VERSION=mr-$CI_MERGE_REQUEST_IID-$CI_COMMIT_SHORT_SHA --build-arg APP_REVISION=$CI_COMMIT_SHA"
+        DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=mr-$CI_MERGE_REQUEST_IID-$CI_COMMIT_SHORT_SHA --build-arg APP_REVISION=$CI_COMMIT_SHA --platform=linux/amd64,linux/arm64"
 
     - if: "$CI_COMMIT_TAG"
       when: on_success
       variables:
-        DOCKER_BUILD_ARGS: "--platform linux/amd64 --platform linux/arm64 --build-arg APP_VERSION=wt-$CI_COMMIT_TAG --build-arg APP_REVISION=$CI_COMMIT_SHA"
+        DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=wt-$CI_COMMIT_TAG --build-arg APP_REVISION=$CI_COMMIT_SHA --platform=linux/amd64,linux/arm64"
 
     - when: never
+
+### Testing place
+### split ci
+
+# stages:
+#   - trigger
+
+# frontend_pipeline:
+#   stage: trigger
+#   trigger:
+#     include:
+#       - local: booklore-ui/.gitlab-ci.yml
+#     strategy: depend
+#   rules:
+#     - changes:
+#         - booklore-ui/**/*
+
+# backend_pipeline:
+#   stage: trigger
+#   trigger:
+#     include:
+#       - local: booklore-api/.gitlab-ci.yml
+#     strategy: depend
+#   rules:
+#     - changes:
+#         - booklore-api/**/*

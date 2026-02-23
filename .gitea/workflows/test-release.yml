@@ -1,0 +1,164 @@
+name: Test Release Build (Local)
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'test-*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to simulate (e.g., v1.2.3)'
+        required: true
+        default: 'test-1.0.0'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version variables
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          
+          # Add wt- prefix if not present
+          if [[ ! "$VERSION" =~ ^wt- ]]; then
+            VERSION="wt-${VERSION}"
+          fi
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "revision=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+          echo "Git revision: ${GITHUB_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: booklore-ui/package-lock.json
+
+      - name: Build Angular frontend
+        run: |
+          cd booklore-ui
+          npm ci --force --legacy-peer-deps
+          npm run build --configuration=production
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+
+      - name: Inject version into application.yaml
+        run: |
+          # Install yq if not available
+          if ! command -v yq &> /dev/null; then
+            wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+            chmod +x /usr/local/bin/yq
+          fi
+          
+          cd booklore-api
+          cp src/main/resources/application.yaml src/main/resources/application.yaml.bak
+          yq eval '.app.version = "${{ steps.version.outputs.version }}"' -i src/main/resources/application.yaml
+
+      - name: Copy Angular dist to Spring Boot static resources
+        run: |
+          mkdir -p booklore-api/src/main/resources/static
+          cp -r booklore-ui/dist/booklore/browser/* booklore-api/src/main/resources/static/
+
+      - name: Build Spring Boot JAR
+        run: |
+          cd booklore-api
+          ./gradlew clean build -x test --no-daemon --parallel
+
+      - name: Restore application.yaml
+        if: always()
+        run: |
+          cd booklore-api
+          if [ -f src/main/resources/application.yaml.bak ]; then
+            mv src/main/resources/application.yaml.bak src/main/resources/application.yaml
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build multi-platform container images
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REVISION="${{ steps.version.outputs.revision }}"
+          
+          echo "Building multi-platform image for version: ${VERSION}"
+          
+          # Note: --load only supports single platform, so we build for local platform only in CI
+          # For actual multi-arch, you'd push to a registry instead
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg APP_VERSION=${VERSION} \
+            --build-arg APP_REVISION=${REVISION} \
+            --file Dockerfile.ci \
+            --tag localhost/booklore:${VERSION} \
+            --load \
+            .
+          
+          echo "Build complete for local platform!"
+
+      - name: Inspect image labels
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          echo "=== Image Inspection ==="
+          docker image inspect localhost/booklore:${VERSION}
+          
+          echo ""
+          echo "=== OCI Labels ==="
+          docker image inspect localhost/booklore:${VERSION} --format '{{json .Config.Labels}}' | jq .
+          
+          echo ""
+          echo "=== Version Check ==="
+          docker image inspect localhost/booklore:${VERSION} --format '{{index .Config.Labels "org.opencontainers.image.version"}}'
+          docker image inspect localhost/booklore:${VERSION} --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+          docker image inspect localhost/booklore:${VERSION} --format '{{index .Config.Labels "org.opencontainers.image.ref.name"}}'
+
+      - name: Test run container
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          echo "Testing container startup..."
+          
+          # Start container in detached mode
+          CONTAINER_ID=$(docker run -d --rm localhost/booklore:${VERSION} ls -lh /app/app.jar)
+          
+          # Wait a moment and check logs
+          sleep 1
+          docker logs $CONTAINER_ID || true
+          
+          # Test Java version
+          docker run --rm localhost/booklore:${VERSION} java -version
+
+      - name: Save image to tar (optional - for artifact upload)
+        if: false  # Set to true if you want to save the image
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          docker save localhost/booklore:${VERSION} -o booklore-${VERSION}.tar
+          ls -lh booklore-${VERSION}.tar
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rmi localhost/booklore:${{ steps.version.outputs.version }} || true
