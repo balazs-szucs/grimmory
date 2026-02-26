@@ -1,5 +1,6 @@
 import {Component, inject, OnInit, OnDestroy} from '@angular/core';
 import {CommonModule} from '@angular/common';
+import {ActivatedRoute, Router} from '@angular/router';
 import {TableLazyLoadEvent, TableModule} from 'primeng/table';
 import {Select} from 'primeng/select';
 import {DatePicker} from 'primeng/datepicker';
@@ -7,6 +8,24 @@ import {FormsModule} from '@angular/forms';
 import {TranslocoDirective} from '@jsverse/transloco';
 import {Subscription, interval} from 'rxjs';
 import {AuditLog, AuditLogService} from './audit-log.service';
+import {TagColor, TagComponent} from '../../../shared/components/tag/tag.component';
+
+const ACTION_COLOR_GROUPS: [TagColor, string[]][] = [
+  ['red', ['USER_DELETED', 'LIBRARY_DELETED', 'BOOK_DELETED', 'SHELF_DELETED', 'MAGIC_SHELF_DELETED', 'EMAIL_PROVIDER_DELETED', 'OPDS_USER_DELETED', 'AUTHOR_DELETED']],
+  ['green', ['USER_CREATED', 'LIBRARY_CREATED', 'BOOK_UPLOADED', 'SHELF_CREATED', 'MAGIC_SHELF_CREATED', 'EMAIL_PROVIDER_CREATED', 'OPDS_USER_CREATED', 'LOGIN_SUCCESS']],
+  ['blue', ['USER_UPDATED', 'LIBRARY_UPDATED', 'SHELF_UPDATED', 'MAGIC_SHELF_UPDATED', 'EMAIL_PROVIDER_UPDATED', 'OPDS_USER_UPDATED']],
+  ['purple', ['METADATA_UPDATED', 'AUTHOR_METADATA_UPDATED']],
+  ['orange', ['SETTINGS_UPDATED', 'OIDC_CONFIG_CHANGED', 'NAMING_PATTERN_CHANGED']],
+  ['amber', ['PASSWORD_CHANGED', 'PERMISSIONS_CHANGED']],
+  ['fuchsia', ['LOGIN_FAILED']],
+  ['pink', ['LOGIN_RATE_LIMITED', 'REFRESH_RATE_LIMITED']],
+  ['teal', ['LIBRARY_SCANNED', 'BOOK_SENT', 'BOOK_FILE_DETACHED', 'DUPLICATE_BOOKS_MERGED']],
+  ['indigo', ['TASK_EXECUTED']],
+];
+
+const ACTION_COLOR_MAP = new Map<string, TagColor>(
+  ACTION_COLOR_GROUPS.flatMap(([color, actions]) => actions.map(a => [a, color]))
+);
 
 interface ActionOption {
   label: string;
@@ -21,12 +40,14 @@ interface UsernameOption {
 @Component({
   selector: 'app-audit-logs',
   standalone: true,
-  imports: [CommonModule, TableModule, Select, DatePicker, FormsModule, TranslocoDirective],
+  imports: [CommonModule, TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
   templateUrl: './audit-logs.component.html',
   styleUrl: './audit-logs.component.scss'
 })
 export class AuditLogsComponent implements OnInit, OnDestroy {
   private readonly auditLogService = inject(AuditLogService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   logs: AuditLog[] = [];
   totalRecords = 0;
@@ -74,11 +95,18 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     {label: 'OPDS User Deleted', value: 'OPDS_USER_DELETED'},
     {label: 'OPDS User Updated', value: 'OPDS_USER_UPDATED'},
     {label: 'Naming Pattern Changed', value: 'NAMING_PATTERN_CHANGED'},
+    {label: 'Login Rate Limited', value: 'LOGIN_RATE_LIMITED'},
+    {label: 'Refresh Rate Limited', value: 'REFRESH_RATE_LIMITED'},
+    {label: 'Duplicate Books Merged', value: 'DUPLICATE_BOOKS_MERGED'},
+    {label: 'Book File Detached', value: 'BOOK_FILE_DETACHED'},
+    {label: 'Author Metadata Updated', value: 'AUTHOR_METADATA_UPDATED'},
+    {label: 'Author Deleted', value: 'AUTHOR_DELETED'},
   ];
 
-  private currentPage = 0;
+  currentPage = 0;
 
   ngOnInit(): void {
+    this.restoreFromQueryParams();
     this.loadUsernames();
     this.loadLogs();
   }
@@ -119,12 +147,15 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   }
 
   onLazyLoad(event: TableLazyLoadEvent): void {
-    this.currentPage = (event.first ?? 0) / (event.rows ?? this.rows);
+    this.rows = event.rows ?? this.rows;
+    this.currentPage = (event.first ?? 0) / this.rows;
+    this.updateQueryParams();
     this.loadLogs();
   }
 
   onFilterChange(): void {
     this.currentPage = 0;
+    this.updateQueryParams();
     this.loadLogs();
   }
 
@@ -148,6 +179,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     this.selectedUsername = null;
     this.dateRange = null;
     this.currentPage = 0;
+    this.updateQueryParams();
     this.loadLogs();
   }
 
@@ -191,11 +223,39 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     return action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w+/g, c => c.toLowerCase());
   }
 
-  getActionClass(action: string): string {
-    if (action.includes('FAILED') || action.includes('DELETED')) return 'action-danger';
-    if (action.includes('CREATED') || action.includes('SUCCESS') || action.includes('UPLOADED')) return 'action-success';
-    if (action.includes('OIDC') || action.includes('PERMISSIONS')) return 'action-warning';
-    return 'action-info';
+  getActionColor(action: string): TagColor {
+    return ACTION_COLOR_MAP.get(action) ?? 'gray';
+  }
+
+  private restoreFromQueryParams(): void {
+    const params = this.route.snapshot.queryParams;
+    if (params['page']) this.currentPage = +params['page'];
+    if (params['size']) this.rows = +params['size'];
+    if (params['action']) this.selectedAction = params['action'];
+    if (params['username']) this.selectedUsername = params['username'];
+    if (params['from'] || params['to']) {
+      const from = params['from'] ? new Date(params['from'] + 'T00:00:00') : null;
+      const to = params['to'] ? new Date(params['to'] + 'T00:00:00') : null;
+      if (from) this.dateRange = [from, to!];
+    }
+  }
+
+  private updateQueryParams(): void {
+    const queryParams: Record<string, string | null> = {
+      page: this.currentPage > 0 ? String(this.currentPage) : null,
+      size: this.rows !== 25 ? String(this.rows) : null,
+      action: this.selectedAction || null,
+      username: this.selectedUsername || null,
+      from: this.dateRange?.[0] ? this.formatDate(this.dateRange[0]) : null,
+      to: this.dateRange?.[1] ? this.formatDate(this.dateRange[1]) : null,
+    };
+    this.router.navigate([], {queryParams, queryParamsHandling: 'merge', replaceUrl: true});
+  }
+
+  private formatDate(date: Date): string {
+    return date.getFullYear() + '-' +
+      String(date.getMonth() + 1).padStart(2, '0') + '-' +
+      String(date.getDate()).padStart(2, '0');
   }
 
   private formatDateTime(date: Date, endOfDay = false): string {

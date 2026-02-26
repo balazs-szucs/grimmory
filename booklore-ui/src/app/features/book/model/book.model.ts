@@ -97,6 +97,14 @@ export interface BookFileProgress {
   progressPercent: number;
 }
 
+export interface AudiobookChapterInfo {
+  index?: number;
+  title?: string;
+  startTimeMs?: number;
+  endTimeMs?: number;
+  durationMs?: number;
+}
+
 export interface AudiobookMetadata {
   narrator?: string;
   abridged?: boolean | null;
@@ -106,6 +114,7 @@ export interface AudiobookMetadata {
   channels?: number;
   codec?: string;
   chapterCount?: number;
+  chapters?: AudiobookChapterInfo[];
   narratorLocked?: boolean;
   abridgedLocked?: boolean;
 }
@@ -381,13 +390,6 @@ export interface BookDeletionResponse {
   failedFileDeletions: number[];
 }
 
-export interface BookSyncResponse {
-  books: Book[];
-  deletedIds: number[];
-  syncTimestamp: string;
-  totalBookCount: number;
-}
-
 export enum ReadStatus {
   UNREAD = 'UNREAD',
   READING = 'READING',
@@ -423,4 +425,24 @@ export interface BookStatusUpdateResponse {
 export interface PersonalRatingUpdateResponse {
   bookId: number;
   personalRating?: number;
+}
+
+export interface DuplicateDetectionRequest {
+  libraryId: number;
+  matchByIsbn: boolean;
+  matchByExternalId: boolean;
+  matchByTitleAuthor: boolean;
+  matchByDirectory: boolean;
+  matchByFilename: boolean;
+}
+
+export interface DuplicateGroup {
+  suggestedTargetBookId: number;
+  matchReason: string;
+  books: Book[];
+}
+
+export interface DetachBookFileResponse {
+  sourceBook: Book;
+  newBook: Book;
 }

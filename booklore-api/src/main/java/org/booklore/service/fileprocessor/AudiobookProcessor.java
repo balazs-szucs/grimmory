@@ -235,7 +235,7 @@ public class AudiobookProcessor extends AbstractFileProcessor implements BookFil
         setAudiobookTechnicalMetadata(bookEntity, audioMetadata);
     }
 
-    private void setAudiobookTechnicalMetadata(BookEntity bookEntity, BookMetadata audioMetadata) {
+    public void setAudiobookTechnicalMetadata(BookEntity bookEntity, BookMetadata audioMetadata) {
         AudiobookMetadata audiobookDto = audioMetadata.getAudiobookMetadata();
         if (audiobookDto == null) {
             return;

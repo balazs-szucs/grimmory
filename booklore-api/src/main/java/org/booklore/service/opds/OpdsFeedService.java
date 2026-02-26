@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -472,7 +473,7 @@ public class OpdsFeedService {
 
         String queryString = request.getQueryString();
         if (queryString != null) {
-            java.util.Arrays.stream(queryString.split("&"))
+            Arrays.stream(queryString.split("&"))
                     .filter(param -> !param.startsWith("page=") && !param.startsWith("size="))
                     .forEach(param -> result.append(param).append("&"));
         }
@@ -691,11 +692,7 @@ public class OpdsFeedService {
             }
             case AUDIOBOOK -> {
                 String lower = bookFile.getFileName().toLowerCase();
-                if (lower.endsWith(".m4b") || lower.endsWith(".m4a")) yield "audio/mp4";
                 if (lower.endsWith(".mp3")) yield "audio/mpeg";
-                if (lower.endsWith(".flac")) yield "audio/flac";
-                if (lower.endsWith(".ogg") || lower.endsWith(".opus")) yield "audio/ogg";
-                if (lower.endsWith(".aac")) yield "audio/aac";
                 yield "audio/mp4";
             }
         };

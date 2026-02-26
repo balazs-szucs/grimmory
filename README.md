@@ -26,8 +26,8 @@ Organize, read, annotate, sync across devices, and share, all without relying on
 <p align="center">
   <a href="https://booklore.org/">🌐 Website</a> ·
   <a href="https://booklore.org/docs/getting-started">📖 Docs</a> ·
-  <a href="#🎮-live-demo">🎮 Demo</a> ·
-  <a href="#🚀-quick-start">🚀 Quick Start</a> ·
+  <a href="#-live-demo">🎮 Demo</a> ·
+  <a href="#-quick-start">🚀 Quick Start</a> ·
   <a href="https://discord.gg/Ee5hd458Uz">💬 Discord</a>
 </p>
 
@@ -210,6 +210,9 @@ volumes:
 | 💡 **Got an idea?** | [Request a Feature](https://github.com/booklore-app/booklore/issues/new?template=feature_request.yml) |
 | 🛠️ **Want to help build?** | [Contributing Guide](CONTRIBUTING.md) |
 | 💬 **Come hang out** | [Discord Server](https://discord.gg/Ee5hd458Uz) |
+
+> [!WARNING]
+> **Before opening a PR:** Open an issue first and get maintainer approval. PRs without a linked issue, without screenshots/video proof, or without pasted test output will be closed. AI-assisted contributions are welcome, but you must run, test, and understand every line you submit. See the [Contributing Guide](CONTRIBUTING.md) for full details.
 
 ---
 

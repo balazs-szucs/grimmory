@@ -196,7 +196,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     const totalGaps = (columns - 1) * this.MOBILE_GAP;
     const availableWidth = this.screenWidth - totalGaps - this.MOBILE_PADDING;
     const cardWidth = Math.floor(availableWidth / columns);
-    const coverHeight = Math.floor(cardWidth * this.CARD_ASPECT_RATIO);
+    const coverHeight = this.isAudiobookOnlyLibrary ? cardWidth : Math.floor(cardWidth * this.CARD_ASPECT_RATIO);
     const cardHeight = coverHeight + this.MOBILE_TITLE_BAR_HEIGHT;
     return {width: cardWidth, height: cardHeight};
   }
@@ -209,22 +209,30 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.isMobile) {
       return this.mobileCardSize;
     }
-    return this.coverScalePreferenceService.currentCardSize;
+    const base = this.coverScalePreferenceService.currentCardSize;
+    if (this.isAudiobookOnlyLibrary) {
+      const squareSide = Math.round(base.width * 1.1);
+      return { width: squareSide, height: squareSide + 31 };
+    }
+    return base;
   }
 
   get gridColumnMinWidth(): string {
     if (this.isMobile) {
       return `${this.mobileCardSize.width}px`;
     }
+    if (this.isAudiobookOnlyLibrary) {
+      return `${this.currentCardSize.width}px`;
+    }
     return this.coverScalePreferenceService.gridColumnMinWidth;
   }
 
   getCardHeight(_book: Book): number {
-    // Use uniform height for all book types to ensure smooth virtual scrolling.
-    // Mixed heights cause choppy/jumpy scrolling because the virtual scroller
-    // cannot accurately estimate positions when item heights vary.
     if (this.isMobile) {
       return this.mobileCardSize.height;
+    }
+    if (this.isAudiobookOnlyLibrary) {
+      return this.currentCardSize.height;
     }
     return this.coverScalePreferenceService.getCardHeight(_book);
   }
@@ -265,6 +273,12 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     return filterSummary.length > 50
       ? this.t.translate('book.browser.labels.activeFilters', {count: filterEntries.length})
       : filterSummary;
+  }
+
+  get isAudiobookOnlyLibrary(): boolean {
+    if (!this.entity || this.entityType !== EntityType.LIBRARY) return false;
+    const library = this.entity as Library;
+    return !!library.allowedFormats && library.allowedFormats.length === 1 && library.allowedFormats[0] === 'AUDIOBOOK';
   }
 
   get seriesViewEnabled(): boolean {
@@ -456,8 +470,13 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
       this.visibleSortOptions = visibleFields.map(f => sortOptionsByField.get(f)).filter((o): o is SortOption => !!o);
 
 
-      // Only update sort criteria if they actually changed to avoid resetting popover/CDK state
-      if (!this.areSortCriteriaEqual(this.bookSorter.selectedSortCriteria, parseResult.sortCriteria)) {
+      // Only update sort criteria if they actually changed to avoid resetting popover/CDK state.
+      // Skip preference-based sort re-derivation when sort is already established (prevents
+      // userState$ emissions from non-sort preference changes like seriesCollapsed from
+      // resetting the sort during the race window before syncQueryParams writes to URL).
+      const sortFromUrl = !!queryParamMap.get('sort');
+      const sortNotYetEstablished = this.bookSorter.selectedSortCriteria.length === 0;
+      if ((sortFromUrl || sortNotYetEstablished) && !this.areSortCriteriaEqual(this.bookSorter.selectedSortCriteria, parseResult.sortCriteria)) {
         this.bookSorter.setSortCriteria(parseResult.sortCriteria);
       }
       this.currentViewMode = parseResult.viewMode;
@@ -808,6 +827,11 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
   lockUnlockMetadata(): void {
     this.dynamicDialogRef = this.dialogHelperService.openLockUnlockMetadataDialog(this.selectedBooks);
+    if (this.dynamicDialogRef) {
+      this.dynamicDialogRef.onClose.subscribe(() => {
+        this.bookSelectionService.deselectAll();
+      });
+    }
   }
 
   autoFetchMetadata(): void {
@@ -823,11 +847,21 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   bulkEditMetadata(): void {
-    this.dialogHelperService.openBulkMetadataEditDialog(this.selectedBooks);
+    this.dynamicDialogRef = this.dialogHelperService.openBulkMetadataEditDialog(this.selectedBooks);
+    if (this.dynamicDialogRef) {
+      this.dynamicDialogRef.onClose.subscribe(() => {
+        this.bookSelectionService.deselectAll();
+      });
+    }
   }
 
   multiBookEditMetadata(): void {
-    this.dialogHelperService.openMultibookMetadataEditorDialog(this.selectedBooks);
+    this.dynamicDialogRef = this.dialogHelperService.openMultibookMetadataEditorDialog(this.selectedBooks);
+    if (this.dynamicDialogRef) {
+      this.dynamicDialogRef.onClose.subscribe(() => {
+        this.bookSelectionService.deselectAll();
+      });
+    }
   }
 
   regenerateCoversForSelected(): void {
@@ -915,11 +949,10 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   attachFilesToBook(): void {
-    // Get selected books that are single-file books (no alternative formats)
     const currentState = this.bookService.getCurrentBookState();
     const selectedBookIds = Array.from(this.selectedBooks);
     const sourceBooks = (currentState.books || []).filter(book =>
-      selectedBookIds.includes(book.id) && !book.alternativeFormats?.length
+      selectedBookIds.includes(book.id)
     );
 
     if (sourceBooks.length === 0) {
@@ -957,14 +990,13 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const currentState = this.bookService.getCurrentBookState();
     const selectedBookIds = Array.from(this.selectedBooks);
-    const eligibleBooks = (currentState.books || []).filter(book =>
-      selectedBookIds.includes(book.id) && !book.alternativeFormats?.length
+    const selectedBooks = (currentState.books || []).filter(book =>
+      selectedBookIds.includes(book.id)
     );
 
-    if (eligibleBooks.length === 0) return false;
+    if (selectedBooks.length === 0) return false;
 
-    // Check if all eligible books are from the same library
-    const libraryIds = new Set(eligibleBooks.map(b => b.libraryId));
+    const libraryIds = new Set(selectedBooks.map(b => b.libraryId));
     return libraryIds.size === 1;
   }
 
