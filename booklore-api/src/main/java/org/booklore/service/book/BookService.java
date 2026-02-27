@@ -309,7 +309,7 @@ public class BookService {
             byte[] bytes = new ClassPathResource("static/images/missing-cover.jpg").getInputStream().readAllBytes();
             return new ByteArrayResource(bytes);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to load missing cover image", e);
+            throw ApiError.INTERNAL_SERVER_ERROR.createException("Failed to load missing cover image");
         }
     }
 
