@@ -71,10 +71,11 @@ spring:
     locations: classpath:db/migration
 
 springdoc:
-  api-docs:
-    enabled: false
   swagger-ui:
-    enabled: false
+    path: /api/v1/swagger-ui.html
+    persist-authorization: true
+  api-docs:
+    path: /api/v1/api-docs
 
 logging:
   level:

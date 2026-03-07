@@ -1,5 +1,6 @@
 package org.booklore.config.security;
 
+import org.booklore.config.AppProperties;
 import org.booklore.config.security.filter.*;
 import org.booklore.config.security.service.OpdsUserDetailsService;
 import jakarta.servlet.DispatcherType;
@@ -47,6 +48,13 @@ public class SecurityConfig {
     private final DualJwtAuthenticationFilter dualJwtAuthenticationFilter;
     private final KoreaderAuthFilter koreaderAuthFilter;
     private final Environment env;
+    private final AppProperties appProperties;
+
+    private static final String[] SWAGGER_ENDPOINTS = {
+            "/api/v1/swagger-ui.html",
+            "/api/v1/swagger-ui/**",
+            "/api/v1/api-docs/**"
+    };
 
     private static final String[] COMMON_PUBLIC_ENDPOINTS = {
             "/ws/**",                  // WebSocket connections (auth handled in WebSocketAuthInterceptor)
@@ -205,6 +213,9 @@ public class SecurityConfig {
     @Order(9)
     public SecurityFilterChain jwtApiSecurityChain(HttpSecurity http) throws Exception {
         List<String> publicEndpoints = new ArrayList<>(Arrays.asList(COMMON_PUBLIC_ENDPOINTS));
+        if (appProperties.getSwagger().isEnabled()) {
+            publicEndpoints.addAll(Arrays.asList(SWAGGER_ENDPOINTS));
+        }
         http
                 .securityMatcher("/api/**", "/komga/**", "/ws/**")
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))

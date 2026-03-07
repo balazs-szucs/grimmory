@@ -14,6 +14,7 @@ public class AppProperties {
     private String bookdropFolder;
     private String version;
     private RemoteAuth remoteAuth;
+    private Swagger swagger = new Swagger();
     private Boolean forceDisableOidc = false;
     private Telemetry telemetry = new Telemetry();
 
@@ -24,6 +25,12 @@ public class AppProperties {
      * unreliable atomic operations that can cause data corruption or loss.
      */
     private String diskType = "LOCAL";
+
+    @Getter
+    @Setter
+    public static class Swagger {
+        private boolean enabled = true;
+    }
 
     @Getter
     @Setter
