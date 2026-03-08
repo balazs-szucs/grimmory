@@ -1,0 +1,55 @@
+include:
+  - component: "$CI_SERVER_FQDN/to-be-continuous/semantic-release/gitlab-ci-semrel@4.1"
+    rules:
+      - if: '$CI_PIPELINE_SOURCE != "parent_pipeline"'
+        when: never
+      - if: "$CI_MERGE_REQUEST_ID"
+        when: never
+      - if: '$CI_COMMIT_BRANCH == "main"'
+        when: always
+      - when: never
+    inputs:
+      changelog-enabled: true
+      auto-release-enabled: false
+
+  - component: "$CI_SERVER_FQDN/to-be-continuous/docker/gitlab-ci-docker@8.1"
+    rules:
+      - if: "$CI_MERGE_REQUEST_ID"
+        when: always
+      - when: never
+    inputs:
+      trivy-disabled: true
+      hadolint-disabled: false
+      prod-publish-strategy: "none"
+      push-args: "--compression-format zstd --compression-level 20"
+      build-args: >-
+        --build-arg APP_VERSION=mr-$CI_MERGE_REQUEST_IID-$CI_COMMIT_SHORT_SHA
+        --build-arg APP_REVISION=$CI_COMMIT_SHA
+        --platform=linux/amd64
+      build-cache-disabled: true
+      snapshot-image: "$CI_REGISTRY_IMAGE/mergerequests:mr-$CI_MERGE_REQUEST_IID"
+
+  - component: "$CI_SERVER_FQDN/to-be-continuous/docker/gitlab-ci-docker@8.1"
+    rules:
+      - if: "$CI_COMMIT_TAG"
+        when: always
+      - when: never
+    inputs:
+      trivy-disabled: true
+      hadolint-disabled: true
+      prod-publish-strategy: "none"
+      push-args: "--compression-format zstd --compression-level 20"
+      build-args: >-
+        --build-arg APP_VERSION=wt-$CI_COMMIT_TAG
+        --build-arg APP_REVISION=$CI_COMMIT_SHA
+        --platform=linux/amd64,linux/arm64
+      snapshot-image: "$CI_REGISTRY_IMAGE/snapshot:$CI_COMMIT_REF_SLUG"
+      release-extra-tags: "latest \\g<major>.\\g<minor>\\g<build> \\g<major>\\g<build>"
+
+.semrel-base:
+  tags:
+    - universal
+
+.docker-base:
+  tags:
+    - buildah

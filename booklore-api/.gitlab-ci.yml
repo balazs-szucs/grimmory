@@ -1,0 +1,48 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
+      when: always
+    - when: never
+
+include:
+  - component: "$CI_SERVER_FQDN/to-be-continuous/gitleaks/gitlab-ci-gitleaks@2.9"
+  # Spectral disabled - no static OpenAPI/AsyncAPI specs to lint
+  # - component: "$CI_SERVER_FQDN/to-be-continuous/spectral/gitlab-ci-spectral@1.4"
+  - component: "$CI_SERVER_FQDN/to-be-continuous/sqlfluff/gitlab-ci-sqlfluff@1.6"
+  - component: "$CI_SERVER_FQDN/to-be-continuous/gradle/gitlab-ci-gradle@2.13.0"
+    inputs:
+      image: "eclipse-temurin:25-jdk"
+      cli-bin: "./gradlew"
+      project-dir: "booklore-api"
+      daemon: false
+      build-args: "test jacocoTestReport --no-daemon --parallel"
+      dependency-check-disabled: true
+# backend_tests:
+#   stage: test
+#   image: eclipse-temurin:25-jdk
+#   tags:
+#     - universal
+#   script:
+#     - cd "$CI_PROJECT_DIR/booklore-api"
+#     - ./gradlew test --no-daemon --parallel
+#   rules:
+#     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+#       when: never
+#     - if: "$CI_COMMIT_TAG"
+#       when: never
+#     - when: on_success
+
+gradle-build:
+  tags:
+    - universal
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - if: "$CI_COMMIT_TAG"
+      when: never
+    - when: on_success
+sqlfluff-lint:
+  rules:
+    - changes:
+        - booklore-api/src/main/resources/db/migration/**/*
+    - when: never

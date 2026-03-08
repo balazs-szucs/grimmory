@@ -116,15 +116,6 @@
           "options": {
             "runnerConfig": "vitest-base.config.ts"
           }
-        },
-        "lint": {
-          "builder": "@angular-eslint/builder:lint",
-          "options": {
-            "lintFilePatterns": [
-              "src/**/*.ts",
-              "src/**/*.html"
-            ]
-          }
         }
       }
     }

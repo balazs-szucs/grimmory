@@ -7,6 +7,7 @@ plugins {
     id 'jacoco'
 }
 
+
 group = 'org.booklore'
 version = '0.0.1-SNAPSHOT'
 
@@ -137,6 +138,8 @@ jacocoTestReport {
     reports {
         xml.required = true
         html.required = true
+        csv.required = true
+        csv.outputLocation = file("${buildDir}/reports/jacoco/test/jacocoTestReport.csv")
     }
 }
 

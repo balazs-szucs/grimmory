@@ -191,7 +191,7 @@ public class AuthorMetadataService {
     }
 
     public void uploadAuthorPhoto(Long authorId, MultipartFile file) {
-        AuthorEntity author = authorRepository.findById(authorId)
+        authorRepository.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         try {
@@ -250,7 +250,7 @@ public class AuthorMetadataService {
     }
 
     public void uploadAuthorPhotoFromUrl(Long authorId, String imageUrl) {
-        AuthorEntity author = authorRepository.findById(authorId)
+        authorRepository.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         fileService.createAuthorThumbnailFromUrl(authorId, imageUrl);

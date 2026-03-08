@@ -1,0 +1,9 @@
+# Gitleaks configuration for BookLore UI
+
+[allowlist]
+  description = "Allowlist for i18n translation files"
+  
+  paths = [
+    '''src/i18n/.*\.json$''',
+    '''i18n/.*\.json$''',
+  ]

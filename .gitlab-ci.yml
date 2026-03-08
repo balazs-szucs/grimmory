@@ -1,162 +1,69 @@
 stages:
-  - build
-  - test
-  - package-build
-  - package-test
-  - publish
+  - test-triggers
+  - release-trigger
 
-workflow:
+frontend_pipeline:
+  stage: test-triggers
+  trigger:
+    include:
+      - local: booklore-ui/.gitlab-ci.yml
+    strategy: depend
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: always
+    - changes:
+        - booklore-ui/**/*
+    - when: never
+
+backend_pipeline:
+  stage: test-triggers
+  trigger:
+    include:
+      - local: booklore-api/.gitlab-ci.yml
+    strategy: depend
+  rules:
+    - changes:
+        - booklore-api/**/*
+    - when: never
+
+releases_pipeline:
+  stage: release-trigger
+  trigger:
+    include:
+      - local: .gitlab/ci/releases.yml
+    strategy: depend
+  needs:
+    - job: frontend_pipeline
+      optional: true
+    - job: backend_pipeline
+      optional: true
+  rules:
     - if: "$CI_COMMIT_TAG"
       when: always
+
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
-    - if: '$CI_PIPELINE_SOURCE == "push"'
+
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: always
-    - when: never
 
-include:
-  # semantic-release only on main push (never on schedule/MR/tag)
-  - component: "$CI_SERVER_FQDN/to-be-continuous/semantic-release/gitlab-ci-semrel@4.0"
-    rules:
-      - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
-        when: always
-      - when: never
-    inputs:
-      changelog-enabled: true
-      auto-release-enabled: false
-  # Docker for MR pipelines
-  - component: "$CI_SERVER_FQDN/to-be-continuous/docker/gitlab-ci-docker@8.0"
-    rules:
-      - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-        when: always
-      - when: never
-    inputs:
-      trivy-disabled: true
-      hadolint-disabled: true
-      prod-publish-strategy: "none"
-      push-args: "--compression-format zstd --compression-level 20"
+    - changes:
+        - .gitlab-ci.yml
+        - .gitlab/**/*
+        - Dockerfile
+        - Dockerfile.*
+        - docker/**/*
+        - compose/**/*
+        - scripts/**/*
+        - docs/**/*
+        - .editorconfig
+        - .gitignore
+        - README*
+        - LICENSE*
+        - gradle/**/*
+        - package*.json
+        - yarn.lock
+        - pnpm-lock.yaml
 
-      # ✅ actually ends up in the build command
-      build-args: >-
-        --build-arg APP_VERSION=mr-$CI_MERGE_REQUEST_IID-$CI_COMMIT_SHORT_SHA
-        --build-arg APP_REVISION=$CI_COMMIT_SHA
-        --platform=linux/amd64
-
-      # ✅ fixes your failing cache push in MR pipelines
-      build-cache-disabled: true
-
-      snapshot-image: "$CI_REGISTRY_IMAGE/mergerequests:mr-$CI_MERGE_REQUEST_IID"
-
-  # Docker for TAG pipelines
-  - component: "$CI_SERVER_FQDN/to-be-continuous/docker/gitlab-ci-docker@8.0"
-    rules:
-      - if: "$CI_COMMIT_TAG"
-        when: always
-      - when: never
-    inputs:
-      trivy-disabled: true
-      hadolint-disabled: true
-      prod-publish-strategy: "none"
-      push-args: "--compression-format zstd --compression-level 20"
-
-      build-args: >-
-        --build-arg APP_VERSION=wt-$CI_COMMIT_TAG
-        --build-arg APP_REVISION=$CI_COMMIT_SHA
-        --platform=linux/amd64,linux/arm64
-
-      snapshot-image: "$CI_REGISTRY_IMAGE/snapshot:$CI_COMMIT_REF_SLUG"
-      release-extra-tags: "latest \\g<major>.\\g<minor>\\g<build> \\g<major>\\g<build>"
-  #- component: "$CI_SERVER_FQDN/to-be-continuous/gitlab-butler/gitlab-ci-butler@1.4"
-  #  inputs:
-  #    pipelines-delete-older-than: "30"
-# -----------------------------
-# Tests (branch pushes + MRs)
-# -----------------------------
-backend_tests:
-  stage: test
-  image: eclipse-temurin:25-jdk
-  tags: [universal]
-  script:
-    - cd booklore-api
-    - ./gradlew test --no-daemon --parallel
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: never
-    - if: "$CI_COMMIT_TAG"
-      when: never
-    - when: on_success
-
-frontend_tests:
-  stage: test
-  image: node:22
-  tags: [universal]
-  script:
-    - cd booklore-ui
-    - npm install --force --legacy-peer-deps
-    - npx ng test
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: never
-    - if: "$CI_COMMIT_TAG"
-      when: never
-    - when: on_success
-
-# -----------------------------
-# to-be-continuous overrides
-# -----------------------------
-
-.semrel-base:
-  tags: [universal]
-  rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
-      when: on_success
+      when: always
+
     - when: never
-  variables:
-    SEMREL_BRANCHES_REF: "^main$"
-
-# Docker jobs should run ONLY in MR pipelines and tag pipelines.
-# Also: no more "push && CI_OPEN_MERGE_REQUESTS" here → Branch pipelines will be "test only".
-.docker-base:
-  tags: [buildah]
-#  rules:
-#    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-#      when: on_success
-#      variables:
-#        DOCKER_SNAPSHOT_IMAGE: "$CI_REGISTRY_IMAGE/mergerequests/mr-$CI_MERGE_REQUEST_IID:latest"
-#        DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=mr-$CI_MERGE_REQUEST_IID-$CI_COMMIT_SHORT_SHA --build-arg APP_REVISION=$CI_COMMIT_SHA --platform=linux/amd64,linux/arm64"#
-#
-#    - if: "$CI_COMMIT_TAG"
-#      when: on_success
-#      variables:
-#        DOCKER_BUILD_ARGS: "--build-arg APP_VERSION=wt-$CI_COMMIT_TAG --build-arg APP_REVISION=$CI_COMMIT_SHA --platform=linux/amd64,linux/arm64"#
-#
-#    - when: never
-
-### Testing place
-### split ci
-
-# stages:
-#   - trigger
-
-# frontend_pipeline:
-#   stage: trigger
-#   trigger:
-#     include:
-#       - local: booklore-ui/.gitlab-ci.yml
-#     strategy: depend
-#   rules:
-#     - changes:
-#         - booklore-ui/**/*
-
-# backend_pipeline:
-#   stage: trigger
-#   trigger:
-#     include:
-#       - local: booklore-api/.gitlab-ci.yml
-#     strategy: depend
-#   rules:
-#     - changes:
-#         - booklore-api/**/*
