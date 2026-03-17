@@ -34,7 +34,7 @@ public class ScalarController {
                 "<head>\n" +
                 "  <meta charset=\"UTF-8\" />\n" +
                 "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n" +
-                "  <title>BookLore API Reference</title>\n" +
+                "  <title>Grimmory API Reference</title>\n" +
                 "</head>\n" +
                 "<body>\n" +
                 "  <script\n" +

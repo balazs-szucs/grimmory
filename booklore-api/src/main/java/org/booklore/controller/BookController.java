@@ -94,7 +94,7 @@ public class BookController {
         return ResponseEntity.ok(bookService.getBook(bookId, withDescription));
     }
 
-    @Operation(summary = "Get book by MD5 hash", description = "Retrieve book details by MD5 hash. Used by KOReader to map local books to Booklore books. ISBN values are available in metadata.isbn10 and metadata.isbn13.")
+    @Operation(summary = "Get book by MD5 hash", description = "Retrieve book details by MD5 hash. Used by KOReader to map local books to Grimmory books. ISBN values are available in metadata.isbn10 and metadata.isbn13.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Book found and details returned including ISBN values in metadata"),
             @ApiResponse(responseCode = "404", description = "Book not found with this hash")

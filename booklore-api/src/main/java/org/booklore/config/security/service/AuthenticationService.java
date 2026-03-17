@@ -99,17 +99,17 @@ public class AuthenticationService {
         if (principal instanceof KoreaderUserDetails koreaderDetails) {
             Long bookLoreUserId = koreaderDetails.getBookLoreUserId();
             if (bookLoreUserId == null) {
-                throw new IllegalStateException("KOReader user is not linked to a BookLore user");
+                throw new IllegalStateException("KOReader user is not linked to a Grimmory user");
             }
             BookLoreUserEntity userEntity = userRepository.findById(bookLoreUserId)
-                    .orElseThrow(() -> new IllegalStateException("BookLore user not found for KOReader user"));
+                    .orElseThrow(() -> new IllegalStateException("Grimmory user not found for KOReader user"));
             BookLoreUser user = bookLoreUserTransformer.toDTO(userEntity);
             if (user.getId() != null && user.getId() != -1L) {
                 defaultSettingInitializer.ensureDefaultSettings(user);
             }
             return user;
         }
-        throw new IllegalStateException("Authenticated principal is not of type BookLoreUser or KoreaderUserDetails");
+        throw new IllegalStateException("Authenticated principal is not of a supported user type");
     }
 
     public BookLoreUser getSystemUser() {
@@ -126,7 +126,7 @@ public class AuthenticationService {
                 .id(-1L)
                 .username("system")
                 .name("System User")
-                .email("system@booklore.internal")
+                .email("system@grimmory.internal")
                 .provisioningMethod(ProvisioningMethod.LOCAL)
                 .isDefaultPassword(false)
                 .permissions(permissions)

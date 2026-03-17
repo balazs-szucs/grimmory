@@ -44,7 +44,7 @@ public class BookloreSyncTokenGenerator {
             String json = objectMapper.writeValueAsString(token);
             return BOOKLORE_TOKEN_PREFIX + base64Encoder.encodeToString(json.getBytes());
         } catch (Exception e) {
-            log.error("Failed to serialize Booklore sync token", e);
+            log.error("Failed to serialize Grimmory sync token", e);
             return BOOKLORE_TOKEN_PREFIX;
         }
     }

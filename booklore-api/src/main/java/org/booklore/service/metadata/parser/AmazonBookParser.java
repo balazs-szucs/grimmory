@@ -830,11 +830,11 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
             return response.parse();
         } catch (HttpStatusException e) {
             if (e.getStatusCode() == 503) {
-                log.info("Amazon service unavailable (503). Please note: this is NOT a Booklore bug. Likely causes include: rate-limiting or failed captcha. Action required: Update cookies or select an alternative metadata source in the Metadata 2 UI. URL: {}", url);
+                log.info("Amazon service unavailable (503). Please note: this is NOT a Grimmory bug. Likely causes include: rate-limiting or failed captcha. Action required: Update cookies or select an alternative metadata source in the Metadata 2 UI. URL: {}", url);
                 throw new AmazonAntiScrapingException("Amazon 503 Anti-Scraping");
             }
             if (e.getStatusCode() == 500) {
-                log.info("Amazon internal server error (500). Please note: this is NOT a Booklore bug. Likely causes include: temporary server issues or anti-bot measures. Action required: Retry later or select an alternative metadata source in the Metadata 2 UI. URL: {}", url);
+                log.info("Amazon internal server error (500). Please note: this is NOT a Grimmory bug. Likely causes include: temporary server issues or anti-bot measures. Action required: Retry later or select an alternative metadata source in the Metadata 2 UI. URL: {}", url);
                 throw new AmazonAntiScrapingException("Amazon 500 Internal Server Error");
             }
             log.error("HTTP error fetching URL. Status={}, URL=[{}]", e.getStatusCode(), url, e);

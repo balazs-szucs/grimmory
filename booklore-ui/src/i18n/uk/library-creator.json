@@ -52,7 +52,7 @@
             "createFailedSummary": "Помилка створення",
             "createFailedDetail": "Під час створення бібліотеки виникла помилка. Будь ласка, спробуйте ще раз."
         },
-        "folderStructureHint": "Переконайтеся, що ваші директорії відповідають очікуваній <a href='https://booklore.org/docs/library/folder-structure#-recommended-structures' target='_blank' rel='noopener'>структурі</a> для книг та аудіокниг."
+        "folderStructureHint": "Переконайтеся, що ваші директорії відповідають очікуваній <a href='https://grimmory.org/docs/library/folder-structure#-recommended-structures' target='_blank' rel='noopener'>структурі</a> для книг та аудіокниг."
     },
     "loading": {
         "title": "Завантаження бібліотеки",

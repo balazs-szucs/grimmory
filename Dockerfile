@@ -55,11 +55,11 @@ ENV APP_VERSION=${APP_VERSION}
 ENV APP_REVISION=${APP_REVISION}
 
 # Set OCI labels
-LABEL org.opencontainers.image.title="WT-BookLore" \
-      org.opencontainers.image.description="WT-BookLore: A self-hosted, multi-user digital library with smart shelves, auto metadata, Kobo & KOReader sync, BookDrop imports, OPDS support, and a built-in reader for EPUB, PDF, and comics. This fork includes native support for the KOReader Sync plugin as well as all changes done by me." \
-      org.opencontainers.image.source="https://gitlab.worldteacher.dev/wt-booklore/wt-booklore" \
-      org.opencontainers.image.url="https://gitlab.worldteacher.dev/wt-booklore/wt-booklore" \
-      org.opencontainers.image.documentation="https://booklore.org/docs/getting-started" \
+LABEL org.opencontainers.image.title="Grimmory" \
+    org.opencontainers.image.description="Grimmory: A self-hosted, multi-user digital library with smart shelves, auto metadata, Kobo & KOReader sync, BookDrop imports, OPDS support, and a built-in reader for EPUB, PDF, and comics." \
+    org.opencontainers.image.source="https://github.com/grimmory-tools/grimmory" \
+    org.opencontainers.image.url="https://github.com/grimmory-tools/grimmory" \
+      org.opencontainers.image.documentation="https://grimmory.org/docs/getting-started" \
       org.opencontainers.image.version=$APP_VERSION \
       org.opencontainers.image.revision=$APP_REVISION \
       org.opencontainers.image.licenses="GPL-3.0" \

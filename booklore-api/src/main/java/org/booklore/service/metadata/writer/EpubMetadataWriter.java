@@ -10,6 +10,7 @@ import org.booklore.model.dto.settings.MetadataPersistenceSettings;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.enums.BookFileType;
+import org.booklore.service.metadata.BookLoreMetadata;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.SecureXmlUtils;
 import org.springframework.stereotype.Component;
@@ -712,7 +713,8 @@ public class EpubMetadataWriter implements MetadataWriter {
         for (int i = metas.getLength() - 1; i >= 0; i--) {
             Element meta = (Element) metas.item(i);
             String property = meta.getAttribute("property");
-            if (property.startsWith("booklore:")) {
+            if (property.startsWith(BookLoreMetadata.NS_PREFIX + ":")
+                    || property.startsWith(BookLoreMetadata.GRIMMORY_NS_PREFIX + ":")) {
                 metadataElement.removeChild(meta);
             }
         }
@@ -805,86 +807,96 @@ public class EpubMetadataWriter implements MetadataWriter {
 
     private void addBookloreMetadata(Element metadataElement, Document doc, BookMetadataEntity metadata) {
         Element packageElement = doc.getDocumentElement();
-        String existingPrefix = packageElement.getAttribute("prefix");
-        String bookloreNamespace = "booklore: http://booklore.org/metadata/1.0/";
-        
-        if (!existingPrefix.contains("booklore:")) {
-            if (existingPrefix.isEmpty()) {
-                packageElement.setAttribute("prefix", bookloreNamespace);
-            } else {
-                packageElement.setAttribute("prefix", existingPrefix.trim() + " " + bookloreNamespace);
-            }
-        }
+        ensureNamespacePrefix(packageElement, BookLoreMetadata.NS_PREFIX, BookLoreMetadata.NS_URI);
+        ensureNamespacePrefix(packageElement, BookLoreMetadata.GRIMMORY_NS_PREFIX, BookLoreMetadata.GRIMMORY_NS_URI);
         
         removeAllBookloreMetadata(metadataElement);
         
         if (metadata.getPageCount() != null && metadata.getPageCount() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "page_count", String.valueOf(metadata.getPageCount())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "page_count", String.valueOf(metadata.getPageCount()));
         }
         
         if (metadata.getSeriesTotal() != null && metadata.getSeriesTotal() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "series_total", String.valueOf(metadata.getSeriesTotal())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "series_total", String.valueOf(metadata.getSeriesTotal()));
         }
         
         if (metadata.getAmazonRating() != null && metadata.getAmazonRating() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "amazon_rating", String.valueOf(metadata.getAmazonRating())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "amazon_rating", String.valueOf(metadata.getAmazonRating()));
         }
         
         if (metadata.getAmazonReviewCount() != null && metadata.getAmazonReviewCount() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "amazon_review_count", String.valueOf(metadata.getAmazonReviewCount())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "amazon_review_count", String.valueOf(metadata.getAmazonReviewCount()));
         }
         
         if (metadata.getGoodreadsRating() != null && metadata.getGoodreadsRating() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "goodreads_rating", String.valueOf(metadata.getGoodreadsRating())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "goodreads_rating", String.valueOf(metadata.getGoodreadsRating()));
         }
         
         if (metadata.getGoodreadsReviewCount() != null && metadata.getGoodreadsReviewCount() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "goodreads_review_count", String.valueOf(metadata.getGoodreadsReviewCount())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "goodreads_review_count", String.valueOf(metadata.getGoodreadsReviewCount()));
         }
         
         if (metadata.getHardcoverRating() != null && metadata.getHardcoverRating() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "hardcover_rating", String.valueOf(metadata.getHardcoverRating())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "hardcover_rating", String.valueOf(metadata.getHardcoverRating()));
         }
         
         if (metadata.getHardcoverReviewCount() != null && metadata.getHardcoverReviewCount() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "hardcover_review_count", String.valueOf(metadata.getHardcoverReviewCount())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "hardcover_review_count", String.valueOf(metadata.getHardcoverReviewCount()));
         }
         
         if (metadata.getLubimyczytacRating() != null && metadata.getLubimyczytacRating() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "lubimyczytac_rating", String.valueOf(metadata.getLubimyczytacRating())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "lubimyczytac_rating", String.valueOf(metadata.getLubimyczytacRating()));
         }
         
         if (metadata.getRanobedbRating() != null && metadata.getRanobedbRating() > 0) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "ranobedb_rating", String.valueOf(metadata.getRanobedbRating())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "ranobedb_rating", String.valueOf(metadata.getRanobedbRating()));
         }
         
         if (metadata.getMoods() != null && !metadata.getMoods().isEmpty()) {
             String moodsJson = "[" + String.join(", ", metadata.getMoods().stream()
                 .map(mood -> "\"" + mood.getName().replace("\"", "\\\"") + "\"")
                 .toList()) + "]";
-            metadataElement.appendChild(createBookloreMetaElement(doc, "moods", moodsJson));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "moods", moodsJson);
         }
         
         if (metadata.getTags() != null && !metadata.getTags().isEmpty()) {
             String tagsJson = "[" + String.join(", ", metadata.getTags().stream()
                 .map(tag -> "\"" + tag.getName().replace("\"", "\\\"") + "\"")
                 .toList()) + "]";
-            metadataElement.appendChild(createBookloreMetaElement(doc, "tags", tagsJson));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "tags", tagsJson);
         }
 
         if (metadata.getAgeRating() != null) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "age_rating", String.valueOf(metadata.getAgeRating())));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "age_rating", String.valueOf(metadata.getAgeRating()));
         }
 
         if (StringUtils.isNotBlank(metadata.getContentRating())) {
-            metadataElement.appendChild(createBookloreMetaElement(doc, "content_rating", metadata.getContentRating()));
+            appendBookloreAndGrimmoryMeta(metadataElement, doc, "content_rating", metadata.getContentRating());
         }
     }
 
-    private Element createBookloreMetaElement(Document doc, String property, String value) {
+    private void ensureNamespacePrefix(Element packageElement, String namespacePrefix, String namespaceUri) {
+        String existingPrefix = packageElement.getAttribute("prefix");
+        String prefixDeclaration = namespacePrefix + ": " + namespaceUri;
+
+        if (!existingPrefix.contains(namespacePrefix + ":")) {
+            if (existingPrefix.isEmpty()) {
+                packageElement.setAttribute("prefix", prefixDeclaration);
+            } else {
+                packageElement.setAttribute("prefix", existingPrefix.trim() + " " + prefixDeclaration);
+            }
+        }
+    }
+
+    private void appendBookloreAndGrimmoryMeta(Element metadataElement, Document doc, String property, String value) {
+        metadataElement.appendChild(createNamespacedMetaElement(doc, BookLoreMetadata.NS_PREFIX, property, value));
+        metadataElement.appendChild(createNamespacedMetaElement(doc, BookLoreMetadata.GRIMMORY_NS_PREFIX, property, value));
+    }
+
+    private Element createNamespacedMetaElement(Document doc, String namespacePrefix, String property, String value) {
         Element meta = doc.createElementNS(OPF_NS, "meta");
         meta.setPrefix("opf");
-        meta.setAttribute("property", "booklore:" + property);
+        meta.setAttribute("property", namespacePrefix + ":" + property);
         meta.setTextContent(value);
         return meta;
     }
@@ -980,7 +992,8 @@ public class EpubMetadataWriter implements MetadataWriter {
                 }
             } else if ("meta".equals(localName)) {
                 String property = elem.getAttribute("property");
-                if (property.startsWith("booklore:")) {
+                if (property.startsWith(BookLoreMetadata.NS_PREFIX + ":")
+                        || property.startsWith(BookLoreMetadata.GRIMMORY_NS_PREFIX + ":")) {
                     bookloreMetas.add(elem);
                 } else if (property.equals("dcterms:modified") || property.equals("calibre:timestamp")) {
                     modifiedMetas.add(elem);

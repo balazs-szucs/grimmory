@@ -14,6 +14,7 @@ import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.booklore.model.dto.BookMetadata;
+import org.booklore.service.metadata.BookLoreMetadata;
 import org.booklore.util.SecureXmlUtils;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
@@ -45,6 +46,10 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     private static final Pattern COMMA_AMPERSAND_PATTERN = Pattern.compile("[,&]");
     private static final Pattern ISBN_CLEANUP_PATTERN = Pattern.compile("[^0-9Xx]");
+    private static final List<String> METADATA_PREFIXES = List.of(
+            BookLoreMetadata.NS_PREFIX,
+            BookLoreMetadata.GRIMMORY_NS_PREFIX
+    );
 
     @Override
     public byte[] extractCover(File file) {
@@ -279,17 +284,9 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
         Set<String> subjects = new HashSet<>(xpathEvaluateMultiple(xpath, doc, "//dc:subject/rdf:Bag/rdf:li/text()"));
         if (!subjects.isEmpty()) {
             Set<String> knownNonCategories = new HashSet<>();
-            
-            try {
-                String moods = xpath.evaluate("//booklore:Moods/text()", doc);
-                if (StringUtils.isNotBlank(moods)) {
-                    Arrays.stream(moods.split(";")).map(String::trim).forEach(knownNonCategories::add);
-                }
-                String tags = xpath.evaluate("//booklore:Tags/text()", doc);
-                if (StringUtils.isNotBlank(tags)) {
-                    Arrays.stream(tags.split(";")).map(String::trim).forEach(knownNonCategories::add);
-                }
-            } catch (Exception ignored) {}
+
+            knownNonCategories.addAll(extractLegacyDelimitedField(xpath, doc, "Moods", "moods"));
+            knownNonCategories.addAll(extractLegacyDelimitedField(xpath, doc, "Tags", "tags"));
             
             subjects.removeAll(knownNonCategories);
             
@@ -354,12 +351,7 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
             }
 
             // Subtitle (try both old PascalCase and new camelCase)
-            String subtitle = extractBookloreField(xpath, doc, "subtitle");
-            log.debug("Extracted subtitle (camelCase): '{}'", subtitle);
-            if (StringUtils.isBlank(subtitle)) {
-                subtitle = xpath.evaluate("//booklore:Subtitle/text()", doc);
-                log.debug("Extracted subtitle (PascalCase fallback): '{}'", subtitle);
-            }
+            String subtitle = extractBookloreField(xpath, doc, "subtitle", "Subtitle");
             if (StringUtils.isNotBlank(subtitle)) {
                 builder.subtitle(subtitle.trim());
             }
@@ -425,7 +417,7 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
             log.debug("Extracted moods from RDF Bag: {}", moods);
             if (moods.isEmpty()) {
                 // Legacy format support
-                String moodsLegacy = xpath.evaluate("//booklore:Moods/text()", doc);
+                String moodsLegacy = extractBookloreField(xpath, doc, "Moods", "moods");
                 log.debug("Legacy moods string: '{}'", moodsLegacy);
                 if (StringUtils.isNotBlank(moodsLegacy)) {
                     moods = Arrays.stream(moodsLegacy.split(";"))
@@ -443,7 +435,7 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
             log.debug("Extracted tags from RDF Bag: {}", tags);
             if (tags.isEmpty()) {
                 // Legacy format support
-                String tagsLegacy = xpath.evaluate("//booklore:Tags/text()", doc);
+                String tagsLegacy = extractBookloreField(xpath, doc, "Tags", "tags");
                 log.debug("Legacy tags string: '{}'", tagsLegacy);
                 if (StringUtils.isNotBlank(tagsLegacy)) {
                     tags = Arrays.stream(tagsLegacy.split(";"))
@@ -474,12 +466,20 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
     /**
      * Extracts a simple text field from Booklore namespace.
      */
-    private String extractBookloreField(XPath xpath, Document doc, String fieldName) {
-        try {
-            return xpath.evaluate("//booklore:" + fieldName + "/text()", doc);
-        } catch (Exception e) {
-            return "";
+    private String extractBookloreField(XPath xpath, Document doc, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            for (String prefix : METADATA_PREFIXES) {
+                try {
+                    String value = xpath.evaluate("//" + prefix + ":" + fieldName + "/text()", doc);
+                    if (StringUtils.isNotBlank(value)) {
+                        return value;
+                    }
+                } catch (Exception ignored) {
+                    // Try next prefix/field combination
+                }
+            }
         }
+        return "";
     }
 
     /**
@@ -487,21 +487,33 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
      */
     private Set<String> extractBookloreBag(XPath xpath, Document doc, String fieldName) {
         Set<String> values = new HashSet<>();
-        try {
-            String xpathExpr = "//booklore:" + fieldName + "/rdf:Bag/rdf:li/text()";
-            log.debug("Executing XPath for {}: {}", fieldName, xpathExpr);
-            NodeList nodes = (NodeList) xpath.evaluate(xpathExpr, doc, XPathConstants.NODESET);
-            log.debug("XPath for {} returned {} nodes", fieldName, nodes != null ? nodes.getLength() : 0);
-            if (nodes != null) {
-                for (int i = 0; i < nodes.getLength(); i++) {
-                    String text = nodes.item(i).getNodeValue();
-                    if (StringUtils.isNotBlank(text)) {
-                        values.add(text.trim());
+        for (String prefix : METADATA_PREFIXES) {
+            try {
+                String xpathExpr = "//" + prefix + ":" + fieldName + "/rdf:Bag/rdf:li/text()";
+                NodeList nodes = (NodeList) xpath.evaluate(xpathExpr, doc, XPathConstants.NODESET);
+                if (nodes != null) {
+                    for (int i = 0; i < nodes.getLength(); i++) {
+                        String text = nodes.item(i).getNodeValue();
+                        if (StringUtils.isNotBlank(text)) {
+                            values.add(text.trim());
+                        }
                     }
                 }
+            } catch (Exception e) {
+                log.debug("Failed to extract RDF Bag for {}:{}: {}", prefix, fieldName, e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Failed to extract RDF Bag for booklore:{}: {}", fieldName, e.getMessage());
+        }
+        return values;
+    }
+
+    private Set<String> extractLegacyDelimitedField(XPath xpath, Document doc, String... fieldNames) {
+        Set<String> values = new HashSet<>();
+        String raw = extractBookloreField(xpath, doc, fieldNames);
+        if (StringUtils.isNotBlank(raw)) {
+            Arrays.stream(raw.split(";"))
+                    .map(String::trim)
+                    .filter(StringUtils::isNotBlank)
+                    .forEach(values::add);
         }
         return values;
     }
@@ -512,10 +524,7 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
     private void extractBookloreRating(XPath xpath, Document doc, String newName, String legacyName, 
                                         java.util.function.Consumer<Double> setter) {
         try {
-            String value = xpath.evaluate("//booklore:" + newName + "/text()", doc);
-            if (StringUtils.isBlank(value)) {
-                value = xpath.evaluate("//booklore:" + legacyName + "/text()", doc);
-            }
+            String value = extractBookloreField(xpath, doc, newName, legacyName);
             if (StringUtils.isNotBlank(value)) {
                 setter.accept(Double.parseDouble(value.trim()));
             }
@@ -590,7 +599,8 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
             prefixMap.put("xmpidq", "http://ns.adobe.com/xmp/Identifier/qual/1.0/");
             prefixMap.put("calibre", "http://calibre-ebook.com/xmp-namespace");
             prefixMap.put("calibreSI", "http://calibre-ebook.com/xmp-namespace/seriesIndex");
-            prefixMap.put("booklore", "http://booklore.org/metadata/1.0/");
+            prefixMap.put("booklore", BookLoreMetadata.NS_URI);
+            prefixMap.put("grimmory", BookLoreMetadata.GRIMMORY_NS_URI);
         }
 
         @Override

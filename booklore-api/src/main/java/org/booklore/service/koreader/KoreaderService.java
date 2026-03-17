@@ -89,8 +89,8 @@ public class KoreaderService {
                 .document(bookHash)
                 .progress(progress.getKoreaderProgress())
                 .percentage(progress.getKoreaderProgressPercent())
-                .device("BookLore")
-                .device_id("BookLore")
+            .device("Grimmory")
+            .device_id("Grimmory")
                 .build();
     }
 
@@ -176,7 +176,7 @@ public class KoreaderService {
                 userProgress.setEpubProgress(cfi);
                 userProgress.setEpubProgressPercent(rounded);
 
-                log.info("Converted xpointer to CFI for BookLore reader sync: {}", cfi);
+                log.info("Converted xpointer to CFI for Grimmory reader sync: {}", cfi);
             } catch (Exception e) {
                 log.warn("Failed to convert xpointer to CFI: {}", e.getMessage());
             }

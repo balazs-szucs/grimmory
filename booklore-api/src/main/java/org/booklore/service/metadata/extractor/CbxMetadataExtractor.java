@@ -38,7 +38,8 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
 
     private static final Pattern LEADING_ZEROS_PATTERN = Pattern.compile("^0+");
     private static final Pattern COMMA_SEMICOLON_PATTERN = Pattern.compile("[,;]");
-    private static final Pattern BOOKLORE_NOTE_PATTERN = Pattern.compile("\\[BookLore:([^\\]]+)\\]\\s*(.*)");
+    private static final Pattern CUSTOM_METADATA_NOTE_PATTERN = Pattern.compile("\\[(?:BookLore|Grimmory):([^\\]]+)\\]\\s*(.*)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CUSTOM_METADATA_NOTE_LINE_PATTERN = Pattern.compile("(?im)^\\[(?:BookLore|Grimmory):[^\\]]+\\][^\\n]*(?:\\n|$)");
     private static final Pattern WEB_SPLIT_PATTERN = Pattern.compile("[,;\\s]+");
 
     // URL Patterns
@@ -376,9 +377,9 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
             );
             boolean hasDescription = existingDescription != null && !existingDescription.isBlank();
 
-            // If description is missing, use cleaned notes (removing BookLore tags)
+            // If description is missing, use cleaned notes (removing metadata note tags)
             if (!hasDescription) {
-                String cleanedNotes = notes.replaceAll("\\[BookLore:[^\\]]+\\][^\\n]*(\n|$)", "").trim();
+                String cleanedNotes = CUSTOM_METADATA_NOTE_LINE_PATTERN.matcher(notes).replaceAll("").trim();
                 if (!cleanedNotes.isEmpty()) {
                     builder.description(cleanedNotes);
                 }
@@ -424,7 +425,7 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     }
 
     private void parseNotes(String notes, BookMetadata.BookMetadataBuilder builder) {
-        java.util.regex.Matcher matcher = BOOKLORE_NOTE_PATTERN.matcher(notes);
+        java.util.regex.Matcher matcher = CUSTOM_METADATA_NOTE_PATTERN.matcher(notes);
         while (matcher.find()) {
             String key = matcher.group(1).trim();
             String value = matcher.group(2).trim();

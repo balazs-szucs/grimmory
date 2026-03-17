@@ -259,7 +259,7 @@ public class PdfMetadataWriter implements MetadataWriter {
         xmpBasicDescription.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xmp", "http://ns.adobe.com/xap/1.0/");
         xmpBasicDescription.setAttributeNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:about", "");
 
-        xmpBasicDescription.appendChild(createXmpElement(doc, "xmp:CreatorTool", "Booklore"));
+        xmpBasicDescription.appendChild(createXmpElement(doc, "xmp:CreatorTool", "Grimmory"));
         // Use ISO-8601 format for current timestamps
         String nowIso = ZonedDateTime.now().format(java.time.format.DateTimeFormatter.ISO_INSTANT);
         xmpBasicDescription.appendChild(createXmpElement(doc, "xmp:MetadataDate", nowIso));
@@ -272,9 +272,10 @@ public class PdfMetadataWriter implements MetadataWriter {
 
         rdfRoot.appendChild(xmpBasicDescription);
 
-        // Booklore namespace for all custom metadata
+        // Booklore/Grimmory namespace aliases for all custom metadata
         Element bookloreDescription = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:Description");
         bookloreDescription.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + BookLoreMetadata.NS_PREFIX, BookLoreMetadata.NS_URI);
+        bookloreDescription.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + BookLoreMetadata.GRIMMORY_NS_PREFIX, BookLoreMetadata.GRIMMORY_NS_URI);
         bookloreDescription.setAttributeNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:about", "");
 
         // Series Information - ONLY write if BOTH name AND number are valid
@@ -411,21 +412,31 @@ public class PdfMetadataWriter implements MetadataWriter {
     }
 
     private void appendBookloreElement(Document doc, Element parent, String localName, String value) {
-        Element elem = doc.createElementNS(BookLoreMetadata.NS_URI, BookLoreMetadata.NS_PREFIX + ":" + localName);
-        elem.setTextContent(value);
-        parent.appendChild(elem);
+        appendNamespacedElement(doc, parent, BookLoreMetadata.NS_PREFIX, BookLoreMetadata.NS_URI, localName, value);
+        appendNamespacedElement(doc, parent, BookLoreMetadata.GRIMMORY_NS_PREFIX, BookLoreMetadata.GRIMMORY_NS_URI, localName, value);
     }
 
     private void appendBookloreRating(Document doc, Element parent, String localName, Double rating) {
         if (rating != null && rating > 0) {
-            Element elem = doc.createElementNS(BookLoreMetadata.NS_URI, BookLoreMetadata.NS_PREFIX + ":" + localName);
-            elem.setTextContent(String.format(Locale.US, "%.1f", rating));
-            parent.appendChild(elem);
+            String formattedRating = String.format(Locale.US, "%.1f", rating);
+            appendNamespacedElement(doc, parent, BookLoreMetadata.NS_PREFIX, BookLoreMetadata.NS_URI, localName, formattedRating);
+            appendNamespacedElement(doc, parent, BookLoreMetadata.GRIMMORY_NS_PREFIX, BookLoreMetadata.GRIMMORY_NS_URI, localName, formattedRating);
         }
     }
 
     private void appendBookloreBag(Document doc, Element parent, String localName, Set<String> values) {
-        Element elem = doc.createElementNS(BookLoreMetadata.NS_URI, BookLoreMetadata.NS_PREFIX + ":" + localName);
+        appendNamespacedBag(doc, parent, BookLoreMetadata.NS_PREFIX, BookLoreMetadata.NS_URI, localName, values);
+        appendNamespacedBag(doc, parent, BookLoreMetadata.GRIMMORY_NS_PREFIX, BookLoreMetadata.GRIMMORY_NS_URI, localName, values);
+    }
+
+    private void appendNamespacedElement(Document doc, Element parent, String prefix, String namespaceUri, String localName, String value) {
+        Element elem = doc.createElementNS(namespaceUri, prefix + ":" + localName);
+        elem.setTextContent(value);
+        parent.appendChild(elem);
+    }
+
+    private void appendNamespacedBag(Document doc, Element parent, String prefix, String namespaceUri, String localName, Set<String> values) {
+        Element elem = doc.createElementNS(namespaceUri, prefix + ":" + localName);
         Element rdfBag = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:Bag");
         
         for (String value : values) {

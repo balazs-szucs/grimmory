@@ -10,7 +10,7 @@
 <!-- If reporting a vulnerability that is not already publicly known: -->
 <!-- DO NOT create a public issue. Instead, set the type to incident: -->
 <!-- 1. Email: security@booklore.org (if available) -->
-<!-- 2. GitHub Security Advisory: https://github.com/booklore-app/booklore/security/advisories/new -->
+<!-- 2. GitHub Security Advisory: https://github.com/grimmory-tools/grimmory/security/advisories/new -->
 <!-- 3. Discord DM to @maintainer -->
 
 

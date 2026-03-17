@@ -5,6 +5,7 @@ import org.booklore.exception.ApiError;
 import org.booklore.model.dto.settings.CoverCroppingSettings;
 import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.metadata.MetadataUserAgentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -47,6 +48,7 @@ public class FileService {
     private final RestTemplate restTemplate;
     private final AppSettingService appSettingService;
     private final RestTemplate noRedirectRestTemplate;
+    private final MetadataUserAgentService metadataUserAgentService;
 
     private static final int MAX_REDIRECTS = 5;
 
@@ -289,7 +291,7 @@ public class FileService {
             }
 
             HttpHeaders headers = new HttpHeaders();
-            headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
+            headers.set(HttpHeaders.USER_AGENT, metadataUserAgentService.getMetadataFetcherUserAgent());
             headers.set(HttpHeaders.ACCEPT, "image/*");
 
             HttpEntity<String> entity = new HttpEntity<>(headers);

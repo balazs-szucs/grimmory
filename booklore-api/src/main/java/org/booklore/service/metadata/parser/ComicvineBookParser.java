@@ -11,6 +11,7 @@ import org.booklore.model.dto.response.comicvineapi.ComicvineApiResponse;
 import org.booklore.model.dto.response.comicvineapi.ComicvineIssueResponse;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.metadata.MetadataUserAgentService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.ObjectMapper;
@@ -59,6 +60,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
     private final ObjectMapper objectMapper;
     private final AppSettingService appSettingService;
+    private final MetadataUserAgentService metadataUserAgentService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     private final AtomicBoolean rateLimited = new AtomicBoolean(false);
@@ -467,7 +469,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             log.debug("ComicVine API call #{} to {}", callNumber, endpoint);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
-                    .header("User-Agent", "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)")
+                    .header("User-Agent", metadataUserAgentService.getMetadataFetcherUserAgent())
                     .GET()
                     .build();
 

@@ -94,7 +94,7 @@ public class SendEmailV2Service {
         MimeMessageHelper helper = new MimeMessageHelper(message, true);
         helper.setFrom(StringUtils.firstNonEmpty(emailProvider.getFromAddress(), emailProvider.getUsername()));
         helper.setTo(recipientEmail);
-        helper.setSubject("Your Book from Booklore: " + book.getMetadata().getTitle());
+        helper.setSubject("Your Book from Grimmory: " + book.getMetadata().getTitle());
         helper.setText(generateEmailBody(book.getMetadata().getTitle()));
         File bookFile = new File(FileUtils.getBookFullPath(book, bookFileEntity));
         helper.addAttachment(bookFile.getName(), bookFile);

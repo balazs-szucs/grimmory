@@ -9,6 +9,7 @@ import org.booklore.model.dto.response.ranobedbapi.RanobedbBookResponse;
 import org.booklore.model.dto.response.ranobedbapi.RanobedbSearchResponse;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.metadata.MetadataUserAgentService;
 import org.booklore.util.BookUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -37,6 +38,7 @@ public class RanobeDbParser implements BookParser {
     private static final String RANOBEDB_IMAGE_URL = "https://images.ranobedb.org/";
 
     private final AppSettingService appSettingService;
+    private final MetadataUserAgentService metadataUserAgentService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
     
     // Rate limiter: 2 requests per second
@@ -132,7 +134,7 @@ public class RanobeDbParser implements BookParser {
 
           HttpRequest request = HttpRequest.newBuilder()
                   .uri(uri)
-                  .header("User-Agent", "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)")
+              .header("User-Agent", metadataUserAgentService.getMetadataFetcherUserAgent())
                   .GET()
                   .build();
 
@@ -189,7 +191,7 @@ public class RanobeDbParser implements BookParser {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
-                    .header("User-Agent", "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)")
+                    .header("User-Agent", metadataUserAgentService.getMetadataFetcherUserAgent())
                     .GET()
                     .build();
 

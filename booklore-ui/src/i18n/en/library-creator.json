@@ -12,7 +12,7 @@
     "bookFolders": "Book Folders",
     "addFolder": "Add folder",
     "emptyFoldersHint": "Add folders containing your book files",
-    "folderStructureHint": "Make sure your folders follow the expected <a href='https://booklore.org/docs/library/folder-structure#-recommended-structures' target='_blank' rel='noopener'>directory structure</a> for books and audiobooks.",
+    "folderStructureHint": "Make sure your folders follow the expected <a href='https://grimmory.org/docs/library/folder-structure#-recommended-structures' target='_blank' rel='noopener'>directory structure</a> for books and audiobooks.",
     "options": "Options",
     "watchFolders": "Watch folders",
     "watchFoldersTooltip": "Automatically detect new books added to folders",
