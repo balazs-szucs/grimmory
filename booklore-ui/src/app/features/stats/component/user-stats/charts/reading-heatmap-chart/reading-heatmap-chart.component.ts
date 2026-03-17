@@ -198,9 +198,6 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
       });
     }
   }
-      });
-  }
-  }
 
   ngOnDestroy(): void {
     this.canvasMouseLeaveUnlisten?.();
@@ -409,11 +406,9 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
         });
       }
     });
-      }
-    });
 
+    if (this.chartOptions?.scales?.['y'])
       (this.chartOptions.scales['y'] as any).max = years.length - 1;
-    }
 
     this.chartDataSubject.next({
       labels: [],
@@ -427,7 +422,6 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
           const intensity = point.v / this.maxBookCount;
           const alpha = Math.max(0.2, Math.min(1.0, intensity * 0.8 + 0.2));
           return `rgba(239, 71, 111, ${alpha})`;
-        },
         },
         borderColor: 'rgba(255, 255, 255, 0.2)',
         borderWidth: 1,
@@ -445,6 +439,7 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
     }
 
     return this.processHeatmapData(currentState.books!);
+  }
 
   private isValidBookState(state: unknown): state is BookState {
     return (
@@ -457,10 +452,10 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
       (state as {books: Book[]}).books.length > 0
     );
   }
-  }
 
   private processHeatmapData(books: Book[]): YearMonthData[] {
     const yearMonthMap = new Map<string, number>();
+    this.booksByYearMonth.clear();
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 9;
 
@@ -474,6 +469,9 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
           const month = finishedDate.getMonth() + 1;
           const key = `${year}-${month}`;
           yearMonthMap.set(key, (yearMonthMap.get(key) || 0) + 1);
+          const arr = this.booksByYearMonth.get(key) ?? [];
+          arr.push(book);
+          this.booksByYearMonth.set(key, arr);
         }
       });
 
@@ -482,15 +480,6 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
         const [year, month] = key.split('-').map(Number);
         return {year, month, count};
       })
-      .sort((a, b) => a.year - b.year || a.month - b.month);
-
-    return Array.from(yearMonthMap.entries())
-      .map(([key, count]) => {
-        const [year, month] = key.split('-').map(Number);
-        return {year, month, count};
-      })
-    return Array.from(map.entries())
-      .map(([k, count]) => { const [y, m] = k.split('-').map(Number); return {year: y, month: m, count}; })
       .sort((a, b) => a.year - b.year || a.month - b.month);
   }
 }

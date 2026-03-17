@@ -106,6 +106,10 @@ export class MetadataMatchWeightsComponent implements OnInit {
     return Object.keys(this.labelMap);
   }
 
+  getFieldLabel(key: string): string {
+    return this.labelMap[key] ?? key;
+  }
+
   save(): void {
     if (this.form.invalid) return;
 

@@ -147,7 +147,7 @@ class MonitoringServiceTest {
 
         service.handleFileChangeEvent(ev);
 
-        verify(processor, timeout(2_000)).processFile(eq(StandardWatchEventKinds.ENTRY_CREATE), eq(123L), eq(watched.toString()), eq(file.toString()));
+        verify(processor, timeout(2_000)).processEvent(eq(StandardWatchEventKinds.ENTRY_CREATE), eq(123L), eq(file), eq(false));
     }
 
     @Test
@@ -211,7 +211,7 @@ class MonitoringServiceTest {
 
         service.handleFileChangeEvent(ev);
 
-        verify(processor, timeout(500).times(0)).processFile(any(), anyLong(), anyString(), anyString());
+        verify(processor, timeout(500).times(0)).processEvent(any(), anyLong(), any(Path.class), anyBoolean());
     }
 
     @Test

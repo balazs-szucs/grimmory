@@ -18,11 +18,10 @@
     <div class="chart-wrapper">
       <canvas #chartCanvas
               baseChart
-    <canvas baseChart
-            [data]="(chartData$ | async) ?? {labels: [], datasets: []}"
-            [options]="chartOptions"
-            [type]="chartType">
-    </canvas>
+              [data]="(chartData$ | async) ?? {labels: [], datasets: []}"
+              [options]="chartOptions"
+              [type]="chartType">
+      </canvas>
   </div>
 </div>
 </ng-container>

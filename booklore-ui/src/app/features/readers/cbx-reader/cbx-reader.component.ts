@@ -6,6 +6,7 @@ import {debounceTime, filter, first, map, switchMap, takeUntil, timeout} from 'r
 import {PageTitleService} from "../../../shared/service/page-title.service";
 import {CbxReaderService} from '../../book/service/cbx-reader.service';
 import {BookService} from '../../book/service/book.service';
+import {CbxBackgroundColor, CbxFitMode, CbxMagnifierLensSize, CbxMagnifierZoom, CbxPageSpread, CbxPageViewMode, CbxScrollMode, CbxReadingDirection, CbxSlideshowInterval, UserService} from '../../settings/user-management/user.service';
 import {MessageService} from 'primeng/api';
 import {TranslocoService, TranslocoPipe} from '@jsverse/transloco';
 import {Book, BookSetting, BookType} from '../../book/model/book.model';
@@ -119,9 +120,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   // Magnifier
   isMagnifierActive = false;
   @ViewChild('magnifierLens', {static: true}) private magnifierLensRef!: ElementRef<HTMLDivElement>;
-magnifierZoom: CbxMagnifierZoom = CbxMagnifierZoom.ZOOM_3X;
-magnifierLensSize: CbxMagnifierLensSize = CbxMagnifierLensSize.MEDIUM;
-private lastMouseEvent: MouseEvent | null = null;
+  magnifierZoom: CbxMagnifierZoom = CbxMagnifierZoom.ZOOM_3X;
+  magnifierLensSize: CbxMagnifierLensSize = CbxMagnifierLensSize.MEDIUM;
+  private lastMouseEvent: MouseEvent | null = null;
 
   // Double page detection
   private pageDimensionsCache = new Map<number, {width: number, height: number}>();
@@ -446,9 +447,9 @@ private lastMouseEvent: MouseEvent | null = null;
       pageSpread: this.pageSpread,
       backgroundColor: this.backgroundColor,
       readingDirection: this.readingDirection,
-slideshowInterval: this.slideshowInterval,
-magnifierZoom: this.magnifierZoom,
-magnifierLensSize: this.magnifierLensSize
+      slideshowInterval: this.slideshowInterval,
+      magnifierZoom: this.magnifierZoom,
+      magnifierLensSize: this.magnifierLensSize
     });
 
     this.headerService.updateState({
@@ -1337,8 +1338,8 @@ magnifierLensSize: this.magnifierLensSize
     const el = this.magnifierLensRef?.nativeElement;
     if (!el) return;
 
-const lensSize = this.magnifierLensSize as number;
-const zoom = this.magnifierZoom as number;
+    const lensSize = this.magnifierLensSize as number;
+    const zoom = this.magnifierZoom as number;
 
     const target = document.elementFromPoint(event.clientX, event.clientY);
     if (!(target instanceof HTMLImageElement) || !target.classList.contains('page-image')) {

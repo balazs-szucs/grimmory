@@ -89,7 +89,6 @@ public class ReadingProgressService {
                                         UserBookFileProgressEntity fileProgress) {
         if (progress != null) {
             book.setReadStatus(progress.getReadStatus() == null ?
-                    String.valueOf(ReadStatus.UNREAD) : String.valueOf(progress.getReadStatus()));
                     String.valueOf(ReadStatus.UNSET) : String.valueOf(progress.getReadStatus()));
             book.setDateFinished(progress.getDateFinished());
             book.setPersonalRating(progress.getPersonalRating());
@@ -241,13 +240,6 @@ public class ReadingProgressService {
                 }
             }
 
-            if (percentage != null) {
-                progress.setReadStatus(calculateReadStatus(percentage, progress.getReadStatus()));
-                BookFileEntity primaryFile = book.getPrimaryBookFile();
-                if (primaryFile != null) {
-                    setProgressPercent(progress, primaryFile.getBookType(), percentage);
-                }
-            }
         }
 
         if (percentage != null) {

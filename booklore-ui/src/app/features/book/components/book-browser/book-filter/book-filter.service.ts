@@ -171,7 +171,7 @@ export class BookFilterService {
     }
 
     const filters = Array.from(filterMap.values());
-const MAX_FILTER_ITEMS = 100;
+    const sorted = sortMode === 'sortIndex'
       ? this.sortFiltersBySortIndex(filters)
       : this.sortFiltersByCount(filters);
 

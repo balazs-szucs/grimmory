@@ -206,7 +206,7 @@ public class MonitoringService {
 
         if (libraryId != null) {
             try {
-                libraryFileEventProcessor.processFile(event.getEventKind(), libraryId, watchedFolder.toString(), filePath.toString());
+                libraryFileEventProcessor.processEvent(event.getEventKind(), libraryId, filePath, Files.isDirectory(filePath));
             } catch (InvalidDataAccessApiUsageException e) {
                 log.debug("InvalidDataAccessApiUsageException for libraryId={}", libraryId);
             }

@@ -44,7 +44,6 @@ export class AuthorService {
     }
     return this.http.get<AuthorSearchResult[]>(`${this.baseUrl}/${authorId}/search-metadata`, {params});
   }
-  }
 
   matchAuthor(authorId: number, request: AuthorMatchRequest): Observable<AuthorDetails> {
     return this.http.post<AuthorDetails>(`${this.baseUrl}/${authorId}/match`, request);

@@ -35,7 +35,6 @@ public class AppProperties {
     public static class Swagger {
         private boolean enabled = true;
     }
-    }
 
     @Getter
     @Setter

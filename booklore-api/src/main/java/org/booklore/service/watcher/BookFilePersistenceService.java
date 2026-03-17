@@ -45,6 +45,15 @@ public class BookFilePersistenceService {
         String newSubPath = FileUtils.getRelativeSubPath(newLibraryPath.getPath(), path);
         String newFileName = path.getFileName().toString();
 
+        BookFileEntity matchedFile = book.getBookFiles().stream()
+                .filter(bf -> currentHash.equals(bf.getCurrentHash()))
+                .findFirst()
+                .orElseGet(book::getPrimaryBookFile);
+
+        if (matchedFile == null) {
+            log.warn("[FILE_CREATE] Book id={} has no files, skipping path update for hash '{}'", book.getId(), currentHash);
+            return;
+        }
 
         boolean changed = !Objects.equals(newSubPath, matchedFile.getFileSubPath())
                 || !Objects.equals(newFileName, matchedFile.getFileName())

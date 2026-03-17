@@ -71,7 +71,7 @@ class EpubMetadataWriterTest {
         metadata.setTitle("Test Book");
         AuthorEntity author = new AuthorEntity();
         author.setName("Test Author");
-
+        metadata.setAuthors(List.of(author));
 
         bookEntity = new BookEntity();
         LibraryPathEntity libraryPath = new LibraryPathEntity();

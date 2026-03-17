@@ -53,12 +53,9 @@ public class OpdsBookService {
 
         List<Library> libraries;
         if (user.getPermissions() != null && user.getPermissions().isAdmin()) {
-        List<Library> libraries;
-        if (user.getPermissions() != null && user.getPermissions().isAdmin()) {
             libraries = libraryService.getAllLibraries();
         } else {
             libraries = user.getAssignedLibraries();
-        }
         }
 
         return libraries.stream()

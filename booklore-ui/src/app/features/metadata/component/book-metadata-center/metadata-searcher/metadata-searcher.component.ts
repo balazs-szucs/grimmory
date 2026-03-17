@@ -149,11 +149,6 @@ export class MetadataSearcherComponent implements OnInit, OnDestroy, OnChanges {
     this.selectedProviderFilters = new Set(['all']);
     this.bookId = book.id;
 
-    this.form.patchValue({
-      provider: this.providers,
-      title: book.metadata?.title ?? '',
-      author: book.metadata?.authors?.[0] ?? '',
-      isbn: book.metadata?.isbn13 ?? book.metadata?.isbn10 ?? ''
     const formUpdate: Record<string, any> = {
       title: book.metadata?.title ?? '',
       author: book.metadata?.authors?.[0] ?? '',

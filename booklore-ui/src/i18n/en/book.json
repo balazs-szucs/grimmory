@@ -511,6 +511,7 @@
     "title": "Filters",
     "showingFirst100": "Showing first 100 items",
     "footerNote": "Note: Top 100 items are displayed per filter category",
+    "searchPlaceholder": "Search...",
     "labels": {
       "author": "Author",
       "category": "Genre",

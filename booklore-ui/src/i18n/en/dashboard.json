@@ -15,6 +15,9 @@
     "recentlyAdded": "Recently Added",
     "discoverNew": "Discover Something New",
     "magicShelf": "Magic Shelf",
+    "upNext": "Up Next",
+    "readAgain": "Read Again",
+    "recommendations": "Recommendations",
     "default": "Scroller"
   },
   "settings": {
@@ -37,7 +40,15 @@
       "latestAdded": "Recently Added",
       "random": "Discover Something New",
       "magicShelf": "Magic Shelf",
+      "upNext": "Up Next",
+      "readAgain": "Read Again",
+      "recommendations": "Recommendations",
       "default": "Scroller"
+    },
+    "upNextLabel": "Up Next Mode",
+    "upNextModes": {
+      "nextInSeries": "Next in Series",
+      "firstUnread": "First Unread"
     },
     "sortFields": {
       "title": "Title",

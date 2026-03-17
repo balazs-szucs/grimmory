@@ -121,6 +121,50 @@ class ReadingProgressServiceTest {
     }
 
     @Test
+    void enrichBookWithProgress_nullReadStatus_defaultsToUNSET() {
+        Book book = Book.builder().id(1L).build();
+        UserBookProgressEntity progress = new UserBookProgressEntity();
+        progress.setReadStatus(null);
+
+        readingProgressService.enrichBookWithProgress(book, progress);
+
+        assertEquals(ReadStatus.UNSET.name(), book.getReadStatus(),
+                "null readStatus must default to UNSET (not UNREAD) — merge-conflict regression");
+    }
+
+    @Test
+    void enrichBookWithProgress_nullReadStatus_doesNotDefaultToUNREAD() {
+        Book book = Book.builder().id(1L).build();
+        UserBookProgressEntity progress = new UserBookProgressEntity();
+        progress.setReadStatus(null);
+
+        readingProgressService.enrichBookWithProgress(book, progress);
+
+        assertNotEquals(ReadStatus.UNREAD.name(), book.getReadStatus(),
+                "Null readStatus must NOT fall back to UNREAD after merge fix");
+    }
+
+    @Test
+    void enrichBookWithProgress_explicitUNREAD_isPreserved() {
+        Book book = Book.builder().id(1L).build();
+        UserBookProgressEntity progress = new UserBookProgressEntity();
+        progress.setReadStatus(ReadStatus.UNREAD);
+
+        readingProgressService.enrichBookWithProgress(book, progress);
+
+        assertEquals(ReadStatus.UNREAD.name(), book.getReadStatus());
+    }
+
+    @Test
+    void enrichBookWithProgress_nullProgress_doesNotSetReadStatus() {
+        Book book = Book.builder().id(1L).build();
+
+        readingProgressService.enrichBookWithProgress(book, (UserBookProgressEntity) null);
+
+        assertNull(book.getReadStatus());
+    }
+
+    @Test
     void enrichBookWithProgress_shouldSetProgressFields() {
         Book book = Book.builder().id(1L).build();
         UserBookProgressEntity progress = new UserBookProgressEntity();

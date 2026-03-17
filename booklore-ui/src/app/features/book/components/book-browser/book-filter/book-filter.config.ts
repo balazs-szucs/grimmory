@@ -224,7 +224,6 @@ export const FILTER_EXTRACTORS: Readonly<Record<Exclude<FilterType, 'library'>, 
     const year = new Date(date).getFullYear().toString();
     return [{id: year, name: year}];
   },
-  fileSize: (book) => findInRange(book.fileSizeKb, FILE_SIZE_RANGES),
   fileSize: (book) => findInRange(book.primaryFile?.fileSizeKb, FILE_SIZE_RANGES),
   amazonRating: (book) => findInRange(book.metadata?.amazonRating, RATING_RANGES_5),
   goodreadsRating: (book) => findInRange(book.metadata?.goodreadsRating, RATING_RANGES_5),

@@ -295,9 +295,9 @@ public class BookCoverService {
     }
 
     /**
-import org.booklore.config.AppProperties;
+     * Regenerate covers for all books, optionally only for books with missing covers.
      */
-private final AppProperties appProperties;
+    public void regenerateCovers(boolean missingOnly) {
         SecurityContextVirtualThread.runWithSecurityContext(() -> {
             try {
                 List<BookRegenerationInfo> books = bookQueryService.getAllFullBookEntities().stream()

@@ -5,6 +5,7 @@ import {Router} from '@angular/router';
 import {LibraryService} from '../book/service/library.service';
 import {FormsModule} from '@angular/forms';
 import {InputText} from 'primeng/inputtext';
+import {Library, MetadataSource, OrganizationMode} from '../book/model/library.model';
 import {BookType} from '../book/model/book.model';
 import {ToggleSwitch} from 'primeng/toggleswitch';
 import {Tooltip} from 'primeng/tooltip';
