@@ -839,7 +839,7 @@ export class MagicShelfComponent implements OnInit {
       return;
     }
 
-    const value = this.form.value as { name: string | null; icon: string | null; group: GroupRule, isPublic: boolean | null };
+    const value = this.form.value as { name: string | null; icon: string | null; group: GroupRule, isPublic: boolean | null, opdsSort: string | null };
     const cleanedGroup = removeNulls(serializeDateRules(value.group));
 
     this.magicShelfService.saveShelf({
@@ -848,6 +848,7 @@ export class MagicShelfComponent implements OnInit {
       icon: value.icon,
       iconType: this.selectedIcon?.type,
       isPublic: !!value.isPublic,
+      opdsSort: value.opdsSort,
       group: cleanedGroup
     }).subscribe({
       next: (savedShelf) => {

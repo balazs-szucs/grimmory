@@ -34,12 +34,33 @@
 
               <p-accordion-content>
                 @if (expandedPanels.includes(i)) {
+                  @if (isSearchable(filterType)) {
+                    <div class="filter-search-wrapper" (click)="$event.stopPropagation()">
+                      <span class="filter-search-icon pi pi-search"></span>
+                      <input
+                        pInputText
+                        type="text"
+                        class="filter-search-input"
+                        [placeholder]="t('searchPlaceholder')"
+                        [(ngModel)]="filterSearchTerms[filterType]"
+                        (ngModelChange)="$event"
+                      />
+                      @if (filterSearchTerms[filterType]) {
+                        <span
+                          class="filter-search-clear pi pi-times"
+                          (click)="clearSearch(filterType, $event)">
+                        </span>
+                      }
+                    </div>
+                  }
+
+                  @let displayedFilters = getFilteredItems(filterType, filters);
                   <cdk-virtual-scroll-viewport
                     [itemSize]="28"
-                    [style.height.px]="getVirtualScrollHeight(filters.length)"
+                    [style.height.px]="getVirtualScrollHeight(displayedFilters.length)"
                     class="filter-list">
                     <div
-                      *cdkVirtualFor="let filter of filters; trackBy: trackByFilter"
+                      *cdkVirtualFor="let filter of displayedFilters; trackBy: trackByFilter"
                       class="filter-row"
                       [ngClass]="{
                     'active': activeFilters[filterType]?.includes(getFilterValueId(filter)),
@@ -50,6 +71,12 @@
                       <p-badge class="filter-value-badge" [value]="filter.bookCount"></p-badge>
                     </div>
                   </cdk-virtual-scroll-viewport>
+
+                  @if (displayedFilters.length === 0 && filterSearchTerms[filterType]) {
+                    <div class="filter-no-results">
+                      {{ t('noResults') }}
+                    </div>
+                  }
                   @if (truncatedFilters[filterType]) {
                     <div class="truncation-notice">
                       {{ t('showingFirst100') }}
@@ -62,6 +89,13 @@
         }
       }
     </p-accordion>
+
+    <div class="footer-notice">
+      {{ t('footerNote') }}
+    </div>
+  </div>
+</div>
+</ng-container>
 
     <div class="footer-notice">
       {{ t('footerNote') }}

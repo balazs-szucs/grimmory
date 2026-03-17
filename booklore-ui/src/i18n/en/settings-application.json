@@ -4,6 +4,7 @@
   "covers": {
     "sectionTitle": "Book Cover Image",
     "regenerate": "Regenerate Covers",
+    "regenerateBtn": "Regenerate",
     "regenerateAllBtn": "Regenerate All",
     "regenerateMissingBtn": "Regenerate Missing",
     "regenerateDesc": "Regenerates cover images for all books from the embedded covers in the file. Use \"Regenerate Missing\" to only generate covers for books that don't have one yet.",

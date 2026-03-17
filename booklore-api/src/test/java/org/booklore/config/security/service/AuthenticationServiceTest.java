@@ -65,7 +65,8 @@ class AuthenticationServiceTest {
         authenticationService = new AuthenticationService(
                 appProperties, userRepository, refreshTokenRepository,
                 userProvisioningService, passwordEncoder, jwtUtils,
-                defaultSettingInitializer, auditService, authRateLimitService, appSettingService
+                defaultSettingInitializer, bookLoreUserTransformer,
+                auditService, authRateLimitService, appSettingService
         );
         ReflectionTestUtils.setField(authenticationService, "dummyPasswordHash", "$2a$10$dummy");
 

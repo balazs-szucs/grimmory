@@ -31,6 +31,11 @@ public class AppProperties {
 
     @Getter
     @Setter
+    public static class Swagger {
+        private boolean enabled = true;
+    }
+    @Getter
+    @Setter
     public static class RemoteAuth {
         private boolean enabled;
         private boolean createNewUsers;

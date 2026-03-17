@@ -63,22 +63,51 @@ class MonitoringRegistrationServiceTest {
         registrationService.unregisterLibrary(99L);
         verify(libraryWatchService).unregisterLibrary(99L);
     }
+@Test
+void registerLibraryPaths_noopWhenMissingOrNotDirectory() throws IOException {
+    Path missing = tmp.resolve("does-not-exist");
+    registrationService.registerLibraryPaths(7L, missing);
+    verify(libraryWatchService).registerLibraryPaths(7L, missing);
 
-    @Test
-    void registerLibraryPaths_noopWhenMissingOrNotDirectory() throws IOException {
-        Path missing = tmp.resolve("does-not-exist");
-        registrationService.registerLibraryPaths(7L, missing);
-        verify(libraryWatchService).registerLibraryPaths(7L, missing);
+    Path file = tmp.resolve("afile.txt");
+    Files.writeString(file, "x");
+    registrationService.registerLibraryPaths(7L, file);
+    verify(libraryWatchService).registerLibraryPaths(7L, file);
+}
 
-        Path file = tmp.resolve("afile.txt");
-        Files.writeString(file, "x");
-        registrationService.registerLibraryPaths(7L, file);
-        verify(libraryWatchService).registerLibraryPaths(7L, file);
-    }
+@Test
+void registerLibraryPaths_delegatesToLibraryWatchService() {
+    registrationService.registerLibraryPaths(42L, root);
+    verify(libraryWatchService).registerLibraryPaths(42L, root);
+}
 
-    @Test
-    void registerLibraryPaths_delegates() {
-        registrationService.registerLibraryPaths(42L, root);
-        verify(libraryWatchService).registerLibraryPaths(42L, root);
+@Test
+void registerLibraryPaths_handlesExceptionGracefully() {
+    doThrow(new RuntimeException("boom")).when(libraryWatchService).registerLibraryPaths(eq(55L), eq(root));
+    assertThrows(RuntimeException.class, () -> registrationService.registerLibraryPaths(55L, root));
+    verify(libraryWatchService).registerLibraryPaths(55L, root);
+}
+
+@Test
+void registerSpecificPath_noopWhenMissing() {
+    Path missing = tmp.resolve("does-not-exist");
+    registrationService.registerSpecificPath(missing, 7L);
+    verifyNoInteractions(libraryWatchService);
+}
+
+@Test
+void registerSpecificPath_noopWhenNotDirectory() throws IOException {
+    Path file = tmp.resolve("afile.txt");
+    Files.writeString(file, "x");
+    registrationService.registerSpecificPath(file, 7L);
+    verifyNoInteractions(libraryWatchService);
+}
+
+@Test
+void isLibraryMonitored_delegates() {
+    when(libraryWatchService.isLibraryMonitored(42L)).thenReturn(true);
+    assertTrue(registrationService.isLibraryMonitored(42L));
+    verify(libraryWatchService).isLibraryMonitored(42L);
+}
     }
 }

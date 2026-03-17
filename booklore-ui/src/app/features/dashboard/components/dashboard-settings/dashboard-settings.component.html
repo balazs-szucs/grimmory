@@ -52,39 +52,42 @@
                 </div>
 
                 <div class="scroller-field">
-                  <label>{{ t('sortField') }}</label>
-                  <p-select
-                    fluid
-                    [options]="sortFieldOptions"
-                    [(ngModel)]="scroller.sortField"
-                    [placeholder]="t('selectField')"
-                    appendTo="body">
-                  </p-select>
-                </div>
-
-                <div class="scroller-field">
-                  <label>{{ t('direction') }}</label>
-                  <p-select
-                    fluid
-                    [options]="sortDirectionOptions"
-                    [(ngModel)]="scroller.sortDirection"
-                    [placeholder]="t('selectDirection')"
+<div class="scroller-field">
+  <label>{{ t('sortField') }}</label>
+  <p-select
+    fluid
+    [options]="sortFieldOptions"
+    [(ngModel)]="scroller.sortField"
+    [placeholder]="t('selectField')"
+    appendTo="body">
+  </p-select>
+</div>
+<div class="scroller-field">
+  <label>{{ t('direction') }}</label>
+  <p-select
+    fluid
+    [options]="sortDirectionOptions"
+    [(ngModel)]="scroller.sortDirection"
+    [placeholder]="t('selectDirection')"
+    appendTo="body">
+  </p-select>
+</div>
                     appendTo="body">
                   </p-select>
                 </div>
               }
             </div>
 
-            <div class="scroller-field max-items-field">
-              <label>{{ t('maxItems') }}</label>
-              <p-inputNumber
-                fluid
-                [(ngModel)]="scroller.maxItems"
-                [min]="MIN_ITEMS"
-                [max]="MAX_ITEMS"
-                [showButtons]="true">
-              </p-inputNumber>
-            </div>
+              <div class="scroller-field max-items-field">
+                <label>{{ t('maxItems') }}</label>
+                <p-inputNumber
+                  fluid
+                  [(ngModel)]="scroller.maxItems"
+                  [min]="MIN_ITEMS"
+                  [max]="MAX_ITEMS"
+                  [showButtons]="true">
+                </p-inputNumber>
+              </div>
 
             <div class="scroller-controls-right">
               <p-button
@@ -127,7 +130,7 @@
           icon="pi pi-plus"
           severity="primary"
           (click)="addScroller()"
-          [disabled]="config.scrollers.length >= 5">
+          [disabled]="config.scrollers.length >= MAX_SCROLLERS">
         </p-button>
         <p-button
           [label]="t('resetToDefault')"
@@ -139,13 +142,13 @@
       </div>
       <div class="footer-actions">
         <p-button
-          [label]="'common.cancel' | transloco"
+          [label]="t('cancel')"
           [outlined]="true"
           severity="secondary"
           (click)="cancel()">
         </p-button>
         <p-button
-          [label]="'common.save' | transloco"
+          [label]="t('save')"
           icon="pi pi-check"
           severity="success"
           (click)="save()">

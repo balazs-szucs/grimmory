@@ -70,7 +70,7 @@ public class MagicShelfBookService {
     }
 
     public List<Long> getBookIdsByMagicShelfId(Long userId, Long magicShelfId, int limit) {
-        MagicShelfEntity shelf = validateMagicShelfAccess(userId, magicShelfId);
+        MagicShelfEntity shelf = getValidatedMagicShelf(userId, magicShelfId);
         try {
             GroupRule groupRule = objectMapper.readValue(shelf.getFilterJson(), GroupRule.class);
             Specification<BookEntity> specification = ruleEvaluatorService.toSpecification(groupRule, userId);

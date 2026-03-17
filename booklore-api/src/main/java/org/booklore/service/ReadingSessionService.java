@@ -4,6 +4,8 @@ import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.ApiError;
 import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.dto.CompletionRaceSessionDto;
+import org.booklore.model.dto.request.ReadingSessionBatchRequest;
+import org.booklore.model.dto.request.ReadingSessionItemRequest;
 import org.booklore.model.dto.request.ReadingSessionRequest;
 import org.booklore.model.dto.PageTurnerSessionDto;
 import org.booklore.model.dto.BookTimelineDto;
@@ -82,6 +84,62 @@ public class ReadingSessionService {
         readingSessionRepository.save(session);
 
         log.info("Reading session persisted successfully: sessionId={}, userId={}, bookId={}, duration={}s", session.getId(), userId, request.getBookId(), request.getDurationSeconds());
+    }
+
+    @Transactional
+    public ReadingSessionBatchResponse recordSessionsBatch(ReadingSessionBatchRequest request) {
+        BookLoreUser authenticatedUser = authenticationService.getAuthenticatedUser();
+        Long userId = authenticatedUser.getId();
+
+        BookLoreUserEntity userEntity = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));
+
+        BookEntity book = bookRepository.findById(request.getBookId())
+                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(request.getBookId()));
+
+        validateBookAccess(book, authenticatedUser);
+
+        for (ReadingSessionItemRequest sessionItem : request.getSessions()) {
+            if (sessionItem.getEndTime().isBefore(sessionItem.getStartTime())) {
+                throw new IllegalArgumentException("End time must be after start time");
+            }
+        }
+
+        List<ReadingSessionEntity> sessionEntities = request.getSessions().stream()
+                .map(sessionItem -> ReadingSessionEntity.builder()
+                        .user(userEntity)
+                        .book(book)
+                        .bookType(request.getBookType())
+                        .startTime(sessionItem.getStartTime())
+                        .endTime(sessionItem.getEndTime())
+                        .durationSeconds(sessionItem.getDurationSeconds())
+                        .durationFormatted(sessionItem.getDurationFormatted())
+                        .startProgress(sessionItem.getStartProgress())
+                        .endProgress(sessionItem.getEndProgress())
+                        .progressDelta(sessionItem.getProgressDelta())
+                        .startLocation(sessionItem.getStartLocation())
+                        .endLocation(sessionItem.getEndLocation())
+                        .build())
+                .collect(Collectors.toList());
+
+        List<ReadingSessionEntity> savedSessions = readingSessionRepository.saveAll(sessionEntities);
+
+        List<ReadingSessionBatchResponse.SessionResult> results = savedSessions.stream()
+                .map(session -> ReadingSessionBatchResponse.SessionResult.builder()
+                        .sessionId(session.getId())
+                        .startTime(session.getStartTime())
+                        .endTime(session.getEndTime())
+                        .build())
+                .collect(Collectors.toList());
+
+        log.info("Batch reading sessions persisted successfully: userId={}, bookId={}, count={}",
+                userId, request.getBookId(), savedSessions.size());
+
+        return ReadingSessionBatchResponse.builder()
+                .totalRequested(request.getSessions().size())
+                .successCount(savedSessions.size())
+                .results(results)
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -824,5 +882,18 @@ public class ReadingSessionService {
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private void validateBookAccess(BookEntity book, BookLoreUser user) {
+        if (user.getPermissions() != null && user.getPermissions().isAdmin()) {
+            return;
+        }
+
+        boolean hasLibraryAccess = user.getAssignedLibraries().stream()
+                .anyMatch(library -> library.getId().equals(book.getLibrary().getId()));
+
+        if (!hasLibraryAccess) {
+            throw ApiError.FORBIDDEN.createException("You are not authorized to access this book.");
+        }
     }
 }

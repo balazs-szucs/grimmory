@@ -149,6 +149,16 @@ export class ReadingHeatmapChartComponent implements OnInit, OnDestroy {
       });
   }
 
+  ngAfterViewInit(): void {
+    // onHover stops firing when the mouse leaves the canvas entirely.
+    // Listen to mouseleave on the canvas so we always schedule a hide.
+    const canvas = this.chartCanvasRef?.nativeElement;
+    if (canvas) {
+      this.canvasMouseLeaveUnlisten = this.renderer.listen(canvas, 'mouseleave', () => {
+        if (!this.mouseInPanel) this.scheduleHide();
+      });
+    }
+  }
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
@@ -174,9 +184,7 @@ export class ReadingHeatmapChartComponent implements OnInit, OnDestroy {
       }
     });
 
-    if (this.chartOptions?.scales?.['y']) {
       (this.chartOptions.scales['y'] as any).max = years.length - 1;
-    }
 
     this.chartDataSubject.next({
       labels: [],
@@ -223,6 +231,7 @@ export class ReadingHeatmapChartComponent implements OnInit, OnDestroy {
 
   private processHeatmapData(books: Book[]): YearMonthData[] {
     const yearMonthMap = new Map<string, number>();
+    this.booksByYearMonth.clear();
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 9;
 
@@ -236,6 +245,9 @@ export class ReadingHeatmapChartComponent implements OnInit, OnDestroy {
           const month = finishedDate.getMonth() + 1;
           const key = `${year}-${month}`;
           yearMonthMap.set(key, (yearMonthMap.get(key) || 0) + 1);
+          const arr = this.booksByYearMonth.get(key) ?? [];
+          arr.push(book);
+          this.booksByYearMonth.set(key, arr);
         }
       });
 
@@ -247,4 +259,3 @@ export class ReadingHeatmapChartComponent implements OnInit, OnDestroy {
       .sort((a, b) => a.year - b.year || a.month - b.month);
   }
 }
-

@@ -14,7 +14,6 @@ import {MagicShelfService} from '../../../magic-shelf/service/magic-shelf.servic
 import {map} from 'rxjs/operators';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
-export const MAX_SCROLLERS = 5;
 export const DEFAULT_MAX_ITEMS = 20;
 export const MIN_ITEMS = 10;
 export const MAX_ITEMS = 20;
@@ -160,10 +159,29 @@ export class DashboardSettingsComponent implements OnInit {
   }
 
   onScrollerTypeChange(scroller: ScrollerConfig): void {
-    if (scroller.type === ScrollerType.MAGIC_SHELF) {
-      scroller.magicShelfId = undefined;
-    } else {
+    // Clean up type-specific fields when switching away from that type
+    if (scroller.type !== ScrollerType.MAGIC_SHELF) {
       delete scroller.magicShelfId;
+      delete scroller.sortField;
+      delete scroller.sortDirection;
+    }
+
+    if (scroller.type === ScrollerType.UP_NEXT) {
+      // Initialize to default if not already set
+      if (scroller.upNextShowFirstUnread === undefined) {
+        scroller.upNextShowFirstUnread = false;
+      }
+    } else {
+      delete scroller.upNextShowFirstUnread;
+    }
+
+    if (scroller.type === ScrollerType.READ_AGAIN) {
+      // Initialize to default if not already set
+      if (scroller.readAgainSortByFinished === undefined) {
+        scroller.readAgainSortByFinished = false;
+      }
+    } else {
+      delete scroller.readAgainSortByFinished;
     }
   }
 

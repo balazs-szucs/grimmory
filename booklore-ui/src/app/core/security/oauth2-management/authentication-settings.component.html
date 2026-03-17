@@ -290,7 +290,7 @@
     </div>
     <div class="section-body">
       <div class="info-panel-grid">
-        @for (item of infoItems; track item.labelKey) {
+        @for (item of infoItems; track $index) {
           <div class="info-panel-item">
             <span class="info-panel-label">{{ t(item.labelKey) }}</span>
             <div class="info-panel-value-row">

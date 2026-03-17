@@ -90,6 +90,10 @@ export class MetadataMatchWeightsComponent implements OnInit {
     return this.t.translate('settingsMeta.matchWeights.fields.' + key);
   }
 
+  getFieldLabel(key: string): string {
+    return this.labelMap[key] ?? key;
+  }
+
   save(): void {
     if (this.form.invalid) return;
 

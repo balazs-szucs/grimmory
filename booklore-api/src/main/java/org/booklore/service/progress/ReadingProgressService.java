@@ -240,13 +240,6 @@ public class ReadingProgressService {
                 }
             }
 
-            if (percentage != null) {
-                progress.setReadStatus(calculateReadStatus(percentage, progress.getReadStatus()));
-                BookFileEntity primaryFile = book.getPrimaryBookFile();
-                if (primaryFile != null) {
-                    setProgressPercent(progress, primaryFile.getBookType(), percentage);
-                }
-            }
         }
 
         if (request.getDateFinished() != null) {

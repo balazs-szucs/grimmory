@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, NgZone } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { fromEvent, merge, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
@@ -26,6 +26,7 @@ export interface ReadingSession {
 })
 export class ReadingSessionService {
   private readonly apiService = inject(ReadingSessionApiService);
+  private readonly zone = inject(NgZone);
 
   private currentSession: ReadingSession | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -37,7 +38,7 @@ export class ReadingSessionService {
   private readonly ACTIVITY_DEBOUNCE_MS = 1000;
 
   constructor() {
-    this.setupBrowserLifecycleListeners();
+    this.zone.runOutsideAngular(() => this.setupBrowserLifecycleListeners());
   }
 
   private setupBrowserLifecycleListeners(): void {
@@ -227,21 +228,23 @@ export class ReadingSessionService {
   private startIdleDetection(): void {
     this.stopIdleDetection();
 
-    const activity$ = merge(
-      fromEvent(document, 'mousemove'),
-      fromEvent(document, 'mousedown'),
-      fromEvent(document, 'keypress'),
-      fromEvent(document, 'scroll'),
-      fromEvent(document, 'touchstart')
-    ).pipe(
-      debounceTime(this.ACTIVITY_DEBOUNCE_MS)
-    );
+    this.zone.runOutsideAngular(() => {
+      const activity$ = merge(
+        fromEvent(document, 'mousemove'),
+        fromEvent(document, 'mousedown'),
+        fromEvent(document, 'keypress'),
+        fromEvent(document, 'scroll'),
+        fromEvent(document, 'touchstart')
+      ).pipe(
+        debounceTime(this.ACTIVITY_DEBOUNCE_MS)
+      );
 
-    this.activitySubscription = activity$.subscribe(() => {
+      this.activitySubscription = activity$.subscribe(() => {
+        this.resetIdleTimer();
+      });
+
       this.resetIdleTimer();
     });
-
-    this.resetIdleTimer();
   }
 
   private pauseIdleDetection(): void {
@@ -266,10 +269,12 @@ export class ReadingSessionService {
       clearTimeout(this.idleTimer);
     }
 
-    this.idleTimer = setTimeout(() => {
-      this.log('User idle detected, ending session');
-      this.endSession();
-    }, this.IDLE_TIMEOUT_MS);
+    this.zone.runOutsideAngular(() => {
+      this.idleTimer = setTimeout(() => {
+        this.log('User idle detected, ending session');
+        this.endSession();
+      }, this.IDLE_TIMEOUT_MS);
+    });
   }
 
   private stopIdleDetection(): void {
