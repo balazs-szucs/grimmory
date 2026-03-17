@@ -368,7 +368,7 @@ class PdfMetadataWriterTest {
         writer.saveMetadataToFile(pdf, meta, null, null);
 
         String xmpContent = readXmpContent(pdf);
-        assertTrue(xmpContent.contains("<xmp:CreatorTool>Booklore</xmp:CreatorTool>"));
+        assertTrue(xmpContent.contains("<xmp:CreatorTool>Grimmory</xmp:CreatorTool>"));
     }
 
     // ========== Helper Methods ==========
