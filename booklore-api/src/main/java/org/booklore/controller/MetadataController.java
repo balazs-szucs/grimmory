@@ -9,6 +9,7 @@ import org.booklore.config.security.annotation.CheckBookAccess;
 import org.booklore.mapper.BookMetadataMapper;
 import org.booklore.model.MetadataUpdateWrapper;
 import org.booklore.model.dto.BookMetadata;
+import org.booklore.model.dto.request.IsbnLookupRequest;
 import org.booklore.model.dto.request.*;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.repository.BookRepository;
@@ -59,8 +60,26 @@ public class MetadataController {
     public ResponseEntity<BookMetadata> updateMetadata(
             @Parameter(description = "Metadata update wrapper") @RequestBody MetadataUpdateWrapper metadataUpdateWrapper,
             @Parameter(description = "ID of the book") @PathVariable long bookId,
-            @Parameter(description = "Merge categories") @RequestParam(defaultValue = "false") boolean mergeCategories) {
-        BookMetadata bookMetadata = bookMetadataService.updateMetadata(bookId, metadataUpdateWrapper, mergeCategories);
+            @Parameter(description = "Merge categories") @RequestParam(defaultValue = "false") boolean mergeCategories,
+            @Parameter(description = "Replace mode") @RequestParam(defaultValue = "REPLACE_ALL") MetadataReplaceMode replaceMode) {
+        BookEntity bookEntity = bookRepository.findAllWithMetadataByIds(java.util.Collections.singleton(bookId)).stream()
+                .findFirst()
+                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+
+        MetadataUpdateContext context = MetadataUpdateContext.builder()
+                .bookEntity(bookEntity)
+                .metadataUpdateWrapper(metadataUpdateWrapper)
+                .updateThumbnail(true)
+                .mergeCategories(mergeCategories)
+                .replaceMode(replaceMode)
+                .mergeMoods(false)
+                .mergeTags(false)
+                .build();
+
+        bookMetadataUpdater.setBookMetadata(context);
+        bookRepository.save(bookEntity);
+        auditService.log(AuditAction.METADATA_UPDATED, "Book", bookId, "Updated metadata for book: " + bookEntity.getMetadata().getTitle());
+        BookMetadata bookMetadata = bookMetadataMapper.toBookMetadata(bookEntity.getMetadata(), true);
         return ResponseEntity.ok(bookMetadata);
     }
 
@@ -120,6 +139,19 @@ public class MetadataController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Lookup metadata by ISBN", description = "Fetch metadata for a book by ISBN. Requires library management permission or admin.")
+    @ApiResponse(responseCode = "200", description = "Metadata found")
+    @ApiResponse(responseCode = "404", description = "No metadata found for the given ISBN")
+    @PostMapping("/metadata/isbn-lookup")
+    @PreAuthorize("@securityUtil.canManageLibrary() or @securityUtil.isAdmin()")
+    public ResponseEntity<BookMetadata> lookupByIsbn(@RequestBody IsbnLookupRequest request) {
+        BookMetadata metadata = bookMetadataService.lookupByIsbn(request);
+        if (metadata == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(metadata);
+    }
+
     @Operation(summary = "Get detailed metadata from provider", description = "Fetch full metadata details for a specific item from a provider. Requires metadata edit permission or admin.")
     @ApiResponse(responseCode = "200", description = "Detailed metadata returned successfully")
     @GetMapping("/metadata/detail/{provider}/{providerItemId}")
@@ -134,4 +166,3 @@ public class MetadataController {
         return ResponseEntity.ok(metadata);
     }
 }
-

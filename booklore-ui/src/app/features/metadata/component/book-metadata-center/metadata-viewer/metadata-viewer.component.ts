@@ -38,6 +38,7 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
 import {AuthorService} from '../../../../author-browser/service/author.service';
 import {Dialog} from 'primeng/dialog';
 import {Checkbox} from 'primeng/checkbox';
+import DOMPurify from 'dompurify';
 
 
 @Component({
@@ -79,8 +80,6 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
   isExpanded = false;
   isOverflowing = false;
   isComicSectionExpanded = true;
-  isAudiobookSectionExpanded = true;
-  isChapterListExpanded = false;
   showFilePath = false;
   isAutoFetching = false;
   private metadataCenterViewMode: 'route' | 'dialog' = 'route';
@@ -236,6 +235,19 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
               command: () => this.assignShelf(book.id)
             });
 
+            if (userState?.user?.permissions.canManageLibrary || userState?.user?.permissions.admin) {
+              const isPhysical = book.isPhysical ?? false;
+              items.push({
+                label: isPhysical
+                  ? this.t.translate('metadata.viewer.menuUnmarkPhysical')
+                  : this.t.translate('metadata.viewer.menuMarkPhysical'),
+                icon: isPhysical ? 'pi pi-times-circle' : 'pi pi-book',
+                command: () => {
+                  this.bookService.togglePhysicalFlag(book.id, !isPhysical).subscribe();
+                }
+              });
+            }
+
             // Add allowed submenus based on user permissions
 
             if (userState?.user?.permissions.canUpload || userState?.user?.permissions.admin) {
@@ -268,7 +280,7 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
                   {
                     label: this.t.translate('metadata.viewer.menuQuickSend'),
                     icon: 'pi pi-bolt',
-                    command: () => this.quickSend(book.id)
+                    command: () => this.quickSend(book)
                   },
                   {
                     label: this.t.translate('metadata.viewer.menuCustomSend'),
@@ -490,6 +502,10 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
     this.isExpanded = !this.isExpanded;
   }
 
+  sanitizeDescription(html: string | null | undefined): string {
+    return html ? DOMPurify.sanitize(html) : '';
+  }
+
   read(bookId: number | undefined, reader?: "epub-streaming", bookType?: BookType): void {
     if (bookId) this.bookService.readBook(bookId, reader, bookType);
   }
@@ -646,19 +662,36 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
     }, 15000);
   }
 
-  quickSend(bookId: number) {
-    this.emailService.emailBookQuick(bookId).subscribe({
-      next: () => this.messageService.add({
-        severity: 'info',
-        summary: this.t.translate('metadata.viewer.toast.quickSendSuccessSummary'),
-        detail: this.t.translate('metadata.viewer.toast.quickSendSuccessDetail'),
-      }),
-      error: (err) => this.messageService.add({
-        severity: 'error',
-        summary: this.t.translate('metadata.viewer.toast.quickSendErrorSummary'),
-        detail: err?.error?.message || this.t.translate('metadata.viewer.toast.quickSendErrorDetail'),
-      })
-    });
+  quickSend(book: Book) {
+    const doSend = () => {
+      this.emailService.emailBookQuick(book.id).subscribe({
+        next: () => this.messageService.add({
+          severity: 'info',
+          summary: this.t.translate('metadata.viewer.toast.quickSendSuccessSummary'),
+          detail: this.t.translate('metadata.viewer.toast.quickSendSuccessDetail'),
+        }),
+        error: (err) => this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('metadata.viewer.toast.quickSendErrorSummary'),
+          detail: err?.error?.message || this.t.translate('metadata.viewer.toast.quickSendErrorDetail'),
+        })
+      });
+    };
+
+    if (book.primaryFile?.fileSizeKb && book.primaryFile.fileSizeKb > 25 * 1024) {
+      this.confirmationService.confirm({
+        message: this.t.translate('metadata.viewer.confirm.largeFileMessage'),
+        header: this.t.translate('metadata.viewer.confirm.largeFileHeader'),
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: this.t.translate('metadata.viewer.confirm.sendAnyway'),
+        rejectLabel: this.t.translate('common.cancel'),
+        acceptButtonProps: { severity: 'warn' },
+        rejectButtonProps: { severity: 'secondary' },
+        accept: doSend,
+      });
+    } else {
+      doSend();
+    }
   }
 
   assignShelf(bookId: number) {
@@ -1391,18 +1424,6 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
-  }
-
-  formatDurationMs(ms: number): string {
-    if (!ms) return '-';
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
   formatSampleRate(sampleRate: number): string {

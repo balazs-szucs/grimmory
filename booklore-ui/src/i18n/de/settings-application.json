@@ -16,7 +16,9 @@
         "aspectRatio": "Seitenverhältnis-Schwellenwert: {{value}}",
         "aspectRatioDesc": "Bilder mit Seitenverhältnissen über diesem Schwellenwert werden zugeschnitten. Ein Wert von 2,5 bedeutet, dass Bilder, die mehr als 2,5-mal höher (oder breiter) als normal sind, zugeschnitten werden.",
         "smartCropping": "Intelligenter Zuschnitt",
-        "smartCroppingDesc": "Gleichmäßige Farbbereiche beim Zuschnitt überspringen. Fokussiert das Coverbild auf den relevantesten Inhalt."
+        "smartCroppingDesc": "Gleichmäßige Farbbereiche beim Zuschnitt überspringen. Fokussiert das Coverbild auf den relevantesten Inhalt.",
+        "regenerateAllBtn": "Alle neu generieren",
+        "regenerateMissingBtn": "Fehlende neu generieren"
     },
     "search": {
         "sectionTitle": "Suche & Empfehlungen",
@@ -41,5 +43,10 @@
     },
     "settingsSaved": "Einstellungen gespeichert",
     "settingsSavedDetail": "Die Einstellungen wurden erfolgreich gespeichert!",
-    "settingsError": "Beim Speichern der Einstellungen ist ein Fehler aufgetreten."
+    "settingsError": "Beim Speichern der Einstellungen ist ein Fehler aufgetreten.",
+    "appearance": {
+        "supportButtonAnimation": "",
+        "supportButtonAnimationDesc": "",
+        "sectionTitle": ""
+    }
 }

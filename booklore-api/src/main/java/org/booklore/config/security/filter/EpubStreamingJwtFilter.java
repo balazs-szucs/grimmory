@@ -6,13 +6,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import org.booklore.config.security.JwtUtils;
-import org.booklore.config.security.service.DynamicOidcJwtProcessor;
 import org.booklore.config.security.userdetails.UserAuthenticationDetails;
 import org.booklore.mapper.custom.BookLoreUserTransformer;
 import org.booklore.model.dto.BookLoreUser;
-import org.booklore.model.dto.settings.OidcProviderDetails;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.repository.UserRepository;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
 import org.booklore.service.appsettings.AppSettingService;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,14 +24,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.regex.Pattern;
 
-/**
- * JWT filter for EPUB streaming endpoints that supports both:
- * 1. Authorization header (Bearer token) - for fetch() requests
- * 2. Query parameter (token) - for browser-initiated requests (fonts, images in CSS)
- */
 @Component
 @AllArgsConstructor
 public class EpubStreamingJwtFilter extends OncePerRequestFilter {
@@ -37,13 +34,10 @@ public class EpubStreamingJwtFilter extends OncePerRequestFilter {
     private final JwtUtils jwtUtils;
     private final UserRepository userRepository;
     private final BookLoreUserTransformer bookLoreUserTransformer;
-    private final AppSettingService appSettingService;
-    private final DynamicOidcJwtProcessor dynamicOidcJwtProcessor;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        // Only filter requests to EPUB file streaming endpoint
         return !EPUB_STREAMING_ENDPOINT_PATTERN.matcher(path).matches();
     }
 
@@ -51,7 +45,6 @@ public class EpubStreamingJwtFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        // Try Authorization header first, then fall back to query parameter
         String token = extractTokenFromHeader(request);
         if (token == null) {
             token = request.getParameter("token");
@@ -64,9 +57,7 @@ public class EpubStreamingJwtFilter extends OncePerRequestFilter {
 
         try {
             if (jwtUtils.validateToken(token)) {
-                authenticateLocalUser(token, request);
-            } else if (appSettingService.getAppSettings().isOidcEnabled()) {
-                authenticateOidcUser(token, request);
+                authenticateUser(token, request);
             } else {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
                 return;
@@ -84,7 +75,7 @@ public class EpubStreamingJwtFilter extends OncePerRequestFilter {
         return (bearer != null && bearer.startsWith("Bearer ")) ? bearer.substring(7) : null;
     }
 
-    private void authenticateLocalUser(String token, HttpServletRequest request) {
+    private void authenticateUser(String token, HttpServletRequest request) {
         Long userId = jwtUtils.extractUserId(token);
         BookLoreUserEntity entity = userRepository.findByIdWithDetails(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));

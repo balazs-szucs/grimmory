@@ -6,14 +6,17 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import org.booklore.config.security.JwtUtils;
-import org.booklore.config.security.service.DynamicOidcJwtProcessor;
 import org.booklore.config.security.userdetails.UserAuthenticationDetails;
 import org.booklore.mapper.custom.BookLoreUserTransformer;
 import org.booklore.model.dto.BookLoreUser;
-import org.booklore.model.dto.settings.OidcProviderDetails;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.repository.UserRepository;
 import org.booklore.service.appsettings.AppSettingService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.AllArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -21,7 +24,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.regex.Pattern;
 
 @Component
@@ -29,13 +31,11 @@ import java.util.regex.Pattern;
 public class AudiobookStreamingJwtFilter extends OncePerRequestFilter {
 
     private static final Pattern AUDIOBOOK_STREAMING_ENDPOINT_PATTERN =
-            Pattern.compile("/api/v1/audiobook/\\d+/(stream|track/\\d+/stream|cover).*");
+            Pattern.compile("/api/v1/audiobooks/\\d+/(stream|track/\\d+/stream|cover).*");
 
     private final JwtUtils jwtUtils;
     private final UserRepository userRepository;
     private final BookLoreUserTransformer bookLoreUserTransformer;
-    private final AppSettingService appSettingService;
-    private final DynamicOidcJwtProcessor dynamicOidcJwtProcessor;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -59,9 +59,7 @@ public class AudiobookStreamingJwtFilter extends OncePerRequestFilter {
 
         try {
             if (jwtUtils.validateToken(token)) {
-                authenticateLocalUser(token, request);
-            } else if (appSettingService.getAppSettings().isOidcEnabled()) {
-                authenticateOidcUser(token, request);
+                authenticateUser(token, request);
             } else {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
                 return;
@@ -79,7 +77,7 @@ public class AudiobookStreamingJwtFilter extends OncePerRequestFilter {
         return (bearer != null && bearer.startsWith("Bearer ")) ? bearer.substring(7) : null;
     }
 
-    private void authenticateLocalUser(String token, HttpServletRequest request) {
+    private void authenticateUser(String token, HttpServletRequest request) {
         Long userId = jwtUtils.extractUserId(token);
         BookLoreUserEntity entity = userRepository.findByIdWithDetails(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));
@@ -105,7 +103,6 @@ public class AudiobookStreamingJwtFilter extends OncePerRequestFilter {
         BookLoreUserEntity entity = userRepository.findByUsernameWithDetails(username)
                 .orElseThrow(() -> new UsernameNotFoundException("OIDC user not found: " + username));
         BookLoreUser user = bookLoreUserTransformer.toDTO(entity);
-
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(user, null, null);
         authentication.setDetails(new UserAuthenticationDetails(request, user.getId()));

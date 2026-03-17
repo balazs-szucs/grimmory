@@ -24,7 +24,7 @@ import org.booklore.repository.LibraryRepository;
 import org.booklore.repository.UserRepository;
 import org.booklore.service.NotificationService;
 import org.booklore.service.audit.AuditService;
-import org.booklore.service.monitoring.MonitoringService;
+import org.booklore.service.monitoring.LibraryWatchService;
 import org.booklore.task.options.RescanLibraryContext;
 import org.booklore.util.FileService;
 import org.booklore.util.SecurityContextVirtualThread;
@@ -72,7 +72,7 @@ public class LibraryService {
     private final LibraryMapper libraryMapper;
     private final NotificationService notificationService;
     private final FileService fileService;
-    private final MonitoringService monitoringService;
+    private final LibraryWatchService libraryWatchService;
     private final AuthenticationService authenticationService;
     private final UserRepository userRepository;
     private final AuditService auditService;
@@ -81,7 +81,7 @@ public class LibraryService {
     @EventListener(ApplicationReadyEvent.class)
     public void initializeMonitoring() {
         List<Library> libraries = libraryRepository.findAll().stream().map(libraryMapper::toLibrary).collect(Collectors.toList());
-        monitoringService.registerLibraries(libraries);
+        libraryWatchService.registerLibraries(libraries);
         log.info("Monitoring initialized with {} libraries", libraries.size());
     }
 
@@ -98,6 +98,9 @@ public class LibraryService {
         library.setAllowedFormats(request.getAllowedFormats());
         if (request.getMetadataSource() != null) {
             library.setMetadataSource(request.getMetadataSource());
+        }
+        if (request.getOrganizationMode() != null) {
+            library.setOrganizationMode(request.getOrganizationMode());
         }
 
         Set<String> currentPaths = library.getLibraryPaths().stream()
@@ -142,9 +145,9 @@ public class LibraryService {
         LibraryEntity savedLibrary = libraryRepository.save(library);
 
         if (request.isWatch()) {
-            monitoringService.registerLibraries(List.of(libraryMapper.toLibrary(savedLibrary)));
+            libraryWatchService.registerLibraries(List.of(libraryMapper.toLibrary(savedLibrary)));
         } else {
-            monitoringService.unregisterLibrary(libraryId);
+            libraryWatchService.unregisterLibrary(libraryId);
         }
 
         if (!newPaths.isEmpty()) {
@@ -175,6 +178,7 @@ public class LibraryService {
                 .formatPriority(request.getFormatPriority())
                 .allowedFormats(request.getAllowedFormats())
                 .metadataSource(request.getMetadataSource())
+                .organizationMode(request.getOrganizationMode())
                 .users(List.of(user.get()))
                 .build();
 
@@ -184,7 +188,7 @@ public class LibraryService {
         if (request.isWatch()) {
             for (LibraryPathEntity pathEntity : libraryEntity.getLibraryPaths()) {
                 Path path = Paths.get(pathEntity.getPath());
-                monitoringService.registerPath(path, libraryId);
+                libraryWatchService.registerPath(path, libraryId);
             }
         }
 
@@ -249,7 +253,7 @@ public class LibraryService {
     public void deleteLibrary(long id) {
         LibraryEntity library = libraryRepository.findByIdWithBooks(id)
                 .orElseThrow(() -> ApiError.LIBRARY_NOT_FOUND.createException(id));
-        monitoringService.unregisterLibrary(id);
+        libraryWatchService.unregisterLibrary(id);
         Set<Long> bookIds = library.getBookEntities().stream().map(BookEntity::getId).collect(Collectors.toSet());
         fileService.deleteBookCovers(bookIds);
         String libraryName = library.getName();
@@ -378,4 +382,3 @@ public class LibraryService {
         });
     }
 }
-

@@ -66,5 +66,7 @@ public interface UserRepository extends JpaRepository<BookLoreUserEntity, Long> 
     Optional<BookLoreUserEntity> findByUsernameWithDetails(@Param("username") String username);
 
     long countByProvisioningMethod(ProvisioningMethod provisioningMethod);
+
+    Optional<BookLoreUserEntity> findByOidcIssuerAndOidcSubject(String oidcIssuer, String oidcSubject);
 }
 
