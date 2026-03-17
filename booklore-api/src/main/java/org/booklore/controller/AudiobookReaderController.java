@@ -23,7 +23,6 @@ import java.nio.file.Path;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/audiobook")
 @RequiredArgsConstructor
 @Tag(name = "Audiobook Reader", description = "Endpoints for streaming audiobooks with HTTP Range support")
 public class AudiobookReaderController {

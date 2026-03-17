@@ -5,7 +5,6 @@ import {Router} from '@angular/router';
 import {LibraryService} from '../book/service/library.service';
 import {FormsModule} from '@angular/forms';
 import {InputText} from 'primeng/inputtext';
-import {Library, MetadataSource} from '../book/model/library.model';
 import {BookType} from '../book/model/book.model';
 import {ToggleSwitch} from 'primeng/toggleswitch';
 import {Tooltip} from 'primeng/tooltip';
@@ -41,8 +40,10 @@ export class LibraryCreatorComponent implements OnInit {
   selectedAllowedFormats: Set<BookType> = new Set();
   formatCounts: Record<string, number> = {};
   metadataSource: MetadataSource = 'EMBEDDED';
+  organizationMode: OrganizationMode = 'BOOK_PER_FILE';
 
   metadataSourceOptions: {label: string, value: string}[] = [];
+  organizationModeOptions: {label: string, value: string}[] = [];
 
   readonly allBookFormats: {type: BookType, label: string}[] = [
     {type: 'EPUB', label: 'EPUB'},
@@ -73,6 +74,7 @@ export class LibraryCreatorComponent implements OnInit {
     ];
     this.initializeFormatPriority();
     this.initializeAllowedFormats();
+    this.initializeOrganizationModeOptions();
 
     const data = this.dynamicDialogConfig?.data;
     if (data?.mode === 'edit') {
@@ -117,6 +119,16 @@ export class LibraryCreatorComponent implements OnInit {
           this.metadataSource = this.library.metadataSource;
         }
 
+        if (this.library.organizationMode) {
+          this.organizationMode = this.library.organizationMode;
+          if (this.library.organizationMode === 'AUTO_DETECT') {
+            this.organizationModeOptions.push({
+              label: this.t.translate('libraryCreator.creator.organizationModeAutoDetect'),
+              value: 'AUTO_DETECT'
+            });
+          }
+        }
+
         this.libraryService.getBookCountsByFormat(this.library.id!).subscribe(counts => {
           this.formatCounts = counts;
         });
@@ -128,6 +140,13 @@ export class LibraryCreatorComponent implements OnInit {
 
   private initializeFormatPriority(): void {
     this.formatPriority = [...this.allBookFormats];
+  }
+
+  private initializeOrganizationModeOptions(): void {
+    this.organizationModeOptions = [
+      {label: this.t.translate('libraryCreator.creator.organizationModeBookPerFile'), value: 'BOOK_PER_FILE'},
+      {label: this.t.translate('libraryCreator.creator.organizationModeBookPerFolder'), value: 'BOOK_PER_FOLDER'}
+    ];
   }
 
   private initializeAllowedFormats(): void {
@@ -237,7 +256,8 @@ export class LibraryCreatorComponent implements OnInit {
       watch: this.watch,
       formatPriority: this.formatPriority.map(f => f.type),
       allowedFormats: this.allowAllFormats ? [] : Array.from(this.selectedAllowedFormats),
-      metadataSource: this.metadataSource
+      metadataSource: this.metadataSource,
+      organizationMode: this.organizationMode
     };
 
     if (this.mode === 'edit') {

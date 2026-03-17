@@ -90,6 +90,7 @@ public class ReadingProgressService {
         if (progress != null) {
             book.setReadStatus(progress.getReadStatus() == null ?
                     String.valueOf(ReadStatus.UNREAD) : String.valueOf(progress.getReadStatus()));
+                    String.valueOf(ReadStatus.UNSET) : String.valueOf(progress.getReadStatus()));
             book.setDateFinished(progress.getDateFinished());
             book.setPersonalRating(progress.getPersonalRating());
 
@@ -152,6 +153,7 @@ public class ReadingProgressService {
                     .cfi(fileProgress.getPositionData())
                     .href(fileProgress.getPositionHref())
                     .percentage(roundToOneDecimal(fileProgress.getProgressPercent()))
+                    .ttsPositionCfi(fileProgress.getTtsPositionCfi())
                     .build());
             case PDF -> book.setPdfProgress(PdfProgress.builder()
                     .page(parseIntOrNull(fileProgress.getPositionData()))
@@ -299,6 +301,7 @@ public class ReadingProgressService {
         entity.setPositionData(fileProgress.positionData());
         entity.setPositionHref(fileProgress.positionHref());
         entity.setProgressPercent(fileProgress.progressPercent());
+        entity.setTtsPositionCfi(fileProgress.ttsPositionCfi());
         entity.setLastReadTime(now);
 
         userBookFileProgressRepository.save(entity);

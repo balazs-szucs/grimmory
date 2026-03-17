@@ -114,15 +114,15 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
       wrapperElement.style["height"] = 'calc(100dvh - 160px)';
     });
   }
-// add all IDs
+
   selectAllBooks(): void {
-    this.selectedBookIds = new Set(
-      this.books.flatMap(book =>
-        book.seriesBooks && book.seriesBooks.length > 0
-          ? book.seriesBooks.map(b => b.id)
-          : [book.id]
-      )
-    );
+this.selectedBookIds = new Set(
+  this.books.flatMap(book =>
+    book.seriesBooks && book.seriesBooks.length > 0
+      ? book.seriesBooks.map(b => b.id)
+      : [book.id]
+  )
+);
     this.selectedBooks = [...this.books];
     this.selectedBooksChange.emit(this.selectedBookIds);
   }
@@ -300,7 +300,7 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
         return book.primaryFile?.fileName ?? '';
 
       case 'fileSizeKb':
-        return this.formatFileSize(book.primaryFile?.fileSizeKb);
+        return this.formatFileSize(book.fileSizeKb);
 
       case 'language':
         return metadata.language ?? '';

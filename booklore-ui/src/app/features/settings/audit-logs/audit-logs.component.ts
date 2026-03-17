@@ -258,7 +258,6 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
       String(date.getDate()).padStart(2, '0');
   }
 
-
   private formatDateTime(date: Date, endOfDay = false): string {
     const d = new Date(date);
     if (endOfDay) {

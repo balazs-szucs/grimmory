@@ -1,6 +1,6 @@
 import {Component, DestroyRef, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-// import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {DynamicDialogRef} from 'primeng/dynamicdialog';
 import {LibraryService} from '../../../book/service/library.service';
 import {forkJoin, Observable, of} from 'rxjs';
 import {catchError, distinctUntilChanged, map, shareReplay, skip, switchMap} from 'rxjs/operators';
@@ -364,7 +364,7 @@ export class MainDashboardComponent implements OnInit {
             results.forEach(recommendations => {
               recommendations.forEach(rec => {
                 const bookId = rec.book.id;
-                
+
                 // Skip books that are already read, in progress, or otherwise not truly unread
                 if (rec.book.readStatus === ReadStatus.READ ||
                     rec.book.readStatus === ReadStatus.READING ||

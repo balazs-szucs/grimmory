@@ -123,7 +123,7 @@ public class OpdsController {
                 .body(feed);
     }
 
-    @Operation(summary = "Get OPDS series navigation", description = "Retrieve the OPDS series navigation feed grouped by first letter.")
+    @Operation(summary = "Get OPDS series navigation", description = "Retrieve the OPDS series navigation feed.")
     @ApiResponse(responseCode = "200", description = "Series navigation feed returned successfully")
     @GetMapping(value = "/series", produces = OPDS_CATALOG_MEDIA_TYPE)
     public ResponseEntity<String> getSeriesNavigation(@Parameter(hidden = true) HttpServletRequest request) {
@@ -197,7 +197,7 @@ public class OpdsController {
                 return super.getParameter(name);
             }
         };
-        
+
         String feed = opdsFeedService.generateRecentFeed(wrappedRequest);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(OPDS_ACQUISITION_MEDIA_TYPE))
@@ -220,7 +220,7 @@ public class OpdsController {
                 return super.getParameter(name);
             }
         };
-        
+
         String feed = opdsFeedService.generateCatalogFeed(wrappedRequest);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(OPDS_ACQUISITION_MEDIA_TYPE))

@@ -151,6 +151,7 @@ public class OpdsFeedService {
                     escapeXml(library.getName()),
                     library.getId(),
                     now(),
+                    escapeXml("/api/v1/opds/catalog?libraryId=" + library.getId()),
                     escapeXml("/api/v1/opds/libraries/" + library.getId()),
                     escapeXml(library.getName() != null ? library.getName() : "Library collection")
             ));
@@ -369,7 +370,7 @@ public class OpdsFeedService {
             booksPage = opdsBookService.getBooksPage(userId, query, libraryId, shelfIds, page - 1, size);
         }
 
-        // Apply sort order (shelf-level override if set, otherwise user's account preference)
+        // Apply user's preferred sort order
         booksPage = opdsBookService.applySortOrder(booksPage, sortOrder);
 
         String feedTitle = determineFeedTitle(libraryId, shelfIds, magicShelfId, author, series);

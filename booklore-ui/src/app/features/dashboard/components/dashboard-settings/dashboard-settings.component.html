@@ -6,7 +6,25 @@
       </div>
       <div class="header-text">
         <h2 class="panel-title">{{ t('title') }}</h2>
+<ng-container *transloco="let t; prefix: 'dashboard.settings'">
+  <div class="dashboard-settings">
+    <div class="panel-header">
+      <div class="header-icon-wrapper">
+        <i class="pi pi-sliders-h header-icon"></i>
+      </div>
+      <div class="header-text">
+        <h2 class="panel-title">{{ t('title') }}</h2>
         <p class="panel-description">{{ t('description', { maxScrollers: MAX_SCROLLERS }) }}</p>
+      </div>
+      <p-button
+        icon="pi pi-times"
+        [text]="true"
+        [rounded]="true"
+        severity="secondary"
+        (onClick)="cancel()"
+        class="close-button"
+      />
+    </div>
       </div>
       <p-button
         icon="pi pi-times"
@@ -52,53 +70,70 @@
                 </div>
 
                 <div class="scroller-field">
-                  <label>{{ t('direction') }}</label>
+                  <label>{{ t('sortField') }}</label>
                   <p-select
                     fluid
-                    [options]="sortDirectionOptions"
-                    [(ngModel)]="scroller.sortDirection"
-                    [placeholder]="t('selectDirection')"
+<div class="scroller-field">
+  <label>{{ t('sortField') }}</label>
+  <p-select
+    fluid
+    [options]="sortFieldOptions"
+    [(ngModel)]="scroller.sortField"
+    [placeholder]="t('selectField')"
+    appendTo="body">
+  </p-select>
+</div>
+<div class="scroller-field">
+  <label>{{ t('direction') }}</label>
+  <p-select
+    fluid
+    [options]="sortDirectionOptions"
+    [(ngModel)]="scroller.sortDirection"
+    [placeholder]="t('selectDirection')"
+    appendTo="body">
+  </p-select>
+</div>
                     appendTo="body">
                   </p-select>
                 </div>
               }
 
-            @if (scroller.type === 'upNext') {
-              <div class="scroller-field">
-                <label>{{ t('upNextLabel') }}</label>
-                <p-select
-                  fluid
-                  [options]="upNextModeOptions"
-                  [(ngModel)]="scroller.upNextShowFirstUnread"
-                  [placeholder]="t('selectMode')"
-                  appendTo="body">
-                </p-select>
-              </div>
-            }
+@if (scroller.type === 'upNext') {
+  <div class="scroller-field">
+    <label>{{ t('upNextLabel') }}</label>
+    <p-select
+      fluid
+      [options]="upNextModeOptions"
+      [(ngModel)]="scroller.upNextShowFirstUnread"
+      [placeholder]="t('selectMode')"
+      appendTo="body">
+    </p-select>
+  </div>
+}
 
-            @if (scroller.type === 'readAgain') {
-              <div class="scroller-field">
-                <label>{{ t('readAgainLabel') }}</label>
-                <p-select
-                  fluid
-                  [options]="readAgainSortOptions"
-                  [(ngModel)]="scroller.readAgainSortByFinished"
-                  [placeholder]="t('selectSorting')"
-                  appendTo="body">
-                </p-select>
-              </div>
-            }
+@if (scroller.type === 'readAgain') {
+  <div class="scroller-field">
+    <label>{{ t('readAgainLabel') }}</label>
+    <p-select
+      fluid
+      [options]="readAgainSortOptions"
+      [(ngModel)]="scroller.readAgainSortByFinished"
+      [placeholder]="t('selectSorting')"
+      appendTo="body">
+    </p-select>
+  </div>
+}
 
-              <div class="scroller-field max-items-field">
-                <label>{{ t('maxItems') }}</label>
-                <p-inputNumber
-                  fluid
-                  [(ngModel)]="scroller.maxItems"
-                  [min]="MIN_ITEMS"
-                  [max]="MAX_ITEMS"
-                  [showButtons]="true">
-                </p-inputNumber>
-              </div>
+            <div class="scroller-field max-items-field">
+              <label>{{ t('maxItems') }}</label>
+              <p-inputNumber
+                fluid
+                [(ngModel)]="scroller.maxItems"
+                [min]="MIN_ITEMS"
+                [max]="MAX_ITEMS"
+                [showButtons]="true">
+              </p-inputNumber>
+            </div>
             </div>
 
             <div class="scroller-controls-right">
@@ -142,7 +177,7 @@
           icon="pi pi-plus"
           severity="primary"
           (click)="addScroller()"
-          [disabled]="config.scrollers.length >= MAX_SCROLLERS">
+          [disabled]="config.scrollers.length >= 5">
         </p-button>
         <p-button
           [label]="t('resetToDefault')"
@@ -154,13 +189,13 @@
       </div>
       <div class="footer-actions">
         <p-button
-          [label]="t('cancel')"
+          [label]="'common.cancel' | transloco"
           [outlined]="true"
           severity="secondary"
           (click)="cancel()">
         </p-button>
         <p-button
-          [label]="t('save')"
+          [label]="'common.save' | transloco"
           icon="pi pi-check"
           severity="success"
           (click)="save()">

@@ -37,7 +37,19 @@ export class BookReadingSessionsComponent implements OnInit, OnChanges {
 
   loadSessions() {
     this.loading = true;
-    this.readingSessionService.getSessionsByBookId(this.bookId, 0, 9999)
+  loadSessions() {
+    this.loading = true;
+    this.readingSessionService.getSessionsByBookId(this.bookId, 0, 100)
+      .subscribe({
+        next: (response) => {
+          this.sessions = response.content;
+          this.loading = false;
+        },
+        error: () => {
+          this.loading = false;
+        }
+      });
+  }
       .subscribe({
         next: (response) => {
           this.sessions = response.content;
@@ -71,12 +83,12 @@ export class BookReadingSessionsComponent implements OnInit, OnChanges {
   getActualDuration(session: ReadingSessionResponse): string {
     const actualDuration = this.calculateActualDuration(session);
     const storedDuration = session.durationSeconds;
-    
+
     if (Math.abs(actualDuration - storedDuration) > 1) {
       // Discrepancy detected - show both values
       return `${this.formatDuration(actualDuration)}`;
     }
-    
+
     return this.formatDuration(actualDuration);
   }
 

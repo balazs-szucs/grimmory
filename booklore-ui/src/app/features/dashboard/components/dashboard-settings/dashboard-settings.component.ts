@@ -12,9 +12,7 @@ import {DashboardConfig, ScrollerConfig, ScrollerType} from '../../models/dashbo
 import {DashboardConfigService} from '../../services/dashboard-config.service';
 import {MagicShelfService} from '../../../magic-shelf/service/magic-shelf.service';
 import {map} from 'rxjs/operators';
-import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
-export const MAX_SCROLLERS = 10;
 export const DEFAULT_MAX_ITEMS = 20;
 export const MIN_ITEMS = 10;
 export const MAX_ITEMS = 20;
@@ -30,7 +28,8 @@ export const MAX_ITEMS = 20;
     InputTextModule,
     SelectModule,
     InputNumberModule,
-    TranslocoDirective
+    TranslocoDirective,
+    TranslocoPipe
   ],
   templateUrl: './dashboard-settings.component.html',
   styleUrls: ['./dashboard-settings.component.scss']
@@ -204,6 +203,8 @@ export class DashboardSettingsComponent implements OnInit {
       }
     } else {
       delete scroller.readAgainSortByFinished;
+    }
+    } else {
     }
   }
 

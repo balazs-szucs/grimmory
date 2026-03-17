@@ -71,7 +71,7 @@ export class BookRuleEvaluatorService {
         case 'readStatus':
           return [String(book.readStatus ?? 'UNSET').toLowerCase()];
         case 'fileType':
-          return [String(book.primaryFile?.bookType ?? '').toLowerCase()];
+          return [String(book['bookType'] ?? '').toLowerCase()];
         case 'library':
           return [String(book.libraryId)];
         case 'shelf':
@@ -275,9 +275,9 @@ export class BookRuleEvaluatorService {
       case 'readStatus':
         return book.readStatus ?? 'UNSET';
       case 'fileType':
-        return book.primaryFile?.bookType?.toLowerCase() ?? null;
+        return (book['bookType'] as string)?.toLowerCase() ?? null;
       case 'fileSize':
-        return book.primaryFile?.fileSizeKb;
+        return book.fileSizeKb;
       case 'metadataScore':
         return book.metadataMatchScore;
       case 'personalRating':
@@ -556,23 +556,6 @@ export class BookRuleEvaluatorService {
       case 'comicLetterers': return book.metadata?.comicMetadata?.letterers;
       case 'comicCoverArtists': return book.metadata?.comicMetadata?.coverArtists;
       case 'comicEditors': return book.metadata?.comicMetadata?.editors;
-      case 'comicIssueNumber': return book.metadata?.comicMetadata?.issueNumber;
-      case 'comicVolumeName': return book.metadata?.comicMetadata?.volumeName;
-      case 'comicVolumeNumber': return book.metadata?.comicMetadata?.volumeNumber;
-      case 'comicStoryArc': return book.metadata?.comicMetadata?.storyArc;
-      case 'comicStoryArcNumber': return book.metadata?.comicMetadata?.storyArcNumber;
-      case 'comicAlternateSeries': return book.metadata?.comicMetadata?.alternateSeries;
-      case 'comicAlternateIssue': return book.metadata?.comicMetadata?.alternateIssue;
-      case 'comicImprint': return book.metadata?.comicMetadata?.imprint;
-      case 'comicFormat': return book.metadata?.comicMetadata?.format;
-      case 'comicBlackAndWhite': return book.metadata?.comicMetadata?.blackAndWhite;
-      case 'comicManga': return book.metadata?.comicMetadata?.manga;
-      case 'comicReadingDirection': return book.metadata?.comicMetadata?.readingDirection;
-      case 'comicWebLink': return book.metadata?.comicMetadata?.webLink;
-      case 'comicNotes': return book.metadata?.comicMetadata?.notes;
-      case 'hardcoverBookId': return book.metadata?.hardcoverBookId;
-      case 'externalUrl': return book.metadata?.externalUrl;
-      case 'reviews': return book.metadata?.reviews;
       default: return null;
     }
   }

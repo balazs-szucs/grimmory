@@ -1,14 +1,12 @@
 # Stage 1: Build the Angular app
-FROM docker.io/library/node:22-alpine AS angular-build
+FROM docker.io/library/node:24-alpine AS angular-build
 
 WORKDIR /angular-app
 
 COPY ./booklore-ui/package.json ./booklore-ui/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm config set registry https://registry.npmjs.org/ \
-    && npm install --force --legacy-peer-deps
-
-
+    && npm ci --force
 COPY ./booklore-ui /angular-app/
 
 RUN npm run build --configuration=production
@@ -67,7 +65,11 @@ LABEL org.opencontainers.image.title="WT-BookLore" \
 
 ENV JAVA_TOOL_OPTIONS="-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+UseContainerSupport -XX:+UseCompactObjectHeaders -XX:MaxRAMPercentage=75.0"
 
-RUN apk update && apk add --no-cache su-exec=0.3-r0
+RUN apk update && apk add --no-cache su-exec libstdc++ libgcc && \
+    mkdir -p /bookdrop
+
+COPY docker/unrar/unrar-${TARGETARCH} /usr/local/bin/unrar
+RUN chmod 755 /usr/local/bin/unrar
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

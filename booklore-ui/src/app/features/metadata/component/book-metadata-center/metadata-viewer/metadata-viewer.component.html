@@ -153,7 +153,6 @@
                   </app-tag>
                 </span>
               }
-              @if (!book?.primaryFile?.filePath && !book?.alternativeFormats?.length) {
                 <app-tag size="3xs" variant="pill" [customBgColor]="'var(--book-type-physical-color)'" customTextColor="#fff">{{ t('physicalBadge') }}</app-tag>
               }
             </div>

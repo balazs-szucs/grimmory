@@ -26,10 +26,15 @@ public class AppProperties {
      */
     private String diskType = "LOCAL";
 
+    public boolean isLocalStorage() {
+        return "LOCAL".equalsIgnoreCase(diskType);
+    }
+
     @Getter
     @Setter
     public static class Swagger {
         private boolean enabled = true;
+    }
     }
 
     @Getter

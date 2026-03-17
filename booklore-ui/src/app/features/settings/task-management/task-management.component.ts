@@ -16,8 +16,7 @@ import {
   TaskProgressPayload,
   TaskService,
   TaskStatus,
-  TaskType,
-  FileHashVerificationRequest
+  TaskType
 } from './task.service';
 import {MetadataRefreshRequest} from '../../metadata/model/request/metadata-refresh-request.model';
 import {finalize, forkJoin, Subscription} from 'rxjs';
@@ -25,7 +24,6 @@ import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-
 import {ToggleSwitch} from 'primeng/toggleswitch';
 import {Tooltip} from 'primeng/tooltip';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
-import {LibraryFilterService, LibraryOption} from '../../stats/component/library-stats/service/library-filter.service';
 
 @Component({
   selector: 'app-task-management',
@@ -50,7 +48,6 @@ export class TaskManagementComponent implements OnInit, OnDestroy {
   private messageService = inject(MessageService);
   private taskService = inject(TaskService);
   private t = inject(TranslocoService);
-  private libraryFilterService = inject(LibraryFilterService);
 
   // State
   taskInfos: TaskInfo[] = [];
@@ -76,12 +73,6 @@ export class TaskManagementComponent implements OnInit, OnDestroy {
   ];
   selectedMetadataReplaceMode: MetadataReplaceMode = MetadataReplaceMode.REPLACE_MISSING;
 
-  // File Hash Verification Options
-  selectedLibraryId: number | null = null;
-  verificationDryRun: boolean = false;
-  verificationOverwriteInitialHash: boolean = false;
-  libraryOptions: LibraryOption[] = [];
-
   // Cron Editing State
   cronUpdating = false;
   editingCronTaskType: string | null = null;
@@ -99,7 +90,6 @@ export class TaskManagementComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadTasks();
     this.subscribeToTaskProgress();
-    this.loadLibraryOptions();
   }
 
   ngOnDestroy(): void {
@@ -172,21 +162,6 @@ export class TaskManagementComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadLibraryOptions(): void {
-    this.libraryFilterService.getLibraryOptions().subscribe({
-      next: (options) => {
-        this.libraryOptions = options;
-      },
-      error: (error) => {
-        console.error('Error loading library options:', error);
-      }
-    });
-  }
-
-  getLibraryOptions(): LibraryOption[] {
-    return this.libraryOptions;
-  }
-
   // ============================================================================
   // Task Execution Operations
   // ============================================================================
@@ -215,21 +190,10 @@ export class TaskManagementComponent implements OnInit, OnDestroy {
       };
     }
 
-    if (type === TaskType.VERIFY_FILE_HASHES) {
-      options = {
-        verificationType: (this.selectedLibraryId ? 'LIBRARY' : 'BOOKS') as 'BOOKS' | 'LIBRARY',
-        libraryId: this.selectedLibraryId,
-        verificationOptions: {
-          dryRun: this.verificationDryRun,
-          overwriteInitialHash: this.verificationOverwriteInitialHash
-        }
-      };
-    }
-
     this.runTaskWithOptions(type, options);
   }
 
-  private runTaskWithOptions(type: string, options: LibraryRescanOptions | MetadataRefreshRequest | FileHashVerificationRequest | null): void {
+  private runTaskWithOptions(type: string, options: LibraryRescanOptions | MetadataRefreshRequest | null): void {
     const request: TaskCreateRequest = {
       taskType: type as TaskType,
       triggeredByCron: false,

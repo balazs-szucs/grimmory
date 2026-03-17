@@ -11,9 +11,7 @@
     "clickToChange": "Click to change",
     "removeIcon": "Remove icon",
     "selectIcon": "Select Icon",
-    "public": "Public",
-    "opdsSort": "OPDS Sort",
-    "opdsSortTooltip": "Override the sort order for this shelf when accessed via OPDS. If not set, the user's OPDS account sort preference is used."
+    "public": "Public"
   },
   "actions": {
     "cancel": "Cancel",
@@ -200,18 +198,6 @@
     "month": "This Month",
     "year": "This Year"
   },
-  "opdsSort": {
-    "default": "Account default (no override)",
-    "RECENT": "Recently Added",
-    "TITLE_ASC": "Title (A \u2192 Z)",
-    "TITLE_DESC": "Title (Z \u2192 A)",
-    "AUTHOR_ASC": "Author (A \u2192 Z)",
-    "AUTHOR_DESC": "Author (Z \u2192 A)",
-    "SERIES_ASC": "Series (A \u2192 Z)",
-    "SERIES_DESC": "Series (Z \u2192 A)",
-    "RATING_ASC": "Rating (Low \u2192 High)",
-    "RATING_DESC": "Rating (High \u2192 Low)"
-  },
   "metadataFieldGroups": {
     "bookInfo": "Book Info",
     "authorsCategories": "Authors & Categories",
@@ -277,24 +263,7 @@
     "comicColorists": "Colorists",
     "comicLetterers": "Letterers",
     "comicCoverArtists": "Cover Artists",
-    "comicEditors": "Editors",
-    "comicIssueNumber": "Issue Number",
-    "comicVolumeName": "Volume Name",
-    "comicVolumeNumber": "Volume Number",
-    "comicStoryArc": "Story Arc",
-    "comicStoryArcNumber": "Story Arc Number",
-    "comicAlternateSeries": "Alternate Series",
-    "comicAlternateIssue": "Alternate Issue",
-    "comicImprint": "Imprint",
-    "comicFormat": "Format",
-    "comicBlackAndWhite": "Black & White",
-    "comicManga": "Manga",
-    "comicReadingDirection": "Reading Direction",
-    "comicWebLink": "Web Link",
-    "comicNotes": "Notes",
-    "hardcoverBookId": "Hardcover Book ID",
-    "externalUrl": "External URL",
-    "reviews": "Reviews"
+    "comicEditors": "Editors"
   },
   "importJson": {
     "buttonLabel": "Import",

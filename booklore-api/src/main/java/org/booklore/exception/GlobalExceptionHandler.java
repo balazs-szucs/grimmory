@@ -7,13 +7,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -45,19 +43,6 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.toList());
 
         ErrorResponse errorResponse = new ErrorResponse(HttpStatus.BAD_REQUEST.value(), "Validation error", errors);
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ErrorResponse> handleTypeMismatchException(MethodArgumentTypeMismatchException ex) {
-        String parameterName = ex.getName();
-        String providedValue = ex.getValue() != null ? ex.getValue().toString() : "null";
-        String requiredType = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown";
-        
-        String message = String.format("Invalid value '%s' for parameter '%s'. Expected type: %s", 
-                providedValue, parameterName, requiredType);
-        
-        ErrorResponse errorResponse = new ErrorResponse(HttpStatus.BAD_REQUEST.value(), message);
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -94,23 +79,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AsyncRequestNotUsableException.class)
     public void handleAsyncRequestNotUsableException(AsyncRequestNotUsableException ex) {
         if (ex.getCause() instanceof ClientAbortException) {
-            log.debug("Request was canceled by client: {}", ex.getMessage());
+            log.info("Request was canceled by client: {}", ex.getMessage());
         } else {
             log.error("Unexpected error occurred during async request handling: ", ex);
         }
-    }
-
-    @ExceptionHandler(HttpMessageNotWritableException.class)
-    public void handleHttpMessageNotWritableException(HttpMessageNotWritableException ex) {
-        Throwable cause = ex.getCause();
-        while (cause != null) {
-            if (cause instanceof ClientAbortException || cause instanceof AsyncRequestNotUsableException) {
-                log.debug("Client disconnected before response could be fully written: {}", ex.getMessage());
-                return;
-            }
-            cause = cause.getCause();
-        }
-        log.error("Could not write HTTP response: {}", ex.getMessage(), ex);
     }
 
     @ExceptionHandler(InterruptedException.class)

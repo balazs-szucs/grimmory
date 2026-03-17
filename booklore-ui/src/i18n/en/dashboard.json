@@ -15,14 +15,11 @@
     "recentlyAdded": "Recently Added",
     "discoverNew": "Discover Something New",
     "magicShelf": "Magic Shelf",
-    "upNext": "Up Next",
-    "readAgain": "Read Again",
-    "recommendations": "Recommendations",
     "default": "Scroller"
   },
   "settings": {
     "title": "Dashboard Configuration",
-    "description": "Add up to {{maxScrollers}} scrollers from different book collections and customize their behavior",
+    "description": "Add up to 5 scrollers from different book collections and customize their behavior",
     "type": "Type",
     "selectType": "Select type",
     "magicShelf": "Magic Shelf",
@@ -32,12 +29,6 @@
     "direction": "Direction",
     "selectDirection": "Select direction",
     "maxItems": "Max Items",
-    "upNextLabel": "Book Selection",
-    "selectMode": "Select mode",
-    "readAgainLabel": "Sort Order",
-    "selectSorting": "Select sorting",
-    "cancel": "Cancel",
-    "save": "Save",
     "addScroller": "Add Scroller",
     "resetToDefault": "Reset to Default",
     "scrollerTypes": {
@@ -46,9 +37,6 @@
       "latestAdded": "Recently Added",
       "random": "Discover Something New",
       "magicShelf": "Magic Shelf",
-      "upNext": "Up Next",
-      "readAgain": "Read Again",
-      "recommendations": "Recommendations",
       "default": "Scroller"
     },
     "sortFields": {
@@ -67,20 +55,12 @@
       "readStatus": "Read Status",
       "dateFinished": "Date Finished",
       "readingProgress": "Reading Progress",
-      "bookType": "Book Type",
+      "bookType": "File Format",
       "pageCount": "Pages"
     },
     "sortDirections": {
       "asc": "Ascending",
       "desc": "Descending"
-    },
-    "upNextModes": {
-      "nextInSeries": "Next book in series",
-      "firstUnread": "First unread in series"
-    },
-    "readAgainSorts": {
-      "random": "Random",
-      "recentlyFinished": "Recently finished"
     }
   }
 }

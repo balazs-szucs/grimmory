@@ -95,7 +95,6 @@ export class MagicShelfService {
     );
   }
 
-  saveShelf(data: { id?: number; name: string | null; icon: string | null; iconType?: 'PRIME_NG' | 'CUSTOM_SVG'; group: unknown, isPublic?: boolean | null, opdsSort?: string | null }): Observable<MagicShelf> {
     const payload: MagicShelf = {
       id: data.id,
       name: data.name ?? '',

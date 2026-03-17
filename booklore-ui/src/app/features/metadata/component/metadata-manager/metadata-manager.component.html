@@ -21,7 +21,7 @@
       <p-tablist>
         @for (tab of tabConfigs; track tab.type) {
           <p-tab [value]="tab.type">
-            <i class="pi {{ tab.icon }}"></i> {{ t(tab.labelKey).endsWith('s') ? t(tab.labelKey) : t(tab.labelKey) + 's' }} ({{ getMetadataItems(tab.type).length }})
+            <i class="pi {{ tab.icon }}"></i> {{ t(tab.labelPluralKey) }} ({{ getMetadataItems(tab.type).length }})
           </p-tab>
         }
       </p-tablist>
@@ -160,13 +160,11 @@
   </div>
 
   <p-dialog
-    [header]="t('mergeSplitDialogTitle', { type: currentMergeType | titlecase })"
     [(visible)]="showMergeDialog"
     [modal]="true"
     class="user-dialog"
     [style]="{width: '50rem'}">
     <div class="dialog-form">
-      <p>{{ t('mergeSplitDescription', { count: getSelectedItems(currentMergeType).length, type: currentMergeType }) }}</p>
       <ul class="selected-items">
         @for (item of getSelectedItems(currentMergeType); track item.value) {
           <li>
@@ -185,9 +183,7 @@
           class="full-width-input"
           [placeholder]="isSingleValueField(currentMergeType) ? t('singleValuePlaceholder') : t('multiValuePlaceholder')"/>
         @if (isSingleValueField(currentMergeType)) {
-          <small class="help-text" [innerHTML]="t('singleMergeHowItWorks', { type: currentMergeType, singular: currentMergeType.slice(0, -1) })"></small>
         } @else {
-          <small class="help-text" [innerHTML]="t('multiMergeHowItWorks', { type: currentMergeType })"></small>
         }
       </div>
       @if (mergingInProgress) {
@@ -219,7 +215,6 @@
   </p-dialog>
 
   <p-dialog
-    [header]="t('renameSplitDialogTitle', { type: currentMergeType | titlecase })"
     [(visible)]="showRenameDialog"
     [modal]="true"
     class="user-dialog"
@@ -242,9 +237,7 @@
           [placeholder]="isSingleValueField(currentMergeType) ? t('singleRenamePlaceholder') : t('multiRenamePlaceholder')"
           (keyup.enter)="confirmRename()"/>
         @if (isSingleValueField(currentMergeType)) {
-          <small class="help-text" [innerHTML]="t('singleRenameHowItWorks', { singular: currentMergeType.slice(0, -1) })"></small>
         } @else {
-          <small class="help-text" [innerHTML]="t('multiRenameHowItWorks', { singular: currentMergeType.slice(0, -1), type: currentMergeType })"></small>
         }
       </div>
       @if (mergingInProgress) {
@@ -276,7 +269,6 @@
   </p-dialog>
 
   <p-dialog
-    [header]="t('deleteDialogTitle', { type: currentMergeType | titlecase })"
     [(visible)]="showDeleteDialog"
     [modal]="true"
     class="user-dialog"
@@ -284,7 +276,6 @@
     <div class="dialog-form">
       <div class="warning-message">
         <i class="pi pi-exclamation-triangle"></i>
-        <p>{{ t('deleteWarning', { count: currentDeleteItem ? 1 : getSelectedItems(currentMergeType).length, type: currentMergeType }) }}</p>
       </div>
 
       @if (currentDeleteItem) {
@@ -305,7 +296,6 @@
       <div class="delete-info">
         <p><strong>{{ t('whatWillHappen') }}</strong></p>
         <ul>
-          <li>{{ t('deleteItemRemoved', { singular: currentMergeType.slice(0, -1) }) }}</li>
           <li>{{ t('deleteCannotUndo') }}</li>
           <li>{{ t('totalBooksAffected') }} <strong>{{ currentDeleteItem ? currentDeleteItem.count : getTotalAffectedBooks(getSelectedItems(currentMergeType)) }}</strong></li>
         </ul>

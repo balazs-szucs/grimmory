@@ -67,8 +67,8 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
 
   public readonly chartType = 'matrix' as const;
 
-  private yearLabels: string[]          = [];
-  private maxBookCount                  = 1;
+  private yearLabels: string[] = [];
+  private maxBookCount = 1;
   private booksByYearMonth              = new Map<string, Book[]>();
   private activeCellKey: string | null  = null;
   private panelEl: HTMLElement | null   = null;
@@ -80,14 +80,47 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
   public readonly chartOptions: ChartConfiguration['options'] = {
     responsive: true,
     maintainAspectRatio: false,
-    layout: {padding: {top: 20}},
+    layout: {
+      padding: {
+        top: 20
+      }
+    },
     plugins: {
-      legend:  {display: false},
-      tooltip: {enabled: false},
+      legend: {display: false},
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: '#ef476f',
+        borderWidth: 2,
+        cornerRadius: 8,
+        displayColors: false,
+        padding: 16,
+        titleFont: {size: 14, weight: 'bold'},
+        bodyFont: {size: 13},
+        callbacks: {
+          title: (context) => {
+            const point = context[0].raw as MatrixDataPoint;
+            const year = this.yearLabels[point.y];
+            const month = MONTH_NAMES[point.x];
+            return `${month} ${year}`;
+          },
+          label: (context) => {
+            const point = context.raw as MatrixDataPoint;
+            const key = point.v === 1 ? 'statsUser.readingHeatmap.tooltipBook' : 'statsUser.readingHeatmap.tooltipBooks';
+            return this.t.translate(key, {value: point.v});
+          }
+        }
+      },
       datalabels: {
         display: true,
         color: '#ffffff',
-        font: {family: "'Inter', sans-serif", size: 10, weight: 'bold'},
+        font: {
+          family: "'Inter', sans-serif",
+          size: 10,
+          weight: 'bold'
+        },
         formatter: (value: MatrixDataPoint) => value.v > 0 ? value.v.toString() : ''
       }
     },
@@ -97,23 +130,41 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
     scales: {
       x: {
         type: 'linear', position: 'bottom',
-        ticks: {stepSize: 1, callback: (v) => MONTH_NAMES[v as number] || '',
-                color: '#ffffff', font: {family: "'Inter', sans-serif", size: 11}},
-        grid: {display: false}
+        ticks: {
+          stepSize: 1,
+          callback: (value) => MONTH_NAMES[value as number] || '',
+          color: '#ffffff',
+          font: {
+            family: "'Inter', sans-serif",
+            size: 11
+          }
+        },
+        grid: {display: false},
       },
       y: {
         type: 'linear', offset: true,
-        ticks: {stepSize: 1, callback: (v) => this.yearLabels[v as number] || '',
-                color: '#ffffff', font: {family: "'Inter', sans-serif", size: 11}},
-        grid: {display: false}
+        ticks: {
+          stepSize: 1,
+          callback: (value) => this.yearLabels[value as number] || '',
+          color: '#ffffff',
+          font: {
+            family: "'Inter', sans-serif",
+            size: 11
+          }
+        },
+        grid: {display: false},
       }
     }
   };
 
   private readonly chartDataSubject = new BehaviorSubject<HeatmapChartData>({
     labels: [],
-    datasets: [{label: this.t.translate('statsUser.readingHeatmap.booksRead'), data: []}]
+    datasets: [{
+      label: this.t.translate('statsUser.readingHeatmap.booksRead'),
+      data: []
+    }]
   });
+
   public readonly chartData$: Observable<HeatmapChartData> = this.chartDataSubject.asObservable();
 
   private canvasMouseLeaveUnlisten: (() => void) | null = null;
@@ -123,11 +174,18 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
   ngOnInit(): void {
     this.bookService.bookState$
       .pipe(
-        filter(state => state.loaded), first(),
-        catchError(err => { console.error('Reading heatmap error:', err); return EMPTY; }),
+        filter(state => state.loaded),
+        first(),
+        catchError((error) => {
+          console.error('Error processing reading heatmap data:', error);
+          return EMPTY;
+        }),
         takeUntil(this.destroy$)
       )
-      .subscribe(() => this.updateChartData(this.calculateHeatmapData()));
+      .subscribe(() => {
+        const stats = this.calculateHeatmapData();
+        this.updateChartData(stats);
+      });
   }
 
   ngAfterViewInit(): void {
@@ -139,6 +197,9 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
         if (!this.mouseInPanel) this.scheduleHide();
       });
     }
+  }
+      });
+  }
   }
 
   ngOnDestroy(): void {
@@ -334,70 +395,100 @@ export class ReadingHeatmapChartComponent implements OnInit, AfterViewInit, OnDe
     const currentYear = new Date().getFullYear();
     const years = Array.from({length: 10}, (_, i) => currentYear - 9 + i);
 
-    this.yearLabels  = years.map(String);
+    this.yearLabels = years.map(String);
     this.maxBookCount = Math.max(1, ...yearMonthData.map(d => d.count));
 
     const heatmapData: MatrixDataPoint[] = [];
-    years.forEach((year, yi) => {
-      for (let m = 0; m <= 11; m++) {
-        const dp = yearMonthData.find(d => d.year === year && d.month === m + 1);
-        heatmapData.push({x: m, y: yi, v: dp?.count || 0});
+    years.forEach((year, yearIndex) => {
+      for (let month = 0; month <= 11; month++) {
+        const dataPoint = yearMonthData.find(d => d.year === year && d.month === month + 1);
+        heatmapData.push({
+          x: month,
+          y: yearIndex,
+          v: dataPoint?.count || 0
+        });
+      }
+    });
       }
     });
 
-    if (this.chartOptions?.scales?.['y'])
       (this.chartOptions.scales['y'] as any).max = years.length - 1;
+    }
 
     this.chartDataSubject.next({
       labels: [],
       datasets: [{
         label: this.t.translate('statsUser.readingHeatmap.booksRead'),
         data: heatmapData,
-        backgroundColor: (ctx) => {
-          const p = ctx.raw as MatrixDataPoint;
-          if (!p?.v) return 'rgba(255,255,255,0.05)';
-          const a = Math.max(0.2, Math.min(1.0, (p.v / this.maxBookCount) * 0.8 + 0.2));
-          return `rgba(239,71,111,${a})`;
+        backgroundColor: (context) => {
+          const point = context.raw as MatrixDataPoint;
+          if (!point?.v) return 'rgba(255, 255, 255, 0.05)';
+
+          const intensity = point.v / this.maxBookCount;
+          const alpha = Math.max(0.2, Math.min(1.0, intensity * 0.8 + 0.2));
+          return `rgba(239, 71, 111, ${alpha})`;
         },
-        borderColor: 'rgba(255,255,255,0.2)',
+        },
+        borderColor: 'rgba(255, 255, 255, 0.2)',
         borderWidth: 1,
-        width:  ({chart}) => (chart.chartArea?.width  || 0) / 12           - 1,
+        width: ({chart}) => (chart.chartArea?.width || 0) / 12 - 1,
         height: ({chart}) => (chart.chartArea?.height || 0) / years.length - 1
       }]
     });
   }
 
   private calculateHeatmapData(): YearMonthData[] {
-    const s = this.bookService.getCurrentBookState();
-    return this.isValidBookState(s) ? this.processHeatmapData(s.books!) : [];
-  }
+    const currentState = this.bookService.getCurrentBookState();
 
-  private isValidBookState(s: unknown): s is BookState {
-    return typeof s === 'object' && s !== null
-      && 'loaded' in s && typeof (s as any).loaded === 'boolean'
-      && 'books'  in s && Array.isArray((s as any).books)
-      && (s as any).books.length > 0;
+    if (!this.isValidBookState(currentState)) {
+      return [];
+    }
+
+    return this.processHeatmapData(currentState.books!);
+
+  private isValidBookState(state: unknown): state is BookState {
+    return (
+      typeof state === 'object' &&
+      state !== null &&
+      'loaded' in state &&
+      typeof (state as {loaded: boolean}).loaded === 'boolean' &&
+      'books' in state &&
+      Array.isArray((state as {books: unknown}).books) &&
+      (state as {books: Book[]}).books.length > 0
+    );
+  }
   }
 
   private processHeatmapData(books: Book[]): YearMonthData[] {
-    const map = new Map<string, number>();
-    this.booksByYearMonth.clear();
+    const yearMonthMap = new Map<string, number>();
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 9;
 
-    const now       = new Date().getFullYear();
-    const startYear = now - 9;
+    books
+      .filter(book => book.dateFinished)
+      .forEach(book => {
+        const finishedDate = new Date(book.dateFinished!);
+        const year = finishedDate.getFullYear();
 
-    books.filter(b => b.dateFinished).forEach(b => {
-      const d    = new Date(b.dateFinished!);
-      const year = d.getFullYear();
-      if (year < startYear || year > now) return;
-      const month = d.getMonth() + 1;
-      const key   = `${year}-${month}`;
-      map.set(key, (map.get(key) || 0) + 1);
-      const arr = this.booksByYearMonth.get(key) ?? [];
-      arr.push(b);
-      this.booksByYearMonth.set(key, arr);
-    });
+        if (year >= startYear && year <= currentYear) {
+          const month = finishedDate.getMonth() + 1;
+          const key = `${year}-${month}`;
+          yearMonthMap.set(key, (yearMonthMap.get(key) || 0) + 1);
+        }
+      });
 
+    return Array.from(yearMonthMap.entries())
+      .map(([key, count]) => {
+        const [year, month] = key.split('-').map(Number);
+        return {year, month, count};
+      })
+      .sort((a, b) => a.year - b.year || a.month - b.month);
+
+    return Array.from(yearMonthMap.entries())
+      .map(([key, count]) => {
+        const [year, month] = key.split('-').map(Number);
+        return {year, month, count};
+      })
     return Array.from(map.entries())
       .map(([k, count]) => { const [y, m] = k.split('-').map(Number); return {year: y, month: m, count}; })
       .sort((a, b) => a.year - b.year || a.month - b.month);

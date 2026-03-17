@@ -132,6 +132,12 @@ export class AppTopBarComponent implements OnDestroy {
       .subscribe(() => {
         this.initializeStatsMenu();
       });
+
+    this.translocoService.langChanges$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.initializeStatsMenu();
+      });
   }
 
   ngOnDestroy(): void {
@@ -151,6 +157,10 @@ export class AppTopBarComponent implements OnDestroy {
   toggleMenu() {
     this.isMenuVisible = !this.isMenuVisible;
     this.layoutService.onMenuToggle();
+  }
+
+  openGithubSupportDialog(): void {
+    this.dialogLauncher.openGithubSupportDialog();
   }
 
   openLibraryCreatorDialog(): void {

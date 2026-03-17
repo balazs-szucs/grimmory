@@ -12,8 +12,7 @@ export enum TaskType {
   SYNC_LIBRARY_FILES = 'SYNC_LIBRARY_FILES',
   BOOKDROP_PERIODIC_SCANNING = 'BOOKDROP_PERIODIC_SCANNING',
   CLEANUP_TEMP_METADATA = 'CLEANUP_TEMP_METADATA',
-  REFRESH_METADATA_MANUAL = 'REFRESH_METADATA_MANUAL',
-  VERIFY_FILE_HASHES = 'VERIFY_FILE_HASHES'
+  REFRESH_METADATA_MANUAL = 'REFRESH_METADATA_MANUAL'
 }
 
 export const TASK_TYPE_CONFIG: Record<TaskType, { parallel: boolean; async: boolean; displayOrder: number }> = {
@@ -23,9 +22,8 @@ export const TASK_TYPE_CONFIG: Record<TaskType, { parallel: boolean; async: bool
   [TaskType.UPDATE_BOOK_RECOMMENDATIONS]: {parallel: false, async: true, displayOrder: 4},
   [TaskType.CLEANUP_DELETED_BOOKS]: {parallel: false, async: false, displayOrder: 5},
   [TaskType.CLEANUP_TEMP_METADATA]: {parallel: false, async: false, displayOrder: 6},
-  [TaskType.VERIFY_FILE_HASHES]: {parallel: false, async: true, displayOrder: 7},
-  [TaskType.REFRESH_METADATA_MANUAL]: {parallel: false, async: false, displayOrder: 8},
-  [TaskType.CLEAR_PDF_CACHE]: {parallel: false, async: false, displayOrder: 9},
+  [TaskType.REFRESH_METADATA_MANUAL]: {parallel: false, async: false, displayOrder: 7},
+  [TaskType.CLEAR_PDF_CACHE]: {parallel: false, async: false, displayOrder: 8},
 };
 
 export enum MetadataReplaceMode {
@@ -37,22 +35,10 @@ export interface LibraryRescanOptions {
   metadataReplaceMode?: MetadataReplaceMode;
 }
 
-export interface FileHashVerificationOptions {
-  dryRun?: boolean;
-  overwriteInitialHash?: boolean;
-}
-
-export interface FileHashVerificationRequest {
-  verificationType: 'BOOKS' | 'LIBRARY';
-  libraryId?: number | null;
-  bookIds?: number[] | null;
-  verificationOptions?: FileHashVerificationOptions;
-}
-
 export interface TaskCreateRequest {
   taskType: TaskType;
   triggeredByCron?: boolean;
-  options?: LibraryRescanOptions | MetadataRefreshRequest | FileHashVerificationRequest | null;
+  options?: LibraryRescanOptions | MetadataRefreshRequest | null;
 }
 
 export interface TaskCreateResponse {

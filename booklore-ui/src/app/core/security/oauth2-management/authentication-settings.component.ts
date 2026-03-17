@@ -75,6 +75,7 @@ export class AuthenticationSettingsComponent implements OnInit {
     {labelKey: 'infoPanel.postLogoutRedirectUri', value: `${window.location.origin}/login`},
     {labelKey: 'infoPanel.backChannelLogoutUri', value: `${window.location.origin}/api/v1/auth/oidc/backchannel-logout`},
     {labelKey: 'infoPanel.requiredScopes', value: 'openid profile email offline_access'},
+    {labelKey: 'infoPanel.requiredScopes', value: 'openid profile email groups offline_access'},
     {labelKey: 'infoPanel.pkceMethod', value: 'S256'},
     {labelKey: 'infoPanel.grantType', value: 'Authorization Code'},
   ];
@@ -102,6 +103,7 @@ export class AuthenticationSettingsComponent implements OnInit {
     clientId: '',
     clientSecret: '',
     issuerUri: '',
+    scopes: '',
     claimMapping: {
       username: '',
       email: '',
@@ -156,6 +158,7 @@ export class AuthenticationSettingsComponent implements OnInit {
       providerName: settings.oidcProviderDetails?.providerName || '',
       clientId: settings.oidcProviderDetails?.clientId || '',
       issuerUri: settings.oidcProviderDetails?.issuerUri || '',
+      scopes: settings.oidcProviderDetails?.scopes || '',
       claimMapping: settings.oidcProviderDetails?.claimMapping || defaultClaimMapping
     };
 
