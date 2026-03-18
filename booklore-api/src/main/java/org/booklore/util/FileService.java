@@ -28,6 +28,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,20 +43,6 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 @Service
 public class FileService {
-
-    private static final ThreadLocal<String> TARGET_HOST_THREAD_LOCAL = new ThreadLocal<>();
-
-    public static String getTargetHost() {
-        return TARGET_HOST_THREAD_LOCAL.get();
-    }
-
-    public static void setTargetHost(String host) {
-        TARGET_HOST_THREAD_LOCAL.set(host);
-    }
-
-    public static void clearTargetHost() {
-        TARGET_HOST_THREAD_LOCAL.remove();
-    }
 
     private final AppProperties appProperties;
     private final RestTemplate restTemplate;
@@ -280,86 +267,101 @@ public class FileService {
         String currentUrl = imageUrl;
         int redirectCount = 0;
 
-        try {
-            while (redirectCount <= MAX_REDIRECTS) {
-                URI uri = URI.create(currentUrl);
-                // Protocol validation
-                if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-                    throw new IOException("Only HTTP and HTTPS protocols are allowed");
-                }
+        while (redirectCount <= MAX_REDIRECTS) {
+            URI uri = URI.create(currentUrl);
+            if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
+                throw new IOException("Only HTTP and HTTPS protocols are allowed");
+            }
 
-                String host = uri.getHost();
-                if (host == null) {
-                    throw new IOException("Invalid URL: no host found in " + currentUrl);
-                }
+            String host = uri.getHost();
+            if (host == null) {
+                throw new IOException("Invalid URL: no host found in " + currentUrl);
+            }
 
-                // Resolve host to IP to prevent DNS rebinding (TOCTOU)
-                InetAddress[] inetAddresses = InetAddress.getAllByName(host);
-                if (inetAddresses.length == 0) {
-                    throw new IOException("Could not resolve host: " + host);
-                }
-                for (InetAddress inetAddress : inetAddresses) {
-                    if (isInternalAddress(inetAddress)) {
-                        throw new SecurityException("URL points to a local or private internal network address: " + host + " (" + inetAddress.getHostAddress() + ")");
-                    }
-                }
-                String ipAddress = inetAddresses[0].getHostAddress();
-
-                // Set target host for SNI / Hostname verification in RestTemplate/SSLSocketFactory
-                setTargetHost(host);
-
-                // Build request URL with IP address to ensure we connect to the validated address.
-                // We keep the original URI's path and query.
-                String portSuffix = (uri.getPort() != -1) ? ":" + uri.getPort() : "";
-                String path = uri.getRawPath();
-                if (path == null || path.isEmpty()) path = "/";
-                String query = uri.getRawQuery();
-
-                // Handle IPv6 address formatting in URL
-                String hostInUrl = ipAddress;
-                if (ipAddress.contains(":")) {
-                    hostInUrl = "[" + ipAddress + "]";
-                }
-                String requestUrl = uri.getScheme() + "://" + hostInUrl + portSuffix + path + (query != null ? "?" + query : "");
-
-                HttpHeaders headers = new HttpHeaders();
-                // Host header is set in prepareConnection via setRequestProperty.
-                // Do NOT set it here: Spring's addRequestProperty would add a duplicate,
-                // and duplicate Host headers cause 400 on strict CDNs like CloudFront.
-                headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
-                headers.set(HttpHeaders.ACCEPT, "image/*");
-
-                HttpEntity<String> entity = new HttpEntity<>(headers);
-
-                log.debug("Downloading image via IP-based URL: {} (Original host: {})", requestUrl, host);
-
-                ResponseEntity<byte[]> response = noRedirectRestTemplate.exchange(
-                        requestUrl,
-                        HttpMethod.GET,
-                        entity,
-                        byte[].class
-                );
-
-                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                    return readImage(response.getBody());
-                } else if (response.getStatusCode().is3xxRedirection()) {
-                    String location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
-                    if (location == null) {
-                        throw new IOException("Redirection response without Location header");
-                    }
-                    // Resolve location against CURRENT URL (which has the hostname)
-                    currentUrl = uri.resolve(location).toString();
-                    redirectCount++;
-                } else {
-                    throw new IOException("Failed to download image. HTTP Status: " + response.getStatusCode());
+            // Validate resolved IPs to block SSRF against internal networks
+            InetAddress[] inetAddresses = InetAddress.getAllByName(host);
+            if (inetAddresses.length == 0) {
+                throw new IOException("Could not resolve host: " + host);
+            }
+            for (InetAddress inetAddress : inetAddresses) {
+                if (isInternalAddress(inetAddress)) {
+                    throw new SecurityException("URL points to a local or private internal network address: " + host + " (" + inetAddress.getHostAddress() + ")");
                 }
             }
-        } finally {
-            // Ensure thread-local is cleared to prevent leakage to subsequent requests (container thread reuse)
-            clearTargetHost();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
+            headers.set(HttpHeaders.ACCEPT, "image/*");
+
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+
+            log.debug("Downloading image from: {}", currentUrl);
+
+            ResponseEntity<byte[]> response = noRedirectRestTemplate.exchange(
+                    currentUrl,
+                    HttpMethod.GET,
+                    entity,
+                    byte[].class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return readImage(response.getBody());
+            } else if (response.getStatusCode().is3xxRedirection()) {
+                String location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
+                if (location == null) {
+                    throw new IOException("Redirection response without Location header");
+                }
+                URI redirectUri = uri.resolve(location);
+
+                // When a CDN redirects to a raw IP (e.g. CloudFront -> 3.168.64.124),
+                // the Host header would become the bare IP, which the CDN rejects with
+                // 400. Rewrite the URL to keep the previous hostname so the JDK
+                // HttpClient sets the correct Host header automatically.
+                if (isRawIpAddress(redirectUri.getHost())) {
+                    try {
+                        redirectUri = new URI(
+                                redirectUri.getScheme(),
+                                redirectUri.getUserInfo(),
+                                host,
+                                redirectUri.getPort(),
+                                redirectUri.getPath(),
+                                redirectUri.getQuery(),
+                                redirectUri.getFragment()
+                        );
+                    } catch (URISyntaxException e) {
+                        throw new IOException("Invalid redirect URI: " + e.getMessage(), e);
+                    }
+                }
+
+                currentUrl = redirectUri.toString();
+                redirectCount++;
+            } else {
+                throw new IOException("Failed to download image. HTTP Status: " + response.getStatusCode());
+            }
         }
 
         throw new IOException("Too many redirects (max " + MAX_REDIRECTS + ")");
+    }
+
+    private boolean isRawIpAddress(String host) {
+        if (host == null) {
+            return false;
+        }
+        // IPv6 in URI brackets
+        if (host.startsWith("[")) {
+            return true;
+        }
+        // IPv4: all segments are digits
+        String[] parts = host.split("\\.");
+        if (parts.length == 4) {
+            for (String part : parts) {
+                if (!part.chars().allMatch(Character::isDigit)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     private boolean isInternalAddress(InetAddress address) {

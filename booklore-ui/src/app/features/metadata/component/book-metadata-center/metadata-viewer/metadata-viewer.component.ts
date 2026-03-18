@@ -80,8 +80,6 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
   isExpanded = false;
   isOverflowing = false;
   isComicSectionExpanded = true;
-  isAudiobookSectionExpanded = true;
-  isChapterListExpanded = false;
   showFilePath = false;
   isAutoFetching = false;
   private metadataCenterViewMode: 'route' | 'dialog' = 'route';
@@ -236,6 +234,19 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
               icon: 'pi pi-folder',
               command: () => this.assignShelf(book.id)
             });
+
+            if (userState?.user?.permissions.canManageLibrary || userState?.user?.permissions.admin) {
+              const isPhysical = book.isPhysical ?? false;
+              items.push({
+                label: isPhysical
+                  ? this.t.translate('metadata.viewer.menuUnmarkPhysical')
+                  : this.t.translate('metadata.viewer.menuMarkPhysical'),
+                icon: isPhysical ? 'pi pi-times-circle' : 'pi pi-book',
+                command: () => {
+                  this.bookService.togglePhysicalFlag(book.id, !isPhysical).subscribe();
+                }
+              });
+            }
 
             // Add allowed submenus based on user permissions
 
@@ -1069,6 +1080,7 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
       case 'm4b':
       case 'm4a':
       case 'mp3':
+      case 'opus':
         return 'pi pi-headphones';
       default:
         return 'pi pi-file';
@@ -1413,18 +1425,6 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
-  }
-
-  formatDurationMs(ms: number): string {
-    if (!ms) return '-';
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
   formatSampleRate(sampleRate: number): string {
