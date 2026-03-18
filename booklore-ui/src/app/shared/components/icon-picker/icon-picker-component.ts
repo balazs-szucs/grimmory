@@ -11,7 +11,8 @@ import {IconCategoriesHelper} from '../../helpers/icon-categories.helper';
 import {Button} from 'primeng/button';
 import {TabsModule} from 'primeng/tabs';
 import {UserService} from '../../../features/settings/user-management/user.service';
-import {forkJoin, of} from 'rxjs';
+import {from, of} from 'rxjs';
+import {catchError, mergeMap, toArray} from 'rxjs/operators';
 
 interface SvgEntry {
   name: string;
@@ -142,20 +143,17 @@ export class IconPickerComponent implements OnInit {
           this.isLoadingSvgIcons = false;
           return;
         }
-        const contentRequests = names.map(name =>
-          this.iconCache.getCachedSanitized(name)
-            ? of(null)
-            : this.iconService.getSvgIconContent(name)
-        );
-        forkJoin(contentRequests).subscribe({
-          next: () => {
-            this.svgIcons = names;
-            this.isLoadingSvgIcons = false;
-          },
-          error: () => {
-            this.svgIcons = names;
-            this.isLoadingSvgIcons = false;
-          }
+        from(names).pipe(
+          mergeMap(name =>
+            this.iconCache.getCachedSanitized(name)
+              ? of(null)
+              : this.iconService.getSvgIconContent(name).pipe(catchError(() => of(null))),
+            5
+          ),
+          toArray()
+        ).subscribe(() => {
+          this.svgIcons = names;
+          this.isLoadingSvgIcons = false;
         });
       },
       error: () => {
