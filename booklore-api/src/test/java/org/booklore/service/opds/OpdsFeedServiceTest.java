@@ -8,6 +8,7 @@ import org.booklore.model.entity.ShelfEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.OpdsSortOrder;
 import org.booklore.service.MagicShelfService;
+import org.booklore.util.ArchiveUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class OpdsFeedServiceTest {
@@ -114,10 +116,11 @@ class OpdsFeedServiceTest {
     }
 
     @Test
-    void generateShelvesNavigation_shouldHandleNullUserDetails() {
+    void generateShelvesNavigation_shouldThrowWhenNotAuthenticated() {
         when(authenticationService.getOpdsUser()).thenReturn(null);
-        String xml = opdsFeedService.generateShelvesNavigation(request);
-        assertThat(xml).contains("</feed>");
+        assertThatThrownBy(() -> opdsFeedService.generateShelvesNavigation(request))
+                .isInstanceOf(org.booklore.exception.APIException.class)
+                .hasMessageContaining("OPDS authentication required");
         verify(opdsBookService, never()).getUserShelves(any());
     }
 
@@ -140,7 +143,7 @@ class OpdsFeedServiceTest {
                 .addedOn(FIXED_INSTANT)
                 .metadata(BookMetadata.builder()
                         .title("Book Title")
-                        .authors(Set.of("Author A"))
+                        .authors(List.of("Author A"))
                         .publisher("Publisher X")
                         .language("en")
                         .categories(Set.of("Fiction"))
@@ -299,14 +302,14 @@ class OpdsFeedServiceTest {
     }
 
     @Test
-    void getUserId_shouldReturnNullWhenNotAuthenticated() throws Exception {
+    void getUserId_shouldThrowWhenNotAuthenticated() throws Exception {
         when(authenticationService.getOpdsUser()).thenReturn(null);
 
         var method = OpdsFeedService.class.getDeclaredMethod("getUserId");
         method.setAccessible(true);
-        Long userId = (Long) method.invoke(opdsFeedService);
-
-        assertThat(userId).isNull();
+        assertThatThrownBy(() -> method.invoke(opdsFeedService))
+                .hasCauseInstanceOf(org.booklore.exception.APIException.class)
+                .hasRootCauseMessage("OPDS authentication required");
     }
 
     @Test
@@ -480,7 +483,7 @@ class OpdsFeedServiceTest {
         BookFile bookFile = BookFile.builder()
                 .bookType(BookFileType.CBX)
                 .fileName("comic.cbz")
-                .archiveType(org.booklore.util.ArchiveUtils.ArchiveType.UNKNOWN)
+                .archiveType(ArchiveUtils.ArchiveType.UNKNOWN)
                 .build();
 
         String mimeType = (String) method.invoke(opdsFeedService, bookFile);
@@ -495,7 +498,7 @@ class OpdsFeedServiceTest {
         BookFile bookFile = BookFile.builder()
                 .bookType(BookFileType.CBX)
                 .fileName("comic.cbr")
-                .archiveType(org.booklore.util.ArchiveUtils.ArchiveType.UNKNOWN)
+                .archiveType(ArchiveUtils.ArchiveType.UNKNOWN)
                 .build();
 
         String mimeType = (String) method.invoke(opdsFeedService, bookFile);

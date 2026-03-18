@@ -12,8 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @UtilityClass
 @Slf4j
@@ -119,15 +122,40 @@ public class FileUtils {
         }
     }
 
+    private static final List<String> COVER_IMAGE_BASENAMES = List.of("cover", "folder", "image");
+    private static final List<String> IMAGE_EXTENSIONS = List.of("jpg", "jpeg", "png", "webp", "gif", "bmp");
+
+    /**
+     * Find a cover image file in a folder by looking for well-known filenames
+     * (cover, folder, image) with common image extensions.
+     */
+    public Optional<Path> findCoverImageInFolder(Path folderPath) {
+        try {
+            if (folderPath == null || !Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
+                return Optional.empty();
+            }
+            for (String baseName : COVER_IMAGE_BASENAMES) {
+                for (String ext : IMAGE_EXTENSIONS) {
+                    Path candidate = folderPath.resolve(baseName + "." + ext);
+                    if (Files.isRegularFile(candidate)) {
+                        return Optional.of(candidate);
+                    }
+                }
+            }
+            return Optional.empty();
+        } catch (Exception e) {
+            log.error("Failed to find cover image in folder [{}]: {}", folderPath, e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
+
     /**
      * Check if a filename is an audio file.
      */
     public boolean isAudioFile(String fileName) {
         if (fileName == null) return false;
         String lower = fileName.toLowerCase();
-        return lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".m4b")
-                || lower.endsWith(".flac") || lower.endsWith(".ogg") || lower.endsWith(".opus")
-                || lower.endsWith(".aac");
+        return lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".m4b") || lower.endsWith(".opus");
     }
 
     /**
@@ -147,6 +175,66 @@ public class FileUtils {
             log.error("Failed to list audio files in folder [{}]: {}", folderPath, e.getMessage(), e);
             return List.of();
         }
+    }
+
+    private static final Pattern LEADING_NUMBER_PREFIX = Pattern.compile("^\\d{1,3}(?:\\.|\\s*-)\\s*");
+    private static final Pattern PART_DISC_INDICATOR = Pattern.compile(
+            "\\s*[\\(\\[\\-]?\\s*(?:part|pt|dis[ck]|cd)\\s*\\d+\\s*[\\)\\]]?\\s*$",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern TRAILING_NUMBERS = Pattern.compile("\\s*\\d+\\s*$");
+    private static final Set<String> GENERIC_AUDIO_TITLES = Set.of(
+            "chapter", "track", "part", "disc", "disk", "cd", "side", "intro", "epilogue", "prologue", "outro"
+    );
+
+    private static final Set<String> SINGLE_FILE_AUDIOBOOK_EXTENSIONS = Set.of("m4b", "m4a");
+
+    /**
+     * Determines if a list of audio files represents a series folder (each file is a separate book)
+     * rather than a multi-file audiobook (chapter files for one book).
+     *
+     * Uses two signals:
+     * 1. File format: .m4b/.m4a files are typically complete audiobooks, so a folder of them
+     *    is likely a series. .mp3 files are typically chapters/tracks of one audiobook.
+     * 2. Title analysis (for .m4b/.m4a only): extracts base titles by stripping numbering and
+     *    part indicators. If multiple distinct non-generic titles exist, it's a series.
+     *
+     * For .mp3 files (the vast majority of chapter-based audiobooks), this always returns false
+     * regardless of naming convention, avoiding the impossible task of distinguishing descriptive
+     * chapter names from book titles via pattern matching.
+     */
+    public boolean isSeriesFolder(List<Path> audioFiles) {
+        if (audioFiles.size() < 2) {
+            return false;
+        }
+
+        boolean allSingleFileFormats = audioFiles.stream().allMatch(f -> {
+            String name = f.getFileName().toString().toLowerCase();
+            int dot = name.lastIndexOf('.');
+            return dot > 0 && SINGLE_FILE_AUDIOBOOK_EXTENSIONS.contains(name.substring(dot + 1));
+        });
+
+        if (!allSingleFileFormats) {
+            return false;
+        }
+
+        Set<String> distinctTitles = new HashSet<>();
+        for (Path file : audioFiles) {
+            String title = extractBaseTitle(file.getFileName().toString());
+            if (!title.isEmpty() && !GENERIC_AUDIO_TITLES.contains(title)) {
+                distinctTitles.add(title);
+            }
+        }
+        return distinctTitles.size() > 1;
+    }
+
+    private String extractBaseTitle(String fileName) {
+        int lastDot = fileName.lastIndexOf('.');
+        String baseName = lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
+        baseName = LEADING_NUMBER_PREFIX.matcher(baseName).replaceFirst("");
+        baseName = PART_DISC_INDICATOR.matcher(baseName).replaceAll("");
+        baseName = TRAILING_NUMBERS.matcher(baseName).replaceAll("");
+        return baseName.toLowerCase().trim();
     }
 
     public void deleteDirectoryRecursively(Path path) throws IOException {
@@ -178,12 +266,24 @@ public class FileUtils {
       ".caltrash"
     );
 
+    private final Set<String> tempExtensions = Set.of(
+            ".part", ".tmp", ".crdownload", ".download",
+            ".bak", ".old", ".temp", ".tempfile"
+    );
+
     public boolean shouldIgnore(Path path) {
-        if (!path.getFileName().toString().isEmpty() && path.getFileName().toString().charAt(0) == '.') {
+        String fileName = path.getFileName().toString();
+        if (!fileName.isEmpty() && fileName.charAt(0) == '.') {
             return true;
         }
         for (Path part : path) {
             if (systemDirs.contains(part.toString())) {
+                return true;
+            }
+        }
+        String lowerName = fileName.toLowerCase();
+        for (String ext : tempExtensions) {
+            if (lowerName.endsWith(ext)) {
                 return true;
             }
         }

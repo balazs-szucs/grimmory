@@ -2,6 +2,7 @@ package org.booklore.service.book;
 
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.APIException;
+import org.booklore.service.audit.AuditService;
 import org.booklore.mapper.BookMapper;
 import org.booklore.model.dto.*;
 import org.booklore.model.dto.request.ReadProgressRequest;
@@ -21,7 +22,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -70,6 +70,8 @@ class BookServiceTest {
     private MonitoringRegistrationService monitoringRegistrationService;
     @Mock
     private BookUpdateService bookUpdateService;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private BookService bookService;
@@ -269,10 +271,10 @@ class BookServiceTest {
     }
 
     @Test
-    void getBookThumbnail_fileMissing_returnsDefault() throws Exception {
+    void getBookThumbnail_fileMissing_returnsDefault() {
         when(fileService.getThumbnailFile(1L)).thenReturn("/tmp/nonexistent.jpg");
         Resource res = bookService.getBookThumbnail(1L);
-        assertTrue(res instanceof UrlResource);
+        assertTrue(res instanceof ClassPathResource);
     }
 
     @Test
@@ -318,7 +320,7 @@ class BookServiceTest {
     }
 
     @Test
-    void getBookContent_returnsByteArrayResource() throws Exception {
+    void getBookContent_returnsResource() throws Exception {
         BookEntity entity = new BookEntity();
         entity.setId(10L);
         when(bookRepository.findById(10L)).thenReturn(Optional.of(entity));
@@ -326,9 +328,9 @@ class BookServiceTest {
         Files.write(path, "hello".getBytes());
         try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
             fileUtilsMock.when(() -> FileUtils.getBookFullPath(entity)).thenReturn(path.toString());
-            ResponseEntity<ByteArrayResource> response = bookService.getBookContent(10L);
+            ResponseEntity<Resource> response = bookService.getBookContent(10L);
             assertEquals(HttpStatus.OK, response.getStatusCode());
-            assertArrayEquals("hello".getBytes(), response.getBody().getByteArray());
+            assertArrayEquals("hello".getBytes(), response.getBody().getInputStream().readAllBytes());
         } finally {
             Files.deleteIfExists(path);
         }
@@ -341,13 +343,13 @@ class BookServiceTest {
     }
 
     @Test
-    void getBookContent_fileIoError_throwsIOException() throws Exception {
+    void getBookContent_fileNotFound_throwsException() {
         BookEntity entity = new BookEntity();
         entity.setId(12L);
         when(bookRepository.findById(12L)).thenReturn(Optional.of(entity));
         try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
             fileUtilsMock.when(() -> FileUtils.getBookFullPath(entity)).thenReturn("/tmp/nonexistentfile.txt");
-            assertThrows(java.io.FileNotFoundException.class, () -> bookService.getBookContent(12L));
+            assertThrows(APIException.class, () -> bookService.getBookContent(12L));
         }
     }
 
@@ -372,8 +374,9 @@ class BookServiceTest {
         Files.createDirectories(filePath.getParent());
         Files.write(filePath, "abc".getBytes());
 
-        doNothing().when(bookRepository).deleteAll(anyList());
+        doNothing().when(bookRepository).deleteAllInBatch(anyList());
         when(bookQueryService.findAllWithMetadataByIds(Set.of(11L))).thenReturn(List.of(entity));
+        when(authenticationService.getAuthenticatedUser()).thenReturn(testUser);
 
         BookDeletionResponse response = bookService.deleteBooks(Set.of(11L)).getBody();
 
@@ -401,7 +404,8 @@ class BookServiceTest {
         entity.setBookFiles(List.of(primaryFile));
 
         when(bookQueryService.findAllWithMetadataByIds(Set.of(13L))).thenReturn(List.of(entity));
-        doNothing().when(bookRepository).deleteAll(anyList());
+        when(authenticationService.getAuthenticatedUser()).thenReturn(testUser);
+        doNothing().when(bookRepository).deleteAllInBatch(anyList());
 
         BookDeletionResponse response = bookService.deleteBooks(Set.of(13L)).getBody();
 

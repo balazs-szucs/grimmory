@@ -10,9 +10,8 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -23,7 +22,7 @@ class PathPatternResolverTest {
     private static final int MAX_FILENAME_BYTES = 245; // From PathPatternResolver.MAX_FILESYSTEM_COMPONENT_BYTES
     private static final Charset FILENAME_CHARSET = StandardCharsets.UTF_8;
 
-    public static final Set<String> LONG_AUTHOR_LIST = new LinkedHashSet<>(List.of(
+    public static final List<String> LONG_AUTHOR_LIST = new ArrayList<>(List.of(
         "梁思成", "叶嘉莹", "厉以宁", "萧乾", "冯友兰", "费孝通", "李济", "侯仁之", "汤一介", "温源宁",
         "胡适", "吴青", "李照国", "蒋梦麟", "汪荣祖", "邢玉瑞", "《中华思想文化术语》编委会",
         "北京大学政策法规研究室", "（美）艾恺（Guy S. Alitto）", "顾毓琇", "陈从周",
@@ -89,7 +88,7 @@ class PathPatternResolverTest {
     void testResolvePattern_multiplePlaceholders() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Test Book")
-                .authors(Set.of("John Doe", "Jane Smith"))
+                .authors(List.of("John Doe", "Jane Smith"))
                 .publishedDate(LocalDate.of(2023, 5, 15))
                 .build();
 
@@ -103,7 +102,7 @@ class PathPatternResolverTest {
     @Test
     void testResolvePattern_authorsList() {
         BookMetadata metadata = BookMetadata.builder()
-                .authors(Set.of("Author One", "Author Two"))
+                .authors(List.of("Author One", "Author Two"))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors}", "original.pdf");
@@ -142,7 +141,7 @@ class PathPatternResolverTest {
     void testResolvePattern_optionalBlock_allPresent() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title")
-                .authors(Set.of("Author Name"))
+                .authors(List.of("Author Name"))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{title}< - {authors}>", "original.pdf");
@@ -261,7 +260,7 @@ class PathPatternResolverTest {
     void testResolvePattern_emptyAuthors() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title")
-                .authors(Set.of())
+                .authors(List.of())
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{title}< - {authors}>", "original.pdf");
@@ -330,7 +329,7 @@ class PathPatternResolverTest {
     void testResolvePattern_complexPattern() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("The Great Book")
-                .authors(Set.of("John Doe", "Jane Smith"))
+                .authors(List.of("John Doe", "Jane Smith"))
                 .seriesName("Awesome Series")
                 .seriesNumber(3.0f)
                 .publishedDate(LocalDate.of(2023, 5, 15))
@@ -374,7 +373,7 @@ class PathPatternResolverTest {
 
     @Test
     void testResolvePattern_authorsWithinLimit() {
-        Set<String> authors = Set.of("John Doe", "Jane Smith", "Bob Wilson");
+        List<String> authors = List.of("John Doe", "Jane Smith", "Bob Wilson");
 
         BookMetadata metadata = BookMetadata.builder()
                 .title("Test Book")
@@ -390,7 +389,7 @@ class PathPatternResolverTest {
     @Test
     @DisplayName("Should apply author truncation in various pattern contexts")
     void testResolvePattern_appliesAuthorTruncation() {
-        Set<String> shortAuthorList = new LinkedHashSet<>(List.of("John Doe", "Jane Smith"));
+        List<String> shortAuthorList = new ArrayList<>(List.of("John Doe", "Jane Smith"));
 
         BookMetadata metadata = BookMetadata.builder()
                 .title("Test")
@@ -429,7 +428,7 @@ class PathPatternResolverTest {
 
         BookMetadata metadata = BookMetadata.builder()
                 .title("Test")
-                .authors(Set.of(veryLongAuthor))
+                .authors(List.of(veryLongAuthor))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors}", "test.epub");
@@ -503,7 +502,7 @@ class PathPatternResolverTest {
     void testResolvePattern_removesTrailingDots() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title")
-                .authors(Set.of("Author Name Jr."))
+                .authors(List.of("Author Name Jr."))
                 .build();
 
         // Pattern: {authors}/{title}
@@ -527,7 +526,7 @@ class PathPatternResolverTest {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title.")
                 .seriesName("Series.")
-                .authors(Set.of("Author."))
+                .authors(List.of("Author."))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors}/{series}/{title}", "original.pdf");
@@ -572,7 +571,7 @@ class PathPatternResolverTest {
     void testResolvePattern_extensionNotInPattern() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title")
-                .authors(Set.of("Author Name"))
+                .authors(List.of("Author Name"))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors} - {title}", "original.pdf");
@@ -683,7 +682,7 @@ class PathPatternResolverTest {
         String veryLongAuthor = "A".repeat(300); // Very long single author
         BookMetadata metadata = BookMetadata.builder()
                 .title("Test")
-                .authors(Set.of(veryLongAuthor))
+                .authors(List.of(veryLongAuthor))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors}", "test.epub");
@@ -701,7 +700,7 @@ class PathPatternResolverTest {
     void testResolvePattern_multipleTrailingDots() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title...")
-                .authors(Set.of("Author Name..."))
+                .authors(List.of("Author Name..."))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors}/{title}", "test.pdf");
@@ -742,7 +741,7 @@ class PathPatternResolverTest {
     void testResolvePattern_optionalBlockAllPresent() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Title")
-                .authors(Set.of("Author"))
+                .authors(List.of("Author"))
                 .seriesName("Series")
                 .build();
 
@@ -815,7 +814,7 @@ class PathPatternResolverTest {
         String veryLongFirstAuthor = "某".repeat(100); // ~300 bytes
         BookMetadata metadata = BookMetadata.builder()
                 .title("Test")
-                .authors(Set.of(veryLongFirstAuthor, "Second Author"))
+                .authors(List.of(veryLongFirstAuthor, "Second Author"))
                 .build();
 
         String result = PathPatternResolver.resolvePattern(metadata, "{authors}", "test.epub");
@@ -890,12 +889,440 @@ class PathPatternResolverTest {
                 "Result bytes should be <= " + MAX_FILENAME_BYTES);
     }
 
+    // ===== Else Clause Tests =====
+
+    @Test
+    @DisplayName("Else clause: should use left side when values are present")
+    void testElseClause_leftSideUsedWhenPresent() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .seriesName("My Series")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}|Standalone>/{title}", "original.pdf");
+
+        assertEquals("My Series/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause: should use fallback when values are missing")
+    void testElseClause_fallbackUsedWhenMissing() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}|Standalone>/{title}", "original.pdf");
+
+        assertEquals("Standalone/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause: fallback can contain placeholders")
+    void testElseClause_fallbackWithPlaceholders() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("John Doe"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}/{seriesIndex} - {title}|{title}>", "original.pdf");
+
+        assertEquals("Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause: backward compatible without pipe")
+    void testElseClause_backwardCompatibleNoPipe() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}/>{title}", "original.pdf");
+
+        assertEquals("Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause: literal text in fallback")
+    void testElseClause_literalFallback() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}|No Series>/{title}", "original.pdf");
+
+        assertEquals("No Series/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause: mixed blocks with and without else")
+    void testElseClause_mixedBlocks() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Author"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}|Standalone>/<{year} - >{title}", "original.pdf");
+
+        assertEquals("Standalone/Book Title.pdf", result);
+    }
+
+    // ===== Modifier Tests =====
+
+    @Test
+    @DisplayName("Modifier: first with multiple authors")
+    void testModifier_firstMultipleAuthors() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(new ArrayList<>(List.of("Patrick Rothfuss", "Brandon Sanderson")))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:first}/{title}", "original.pdf");
+
+        assertEquals("Patrick Rothfuss/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: first with single author")
+    void testModifier_firstSingleAuthor() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:first}/{title}", "original.pdf");
+
+        assertEquals("Patrick Rothfuss/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: sort transforms 'First Last' to 'Last, First'")
+    void testModifier_sort() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:sort}/{title}", "original.pdf");
+
+        assertEquals("Rothfuss, Patrick/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: sort with single-word author name")
+    void testModifier_sortSingleWord() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Plato"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:sort}/{title}", "original.pdf");
+
+        assertEquals("Plato/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: initial on title")
+    void testModifier_initialTitle() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("The Name of the Wind")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:initial}/{title}", "original.pdf");
+
+        assertEquals("T/The Name of the Wind.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: initial on authors uses first letter of last name")
+    void testModifier_initialAuthors() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:initial}/{authors:sort}/{title}", "original.pdf");
+
+        assertEquals("R/Rothfuss, Patrick/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: upper")
+    void testModifier_upper() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:upper}", "original.pdf");
+
+        assertEquals("BOOK TITLE.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: lower")
+    void testModifier_lower() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:lower}", "original.pdf");
+
+        assertEquals("book title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: unknown modifier passes through unchanged")
+    void testModifier_unknownPassesThrough() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:reverse}", "original.pdf");
+
+        assertEquals("Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier inside else clause fallback")
+    void testModifier_insideElseClause() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}|{authors:sort}>/{title}", "original.pdf");
+
+        assertEquals("Rothfuss, Patrick/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier in optional block with present values")
+    void testModifier_inOptionalBlock() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{authors:sort}/>{title}", "original.pdf");
+
+        assertEquals("Rothfuss, Patrick/Book Title.pdf", result);
+    }
+
+    // ===== Edge Case Tests =====
+
+    @Test
+    @DisplayName("Modifier: sort with three-word author name uses last word as last name")
+    void testModifier_sortThreeWordName() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Mary Jane Watson"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:sort}/{title}", "original.pdf");
+
+        assertEquals("Watson, Mary Jane/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: initial on single-word author name uses that name")
+    void testModifier_initialSingleWordAuthor() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Plato"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:initial}/{title}", "original.pdf");
+
+        assertEquals("P/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: first on non-authors field takes first comma-separated value")
+    void testModifier_firstOnNonAuthorsField() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Intro, Outro, Epilogue")
+                .build();
+
+        // The title contains commas, but they are sanitized first (commas are allowed chars).
+        // However, sanitize doesn't remove commas, so :first should split on ", "
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:first}", "original.pdf");
+
+        // The title value after sanitize is "Intro, Outro, Epilogue" and first splits on ", "
+        assertEquals("Intro.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: sort on non-authors field still works (splits on last space)")
+    void testModifier_sortOnTitle() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("The Wind")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:sort}", "original.pdf");
+
+        assertEquals("Wind, The.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Multiple else clause blocks in same pattern")
+    void testElseClause_multipleBlocks() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Author"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "<{series}|Standalone>/<{year}|Unknown Year> - {title}", "original.pdf");
+
+        assertEquals("Standalone/Unknown Year - Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause with empty fallback produces empty string")
+    void testElseClause_emptyFallback() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "<{series}|>{title}", "original.pdf");
+
+        assertEquals("Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause: primary side partially missing with multiple placeholders triggers fallback")
+    void testElseClause_primaryPartiallyMissing() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .seriesName("My Series")
+                // seriesIndex is null
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "<{series} #{seriesIndex}|{title}>", "original.pdf");
+
+        // series present but seriesIndex missing → fallback to {title}
+        assertEquals("Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier in primary side of else clause with all values present")
+    void testModifier_inPrimarySideOfElseClause() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .seriesName("My Series")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "<{series} by {authors:sort}|{title}>", "original.pdf");
+
+        assertEquals("My Series by Rothfuss, Patrick.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Chained modifiers on different fields in same pattern")
+    void testModifier_chainedDifferentFields() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Patrick Rothfuss"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "{title:initial}/{authors:first}/{title:lower}", "original.pdf");
+
+        assertEquals("B/Patrick Rothfuss/book title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier on field used in optional block where field is missing - block should be removed")
+    void testModifier_onMissingFieldInOptionalBlock() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "<{authors:sort}/>{title}", "original.pdf");
+
+        assertEquals("Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: first with truncated author list preserves first author")
+    void testModifier_firstWithManyAuthors() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(new ArrayList<>(List.of("Alice", "Bob", "Carol", "Dave")))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{authors:first}/{title}", "original.pdf");
+
+        assertEquals("Alice/Book Title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Modifier combined with else clause and extension check")
+    void testModifier_withElseClauseAndExtension() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("My Book")
+                .authors(List.of("Jane Doe"))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "<{series:upper}|{authors:sort}>/{title}.{extension}", "original.epub");
+
+        assertEquals("Doe, Jane/My Book.epub", result);
+    }
+
+    @Test
+    @DisplayName("Modifier: initial on lowercase title produces uppercase letter")
+    void testModifier_initialLowercaseTitle() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("lowercase title")
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata, "{title:initial}/{title}", "original.pdf");
+
+        assertEquals("L/lowercase title.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause with all primary values present ignores fallback")
+    void testElseClause_primaryCompleteIgnoresFallback() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .seriesName("My Series")
+                .seriesNumber(5f)
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "<{series} #{seriesIndex}|{title}>", "original.pdf");
+
+        assertEquals("My Series #05.pdf", result);
+    }
+
+    @Test
+    @DisplayName("Else clause preserves backward compatibility with existing patterns")
+    void testElseClause_existingPatternsUnchanged() {
+        BookMetadata metadata = BookMetadata.builder()
+                .title("Book Title")
+                .authors(List.of("Author"))
+                .seriesName("Series")
+                .seriesNumber(1f)
+                .publishedDate(LocalDate.of(2023, 1, 1))
+                .build();
+
+        String result = PathPatternResolver.resolvePattern(metadata,
+                "{authors}/<{series}/><{seriesIndex}. >{title}< ({year})>", "original.epub");
+
+        assertEquals("Author/Series/01. Book Title (2023).epub", result);
+    }
+
     @Test
     @DisplayName("Should remove leading slash from resolved pattern if first component is empty")
     void testResolvePattern_removesLeadingSlash_whenFirstComponentIsEmpty() {
         BookMetadata metadata = BookMetadata.builder()
                 .title("Book Title")
-                .authors(Set.of()) // Empty authors
+                .authors(List.of()) // Empty authors
                 .build();
 
         // Pattern implies a subdirectory, but authors is missing

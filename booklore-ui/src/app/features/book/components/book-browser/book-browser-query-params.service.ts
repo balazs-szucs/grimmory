@@ -249,7 +249,7 @@ export class BookBrowserQueryParamsService {
 
   serializeFilters(filters: Record<string, string[]>): string {
     return Object.entries(filters)
-      .map(([k, v]) => `${k}:${v.join('|')}`)
+      .map(([k, v]) => `${k}:${v.map(val => encodeURIComponent(val)).join('|')}`)
       .join(',');
   }
 
@@ -262,7 +262,7 @@ export class BookBrowserQueryParamsService {
       const [key, ...valueParts] = pair.split(':');
       const value = valueParts.join(':');
       if (key && value) {
-        parsedFilters[key] = value.split('|').map(v => v.trim()).filter(Boolean);
+        parsedFilters[key] = value.split('|').map(v => decodeURIComponent(v.trim())).filter(Boolean);
       }
     });
 
@@ -271,14 +271,11 @@ export class BookBrowserQueryParamsService {
 
   syncQueryParams(
     viewMode: string,
-    sortCriteria: SortOption[],
     filterMode: BookFilterMode,
     filters: Record<string, string[]>
   ): void {
     const queryParams: Record<string, string | number | null | undefined> = {
       [QUERY_PARAMS.VIEW]: viewMode,
-      [QUERY_PARAMS.SORT]: this.serializeSort(sortCriteria),
-      [QUERY_PARAMS.DIRECTION]: null,  // Remove legacy direction param
       [QUERY_PARAMS.FMODE]: filterMode,
     };
 
@@ -287,7 +284,7 @@ export class BookBrowserQueryParamsService {
     }
 
     const currentParams = this.activatedRoute.snapshot.queryParams;
-    const changed = Object.keys(queryParams).some(k => currentParams[k] !== queryParams[k]);
+    const changed = Object.keys(queryParams).some(k => (queryParams[k] ?? undefined) !== (currentParams[k] ?? undefined));
 
     if (changed) {
       const mergedParams = {...currentParams, ...queryParams};

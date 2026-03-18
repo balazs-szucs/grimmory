@@ -23,6 +23,7 @@ html {
   --book-type-m4b-color: #eab308;
   --book-type-mp3-color: #84cc16;
   --book-type-m4a-color: #f43f5e;
+  --book-type-opus-color: #06b6d4;
   --book-type-physical-color: #8b5cf6;
 }
 
@@ -49,6 +50,21 @@ html {
   scrollbar-color: rgba(128, 128, 128, 0.5) rgba(0, 0, 0, 0.1);
 }
 
+.chart-info-tooltip.p-tooltip {
+  --p-tooltip-max-width: 25rem;
+}
+
+.chart-info-icon {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.9rem;
+  cursor: help;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.8);
+  }
+}
+
 .p-toast {
   top: 4rem !important;
 }
@@ -63,4 +79,9 @@ html {
 
 .p-inputchips input.p-inputtext {
   width: 100% !important;
+}
+
+.footer-menu .p-tieredmenu-submenu {
+  top: auto !important;
+  bottom: 0;
 }

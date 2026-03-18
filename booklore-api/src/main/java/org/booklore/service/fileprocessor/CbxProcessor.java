@@ -19,6 +19,7 @@ import org.booklore.util.ArchiveUtils;
 import org.booklore.util.BookCoverUtils;
 import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
+import org.booklore.util.UnrarHelper;
 import com.github.junrar.Archive;
 import com.github.junrar.rarfile.FileHeader;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.booklore.util.FileService.truncate;
 
@@ -64,7 +66,14 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
     public BookEntity processNewFile(LibraryFile libraryFile) {
         BookEntity bookEntity = bookCreatorService.createShellBook(libraryFile, BookFileType.CBX);
         bookEntity.getPrimaryBookFile().setArchiveType(ArchiveUtils.detectArchiveType(new File(FileUtils.getBookFullPath(bookEntity))));
-        if (generateCover(bookEntity)) {
+        boolean coverGenerated = generateCover(bookEntity);
+        if (!coverGenerated) {
+            var folder = getBookFolderForCoverFallback(libraryFile);
+            if (folder != null) {
+                coverGenerated = generateCoverFromFolderImage(bookEntity, folder);
+            }
+        }
+        if (coverGenerated) {
             FileService.setBookCoverPath(bookEntity.getMetadata());
             bookEntity.setBookCoverHash(BookCoverUtils.generateCoverHash());
         }
@@ -209,7 +218,33 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
                 }
             }
         } catch (Exception e) {
+            if (UnrarHelper.isAvailable()) {
+                log.info("junrar failed for {}, falling back to unrar CLI: {}", file.getName(), e.getMessage());
+                return extractFirstImageFromRarViaCli(file);
+            }
             log.error("Error extracting RAR: {}", e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    private Optional<BufferedImage> extractFirstImageFromRarViaCli(File file) {
+        try {
+            List<String> entries = UnrarHelper.listEntries(file.toPath());
+            List<String> imageEntries = entries.stream()
+                    .filter(name -> IMAGE_EXTENSION_CASE_INSENSITIVE_PATTERN.matcher(name).matches())
+                    .sorted()
+                    .toList();
+            for (String entry : imageEntries) {
+                try {
+                    byte[] bytes = UnrarHelper.extractEntryBytes(file.toPath(), entry);
+                    BufferedImage image = FileService.readImage(new ByteArrayInputStream(bytes));
+                    if (image != null) return Optional.of(image);
+                } catch (Exception ex) {
+                    log.warn("Error reading RAR entry via CLI {}: {}", entry, ex.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("unrar CLI fallback also failed for {}: {}", file.getName(), e.getMessage());
         }
         return Optional.empty();
     }
@@ -224,7 +259,10 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
             }
 
             BookMetadataEntity metadata = bookEntity.getMetadata();
+            
+            // Basic fields
             metadata.setTitle(truncate(extracted.getTitle(), 1000));
+            metadata.setSubtitle(truncate(extracted.getSubtitle(), 1000));
             metadata.setDescription(truncate(extracted.getDescription(), 5000));
             metadata.setPublisher(truncate(extracted.getPublisher(), 1000));
             metadata.setPublishedDate(extracted.getPublishedDate());
@@ -233,12 +271,58 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
             metadata.setSeriesTotal(extracted.getSeriesTotal());
             metadata.setPageCount(extracted.getPageCount());
             metadata.setLanguage(truncate(extracted.getLanguage(), 1000));
+            
+            // ISBN fields
+            metadata.setIsbn13(truncate(extracted.getIsbn13(), 64));
+            metadata.setIsbn10(truncate(extracted.getIsbn10(), 64));
+            
+            // External IDs
+            metadata.setAsin(truncate(extracted.getAsin(), 20));
+            metadata.setGoodreadsId(truncate(extracted.getGoodreadsId(), 100));
+            metadata.setHardcoverId(truncate(extracted.getHardcoverId(), 100));
+            metadata.setHardcoverBookId(truncate(extracted.getHardcoverBookId(), 100));
+            metadata.setGoogleId(truncate(extracted.getGoogleId(), 100));
+            metadata.setComicvineId(truncate(extracted.getComicvineId(), 100));
+            metadata.setLubimyczytacId(truncate(extracted.getLubimyczytacId(), 100));
+            metadata.setRanobedbId(truncate(extracted.getRanobedbId(), 100));
+            
+            // Ratings
+            metadata.setAmazonRating(extracted.getAmazonRating());
+            metadata.setAmazonReviewCount(extracted.getAmazonReviewCount());
+            metadata.setGoodreadsRating(extracted.getGoodreadsRating());
+            metadata.setGoodreadsReviewCount(extracted.getGoodreadsReviewCount());
+            metadata.setHardcoverRating(extracted.getHardcoverRating());
+            metadata.setHardcoverReviewCount(extracted.getHardcoverReviewCount());
+            metadata.setLubimyczytacRating(extracted.getLubimyczytacRating());
+            metadata.setRanobedbRating(extracted.getRanobedbRating());
 
+            // Authors
             if (extracted.getAuthors() != null) {
                 bookCreatorService.addAuthorsToBook(extracted.getAuthors(), bookEntity);
             }
+            
+            // Categories
             if (extracted.getCategories() != null) {
-                bookCreatorService.addCategoriesToBook(extracted.getCategories(), bookEntity);
+                Set<String> validCategories = extracted.getCategories().stream()
+                        .filter(s -> s != null && !s.isBlank() && s.length() <= 100 && !s.contains("\n") && !s.contains("\r") && !s.contains("  "))
+                        .collect(Collectors.toSet());
+                bookCreatorService.addCategoriesToBook(validCategories, bookEntity);
+            }
+            
+            // Moods
+            if (extracted.getMoods() != null && !extracted.getMoods().isEmpty()) {
+                Set<String> validMoods = extracted.getMoods().stream()
+                        .filter(s -> s != null && !s.isBlank() && s.length() <= 255)
+                        .collect(Collectors.toSet());
+                bookCreatorService.addMoodsToBook(validMoods, bookEntity);
+            }
+            
+            // Tags
+            if (extracted.getTags() != null && !extracted.getTags().isEmpty()) {
+                Set<String> validTags = extracted.getTags().stream()
+                        .filter(s -> s != null && !s.isBlank() && s.length() <= 255)
+                        .collect(Collectors.toSet());
+                bookCreatorService.addTagsToBook(validTags, bookEntity);
             }
             if (extracted.getComicMetadata() != null) {
                 saveComicMetadata(bookEntity, extracted.getComicMetadata());

@@ -75,6 +75,9 @@ public class SettingPersistenceHelper {
     }
 
     public String serializeSettingValue(AppSettingKey key, Object val) throws JacksonException {
+        if (val == null) {
+            return null;
+        }
         return key.isJson() ? objectMapper.writeValueAsString(val) : val.toString();
     }
 
@@ -146,12 +149,14 @@ public class SettingPersistenceHelper {
                 .comicvineId(nullProvider)
                 .hardcoverId(nullProvider)
                 .googleId(nullProvider)
+                .lubimyczytacId(nullProvider)
                 .amazonRating(nullProvider)
                 .amazonReviewCount(nullProvider)
                 .goodreadsRating(nullProvider)
                 .goodreadsReviewCount(nullProvider)
                 .hardcoverRating(nullProvider)
                 .hardcoverReviewCount(nullProvider)
+                .lubimyczytacRating(nullProvider)
                 .ranobedbId(nullProvider)
                 .ranobedbRating(nullProvider)
                 .moods(nullProvider)
@@ -179,12 +184,14 @@ public class SettingPersistenceHelper {
                 .comicvineId(true)
                 .hardcoverId(true)
                 .googleId(true)
+                .lubimyczytacId(true)
                 .amazonRating(true)
                 .amazonReviewCount(true)
                 .goodreadsRating(true)
                 .goodreadsReviewCount(true)
                 .hardcoverRating(true)
                 .hardcoverReviewCount(true)
+                .lubimyczytacRating(true)
                 .ranobedbId(false)
                 .ranobedbRating(false)
                 .moods(true)

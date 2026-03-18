@@ -1,18 +1,18 @@
-import {Component, HostListener, inject, OnDestroy, OnInit} from '@angular/core';
+import {Component, ElementRef, HostListener, inject, OnDestroy, OnInit, ViewChild} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {CommonModule} from '@angular/common';
 import {forkJoin, Subject} from 'rxjs';
-import {filter, first, map, switchMap, takeUntil, timeout} from 'rxjs/operators';
+import {debounceTime, filter, first, map, switchMap, takeUntil, timeout} from 'rxjs/operators';
 import {PageTitleService} from "../../../shared/service/page-title.service";
 import {CbxReaderService} from '../../book/service/cbx-reader.service';
 import {BookService} from '../../book/service/book.service';
-import {CbxBackgroundColor, CbxFitMode, CbxPageSpread, CbxPageViewMode, CbxScrollMode, CbxReadingDirection, CbxSlideshowInterval, PdfBackgroundColor, PdfFitMode, PdfPageSpread, PdfPageViewMode, PdfScrollMode, UserService} from '../../settings/user-management/user.service';
+import {CbxBackgroundColor, CbxFitMode, CbxMagnifierLensSize, CbxMagnifierZoom, CbxPageSpread, CbxPageViewMode, CbxScrollMode, CbxReadingDirection, CbxSlideshowInterval, UserService} from '../../settings/user-management/user.service';
 import {MessageService} from 'primeng/api';
+import {TranslocoService, TranslocoPipe} from '@jsverse/transloco';
 import {Book, BookSetting, BookType} from '../../book/model/book.model';
 import {BookState} from '../../book/model/state/book-state.model';
 import {ProgressSpinner} from 'primeng/progressspinner';
 import {FormsModule} from "@angular/forms";
-import {NewPdfReaderService} from '../../book/service/new-pdf-reader.service';
 import {ReadingSessionService} from '../../../shared/service/reading-session.service';
 import {ReaderHeaderFooterVisibilityManager} from '../ebook-reader';
 
@@ -36,6 +36,7 @@ import {BookNoteV2} from '../../../shared/service/book-note-v2.service';
     CommonModule,
     ProgressSpinner,
     FormsModule,
+    TranslocoPipe,
     CbxHeaderComponent,
     CbxSidebarComponent,
     CbxFooterComponent,
@@ -54,6 +55,7 @@ import {BookNoteV2} from '../../../shared/service/book-note-v2.service';
 })
 export class CbxReaderComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
+  private progressSaveSubject$ = new Subject<void>();
 
   bookType!: BookType;
   bookId!: number;
@@ -63,11 +65,11 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   currentPage = 0;
   isLoading = true;
 
-  pageSpread: CbxPageSpread | PdfPageSpread = CbxPageSpread.ODD;
-  pageViewMode: CbxPageViewMode | PdfPageViewMode = CbxPageViewMode.SINGLE_PAGE;
-  backgroundColor: CbxBackgroundColor | PdfBackgroundColor = CbxBackgroundColor.GRAY;
-  fitMode: CbxFitMode | PdfFitMode = CbxFitMode.FIT_PAGE;
-  scrollMode: CbxScrollMode | PdfScrollMode = CbxScrollMode.PAGINATED;
+  pageSpread: CbxPageSpread = CbxPageSpread.ODD;
+  pageViewMode: CbxPageViewMode = CbxPageViewMode.SINGLE_PAGE;
+  backgroundColor: CbxBackgroundColor = CbxBackgroundColor.GRAY;
+  fitMode: CbxFitMode = CbxFitMode.FIT_PAGE;
+  scrollMode: CbxScrollMode = CbxScrollMode.PAGINATED;
 
   private touchStartX = 0;
   private touchEndX = 0;
@@ -94,6 +96,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   noteDialogData: CbxNoteDialogData | null = null;
   private editingNote: BookNoteV2 | null = null;
 
+  // Footer visibility (for slideshow progress bar positioning)
+  isFooterVisible = false;
+
   // Fullscreen state
   isFullscreen = false;
 
@@ -107,10 +112,17 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   // Double-tap zoom
   private lastTapTime = 0;
-  private originalFitMode: CbxFitMode | PdfFitMode | null = null;
+  private originalFitMode: CbxFitMode | null = null;
 
   // Shortcuts help dialog
   showShortcutsHelp = false;
+
+  // Magnifier
+  isMagnifierActive = false;
+  @ViewChild('magnifierLens', {static: true}) private magnifierLensRef!: ElementRef<HTMLDivElement>;
+  magnifierZoom: CbxMagnifierZoom = CbxMagnifierZoom.ZOOM_3X;
+  magnifierLensSize: CbxMagnifierLensSize = CbxMagnifierLensSize.MEDIUM;
+  private lastMouseEvent: MouseEvent | null = null;
 
   // Double page detection
   private pageDimensionsCache = new Map<number, {width: number, height: number}>();
@@ -121,10 +133,10 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private cbxReaderService = inject(CbxReaderService);
-  private pdfReaderService = inject(NewPdfReaderService);
   private bookService = inject(BookService);
   private userService = inject(UserService);
   private messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   private pageTitle = inject(PageTitleService);
   private readingSessionService = inject(ReadingSessionService);
   private headerService = inject(CbxHeaderService);
@@ -138,7 +150,6 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   protected readonly CbxPageViewMode = CbxPageViewMode;
   protected readonly CbxPageSpread = CbxPageSpread;
 
-  private static readonly TYPE_PDF = 'PDF';
   private static readonly TYPE_CBX = 'CBX';
   private static readonly SETTING_GLOBAL = 'Global';
 
@@ -148,6 +159,15 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       this.headerService.setForceVisible(state.headerVisible);
       this.footerService.setForceVisible(state.footerVisible);
     });
+
+    this.footerService.forceVisible$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(visible => this.isFooterVisible = visible);
+
+    this.progressSaveSubject$.pipe(
+      debounceTime(2000),
+      takeUntil(this.destroy$)
+    ).subscribe(() => this.updateProgress());
 
     this.subscribeToHeaderEvents();
     this.subscribeToSidebarEvents();
@@ -196,9 +216,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
             this.loadSeriesNavigationAsync(book);
           }
 
-          const pagesObservable = this.bookType === CbxReaderComponent.TYPE_PDF
-            ? this.pdfReaderService.getAvailablePages(this.bookId, this.altBookType)
-            : this.cbxReaderService.getAvailablePages(this.bookId, this.altBookType);
+          const pagesObservable = this.cbxReaderService.getAvailablePages(this.bookId, this.altBookType);
 
           pagesObservable.subscribe({
             next: (pages) => {
@@ -232,30 +250,6 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
                 }
               }
 
-              if (this.bookType === CbxReaderComponent.TYPE_PDF) {
-                const global = userSettings.perBookSetting.pdf === CbxReaderComponent.SETTING_GLOBAL;
-                this.pageViewMode = global
-                  ? PdfPageViewMode[userSettings.newPdfReaderSetting.pageViewMode as keyof typeof PdfPageViewMode] || PdfPageViewMode.SINGLE_PAGE
-                  : PdfPageViewMode[bookSettings.newPdfSettings?.pageViewMode as keyof typeof PdfPageViewMode] || PdfPageViewMode[userSettings.newPdfReaderSetting.pageViewMode as keyof typeof PdfPageViewMode] || PdfPageViewMode.SINGLE_PAGE;
-
-                this.pageSpread = global
-                  ? PdfPageSpread[userSettings.newPdfReaderSetting.pageSpread as keyof typeof PdfPageSpread] || PdfPageSpread.ODD
-                  : PdfPageSpread[bookSettings.newPdfSettings?.pageSpread as keyof typeof PdfPageSpread] || PdfPageSpread[userSettings.newPdfReaderSetting.pageSpread as keyof typeof PdfPageSpread] || PdfPageSpread.ODD;
-
-                this.fitMode = global
-                  ? PdfFitMode[userSettings.newPdfReaderSetting.fitMode as keyof typeof PdfFitMode] || PdfFitMode.FIT_PAGE
-                  : PdfFitMode[bookSettings.newPdfSettings?.fitMode as keyof typeof PdfFitMode] || PdfFitMode[userSettings.newPdfReaderSetting.fitMode as keyof typeof PdfFitMode] || PdfFitMode.FIT_PAGE;
-
-                this.scrollMode = global
-                  ? PdfScrollMode[userSettings.newPdfReaderSetting.scrollMode as keyof typeof PdfScrollMode] || PdfScrollMode.PAGINATED
-                  : PdfScrollMode[bookSettings.newPdfSettings?.scrollMode as keyof typeof PdfScrollMode] || PdfScrollMode[userSettings.newPdfReaderSetting.scrollMode as keyof typeof PdfScrollMode] || PdfScrollMode.PAGINATED;
-
-                this.backgroundColor = global
-                  ? PdfBackgroundColor[userSettings.newPdfReaderSetting.backgroundColor as keyof typeof PdfBackgroundColor] || PdfBackgroundColor.GRAY
-                  : PdfBackgroundColor[bookSettings.newPdfSettings?.backgroundColor as keyof typeof PdfBackgroundColor] || PdfBackgroundColor[userSettings.newPdfReaderSetting.backgroundColor as keyof typeof PdfBackgroundColor] || PdfBackgroundColor.GRAY;
-
-                this.currentPage = (book.pdfProgress?.page || 1) - 1;
-              }
               this.alignCurrentPageToParity();
               this.updateServiceStates();
               this.updateBookmarkState();
@@ -269,15 +263,15 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
               this.readingSessionService.startSession(this.bookId, "CBX", (this.currentPage + 1).toString(), percentage);
             },
             error: (err) => {
-              const errorMessage = err?.error?.message || 'Failed to load pages';
-              this.messageService.add({severity: 'error', summary: 'Error', detail: errorMessage});
+              const errorMessage = err?.error?.message || this.t.translate('shared.reader.failedToLoadPages');
+              this.messageService.add({severity: 'error', summary: this.t.translate('common.error'), detail: errorMessage});
               this.isLoading = false;
             }
           });
         },
         error: (err) => {
-          const errorMessage = err?.error?.message || 'Failed to load the book';
-          this.messageService.add({severity: 'error', summary: 'Error', detail: errorMessage});
+          const errorMessage = err?.error?.message || this.t.translate('shared.reader.failedToLoadBook');
+          this.messageService.add({severity: 'error', summary: this.t.translate('common.error'), detail: errorMessage});
           this.isLoading = false;
         }
       });
@@ -313,6 +307,16 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.toggleSlideshow();
+      });
+
+    this.headerService.toggleMagnifier$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.isMagnifierActive = !this.isMagnifierActive;
+        if (!this.isMagnifierActive) {
+          this.hideMagnifier();
+        }
+        this.headerService.updateState({isMagnifierActive: this.isMagnifierActive});
       });
 
     this.headerService.showShortcutsHelp$
@@ -416,6 +420,14 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     this.quickSettingsService.slideshowIntervalChange$
       .pipe(takeUntil(this.destroy$))
       .subscribe(interval => this.onSlideshowIntervalChange(interval));
+
+    this.quickSettingsService.magnifierZoomChange$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(zoom => this.onMagnifierZoomChange(zoom));
+
+    this.quickSettingsService.magnifierLensSizeChange$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(size => this.onMagnifierLensSizeChange(size));
   }
 
   private updateServiceStates(): void {
@@ -435,7 +447,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       pageSpread: this.pageSpread,
       backgroundColor: this.backgroundColor,
       readingDirection: this.readingDirection,
-      slideshowInterval: this.slideshowInterval
+      slideshowInterval: this.slideshowInterval,
+      magnifierZoom: this.magnifierZoom,
+      magnifierLensSize: this.magnifierLensSize
     });
 
     this.headerService.updateState({
@@ -603,7 +617,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   }
 
   get isTwoPageView(): boolean {
-    return this.pageViewMode === this.CbxPageViewMode.TWO_PAGE || this.pageViewMode === PdfPageViewMode.TWO_PAGE;
+    return this.pageViewMode === this.CbxPageViewMode.TWO_PAGE;
   }
 
   get hasSeries(): boolean {
@@ -681,7 +695,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   private alignCurrentPageToParity() {
     if (!this.pages.length || !this.isTwoPageView) return;
 
-    const desiredOdd = this.pageSpread === CbxPageSpread.ODD || this.pageSpread === PdfPageSpread.ODD;
+    const desiredOdd = this.pageSpread === CbxPageSpread.ODD;
     for (let i = this.currentPage; i >= 0; i--) {
       if ((this.pages[i] % 2 === 1) === desiredOdd) {
         this.currentPage = i;
@@ -796,7 +810,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         const newPage = this.infiniteScrollPages[i];
         if (newPage !== this.currentPage) {
           this.currentPage = newPage;
-          this.updateProgress();
+          this.progressSaveSubject$.next();
           this.updateSessionProgress();
           this.updateFooterPage();
         }
@@ -805,36 +819,20 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getPageImageUrl(pageIndex: number): string {
-    return this.bookType === CbxReaderComponent.TYPE_PDF
-      ? this.pdfReaderService.getPageImageUrl(this.bookId, this.pages[pageIndex], this.altBookType)
-      : this.cbxReaderService.getPageImageUrl(this.bookId, this.pages[pageIndex], this.altBookType);
-  }
-
-  get infiniteScrollImageUrls(): string[] {
-    return this.infiniteScrollPages.map(pageIndex => this.getPageImageUrl(pageIndex));
+  getPageImageUrl(pageIndex: number): string {
+    return this.cbxReaderService.getPageImageUrl(this.bookId, this.pages[pageIndex], this.altBookType);
   }
 
   private updateViewerSetting(): void {
-    const bookSetting: BookSetting = this.bookType === CbxReaderComponent.TYPE_CBX
-      ? {
-        cbxSettings: {
-          pageSpread: this.pageSpread as CbxPageSpread,
-          pageViewMode: this.pageViewMode as CbxPageViewMode,
-          fitMode: this.fitMode as CbxFitMode,
-          scrollMode: this.scrollMode as CbxScrollMode,
-          backgroundColor: this.backgroundColor as CbxBackgroundColor,
-        }
+    const bookSetting: BookSetting = {
+      cbxSettings: {
+        pageSpread: this.pageSpread,
+        pageViewMode: this.pageViewMode,
+        fitMode: this.fitMode,
+        scrollMode: this.scrollMode,
+        backgroundColor: this.backgroundColor,
       }
-      : {
-        newPdfSettings: {
-          pageSpread: this.pageSpread as PdfPageSpread,
-          pageViewMode: this.pageViewMode as PdfPageViewMode,
-          fitMode: this.fitMode as PdfFitMode,
-          scrollMode: this.scrollMode as PdfScrollMode,
-          backgroundColor: this.backgroundColor as PdfBackgroundColor,
-        }
-      };
+    };
     this.bookService.updateViewerSetting(bookSetting, this.bookId).subscribe();
   }
 
@@ -843,12 +841,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       ? Math.round(((this.currentPage + 1) / this.pages.length) * 1000) / 10
       : 0;
 
-    if (this.bookType === CbxReaderComponent.TYPE_CBX) {
-      this.bookService.saveCbxProgress(this.bookId, this.currentPage + 1, percentage, this.bookFileId).subscribe();
-    }
-    if (this.bookType === CbxReaderComponent.TYPE_PDF) {
-      this.bookService.savePdfProgress(this.bookId, this.currentPage + 1, percentage, this.bookFileId).subscribe();
-    }
+    this.bookService.saveCbxProgress(this.bookId, this.currentPage + 1, percentage, this.bookFileId).subscribe();
   }
 
   private updateSessionProgress(): void {
@@ -869,7 +862,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
     this.currentPage = targetIndex;
 
-    if (this.scrollMode === CbxScrollMode.INFINITE) {
+    if (this.scrollMode === CbxScrollMode.INFINITE || this.scrollMode === CbxScrollMode.LONG_STRIP) {
       this.ensurePageLoaded(targetIndex);
       this.scrollToPage(targetIndex);
       this.updateProgress();
@@ -896,7 +889,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     this.ensurePageLoaded(pageIndex);
 
     setTimeout(() => {
-      const container = document.querySelector('.image-container.infinite-scroll') as HTMLElement;
+      const container = document.querySelector('.image-container.infinite-scroll, .image-container.long-strip') as HTMLElement;
       if (!container) return;
 
       const images = container.querySelectorAll('.page-image');
@@ -979,12 +972,50 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         event.preventDefault();
         this.toggleSlideshow();
         break;
+      case 'm':
+      case 'M':
+        event.preventDefault();
+        this.isMagnifierActive = !this.isMagnifierActive;
+        if (!this.isMagnifierActive) {
+          this.hideMagnifier();
+        }
+        this.headerService.updateState({isMagnifierActive: this.isMagnifierActive});
+        break;
+      case '+':
+      case '=':
+        if (this.isMagnifierActive) {
+          event.preventDefault();
+          this.cycleMagnifierZoom(1);
+        }
+        break;
+      case '-':
+        if (this.isMagnifierActive) {
+          event.preventDefault();
+          this.cycleMagnifierZoom(-1);
+        }
+        break;
+      case ']':
+        if (this.isMagnifierActive) {
+          event.preventDefault();
+          this.cycleMagnifierLensSize(1);
+        }
+        break;
+      case '[':
+        if (this.isMagnifierActive) {
+          event.preventDefault();
+          this.cycleMagnifierLensSize(-1);
+        }
+        break;
       case '?':
         event.preventDefault();
         this.showShortcutsHelp = true;
         break;
       case 'Escape':
-        if (this.showShortcutsHelp) {
+        if (this.isMagnifierActive) {
+          this.isMagnifierActive = false;
+          this.hideMagnifier();
+          this.headerService.updateState({isMagnifierActive: false});
+        } else if (this.showShortcutsHelp) {
           this.showShortcutsHelp = false;
         } else if (this.showNoteDialog) {
           this.showNoteDialog = false;
@@ -1022,15 +1053,24 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   @HostListener('document:mousemove', ['$event'])
   onMouseMove(event: MouseEvent): void {
+    this.lastMouseEvent = event;
     this.visibilityManager.handleMouseMove(event.clientY);
+    if (this.isMagnifierActive) {
+      this.updateMagnifier(event);
+    }
   }
 
   @HostListener('document:mouseleave', ['$event'])
   onMouseLeave(event: MouseEvent): void {
     this.visibilityManager.handleMouseLeave();
+    if (this.isMagnifierActive) {
+      this.hideMagnifier();
+    }
   }
 
   private handleSwipeGesture() {
+    if (this.scrollMode === CbxScrollMode.INFINITE || this.scrollMode === CbxScrollMode.LONG_STRIP) return;
+
     const delta = this.touchEndX - this.touchStartX;
     if (Math.abs(delta) >= 50) {
       // In RTL mode, swipe directions are reversed
@@ -1042,7 +1082,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   private enforcePortraitSinglePageView() {
     if (this.isPhonePortrait() && this.isTwoPageView) {
-      this.pageViewMode = this.bookType === CbxReaderComponent.TYPE_CBX ? CbxPageViewMode.SINGLE_PAGE : PdfPageViewMode.SINGLE_PAGE;
+      this.pageViewMode = CbxPageViewMode.SINGLE_PAGE;
       this.quickSettingsService.setPageViewMode(this.pageViewMode);
       this.footerService.setTwoPageView(false);
       this.updateViewerSetting();
@@ -1060,14 +1100,14 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   navigateToPreviousBook(): void {
     if (this.previousBookInSeries) {
       this.endReadingSession();
-      this.router.navigate(['/cbx-reader/book', this.previousBookInSeries.id]);
+      this.router.navigate(['/cbx-reader/book', this.previousBookInSeries.id], {replaceUrl: true});
     }
   }
 
   navigateToNextBook(): void {
     if (this.nextBookInSeries) {
       this.endReadingSession();
-      this.router.navigate(['/cbx-reader/book', this.nextBookInSeries.id]);
+      this.router.navigate(['/cbx-reader/book', this.nextBookInSeries.id], {replaceUrl: true});
     }
   }
 
@@ -1221,6 +1261,44 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     }
   }
 
+  onMagnifierZoomChange(zoom: CbxMagnifierZoom): void {
+    this.magnifierZoom = zoom;
+    this.quickSettingsService.setMagnifierZoom(zoom);
+    this.refreshMagnifier();
+  }
+
+  onMagnifierLensSizeChange(size: CbxMagnifierLensSize): void {
+    this.magnifierLensSize = size;
+    this.quickSettingsService.setMagnifierLensSize(size);
+    this.refreshMagnifier();
+  }
+
+  private refreshMagnifier(): void {
+    if (this.isMagnifierActive && this.lastMouseEvent) {
+      this.updateMagnifier(this.lastMouseEvent);
+    }
+  }
+
+  private cycleMagnifierZoom(direction: 1 | -1): void {
+    const values = Object.values(CbxMagnifierZoom).filter(v => typeof v === 'number') as number[];
+    values.sort((a, b) => a - b);
+    const currentIndex = values.indexOf(this.magnifierZoom as number);
+    const newIndex = currentIndex + direction;
+    if (newIndex >= 0 && newIndex < values.length) {
+      this.onMagnifierZoomChange(values[newIndex] as CbxMagnifierZoom);
+    }
+  }
+
+  private cycleMagnifierLensSize(direction: 1 | -1): void {
+    const values = Object.values(CbxMagnifierLensSize).filter(v => typeof v === 'number') as number[];
+    values.sort((a, b) => a - b);
+    const currentIndex = values.indexOf(this.magnifierLensSize as number);
+    const newIndex = currentIndex + direction;
+    if (newIndex >= 0 && newIndex < values.length) {
+      this.onMagnifierLensSizeChange(values[newIndex] as CbxMagnifierLensSize);
+    }
+  }
+
   // Double-tap zoom
   onImageDoubleClick(): void {
     if (this.originalFitMode === null) {
@@ -1254,6 +1332,60 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   shouldShowSinglePage(pageIndex: number): boolean {
     return this.isTwoPageView && this.isSpreadPage(pageIndex);
+  }
+
+  private updateMagnifier(event: MouseEvent): void {
+    const el = this.magnifierLensRef?.nativeElement;
+    if (!el) return;
+
+    const lensSize = this.magnifierLensSize as number;
+    const zoom = this.magnifierZoom as number;
+
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    if (!(target instanceof HTMLImageElement) || !target.classList.contains('page-image')) {
+      el.style.display = 'none';
+      return;
+    }
+
+    if (!target.naturalWidth || !target.naturalHeight) {
+      el.style.display = 'none';
+      return;
+    }
+
+    const imgRect = target.getBoundingClientRect();
+    const scale = Math.min(imgRect.width / target.naturalWidth, imgRect.height / target.naturalHeight);
+    const renderedWidth = target.naturalWidth * scale;
+    const renderedHeight = target.naturalHeight * scale;
+    const imgOffsetX = (imgRect.width - renderedWidth) / 2;
+    const imgOffsetY = (imgRect.height - renderedHeight) / 2;
+
+    const relX = (event.clientX - imgRect.left - imgOffsetX) / renderedWidth;
+    const relY = (event.clientY - imgRect.top - imgOffsetY) / renderedHeight;
+
+    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) {
+      el.style.display = 'none';
+      return;
+    }
+
+    const bgWidth = renderedWidth * zoom;
+    const bgHeight = renderedHeight * zoom;
+    const bgPosX = -(relX * bgWidth - lensSize / 2);
+    const bgPosY = -(relY * bgHeight - lensSize / 2);
+
+    el.style.display = 'block';
+    el.style.width = `${lensSize}px`;
+    el.style.height = `${lensSize}px`;
+    el.style.transform = `translate(${event.clientX - lensSize / 2}px, ${event.clientY - lensSize / 2}px)`;
+    el.style.backgroundImage = `url('${target.src}')`;
+    el.style.backgroundSize = `${bgWidth}px ${bgHeight}px`;
+    el.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
+  }
+
+  private hideMagnifier(): void {
+    const el = this.magnifierLensRef?.nativeElement;
+    if (el) {
+      el.style.display = 'none';
+    }
   }
 
   // Shortcuts help dialog

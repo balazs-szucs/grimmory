@@ -8,6 +8,8 @@ import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.repository.BookRepository;
+import org.booklore.service.audit.AuditService;
+import org.booklore.model.enums.MetadataReplaceMode;
 import org.booklore.service.metadata.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,11 +40,13 @@ class MetadataControllerTest {
     private BookRepository bookRepository;
     @Mock
     private MetadataManagementService metadataManagementService;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private MetadataController metadataController;
 
-    private MetadataUpdateContext captureContextFromUpdate() {
+    private MetadataUpdateContext captureContextFromUpdate(MetadataReplaceMode replaceMode) {
         long bookId = 1L;
         MetadataUpdateWrapper wrapper = MetadataUpdateWrapper.builder().build();
         BookEntity bookEntity = new BookEntity();
@@ -52,7 +56,7 @@ class MetadataControllerTest {
         when(bookRepository.findAllWithMetadataByIds(java.util.Collections.singleton(bookId))).thenReturn(java.util.List.of(bookEntity));
         when(bookMetadataMapper.toBookMetadata(any(), anyBoolean())).thenReturn(new BookMetadata());
 
-        metadataController.updateMetadata(wrapper, bookId, true);
+        metadataController.updateMetadata(wrapper, bookId, true, replaceMode);
 
         ArgumentCaptor<MetadataUpdateContext> captor = ArgumentCaptor.forClass(MetadataUpdateContext.class);
         verify(bookMetadataUpdater).setBookMetadata(captor.capture());
@@ -61,9 +65,23 @@ class MetadataControllerTest {
 
     @Test
     void updateMetadata_shouldDisableMergingForTagsAndMoods() {
-        MetadataUpdateContext context = captureContextFromUpdate();
+        MetadataUpdateContext context = captureContextFromUpdate(MetadataReplaceMode.REPLACE_ALL);
 
         assertFalse(context.isMergeTags(), "mergeTags should be false to allow deletion of tags");
         assertFalse(context.isMergeMoods(), "mergeMoods should be false to allow deletion of moods");
+    }
+
+    @Test
+    void updateMetadata_shouldPassReplaceModeFromParam() {
+        MetadataUpdateContext context = captureContextFromUpdate(MetadataReplaceMode.REPLACE_WHEN_PROVIDED);
+
+        assertEquals(MetadataReplaceMode.REPLACE_WHEN_PROVIDED, context.getReplaceMode());
+    }
+
+    @Test
+    void updateMetadata_shouldDefaultToReplaceAll() {
+        MetadataUpdateContext context = captureContextFromUpdate(MetadataReplaceMode.REPLACE_ALL);
+
+        assertEquals(MetadataReplaceMode.REPLACE_ALL, context.getReplaceMode());
     }
 }

@@ -2,6 +2,7 @@ package org.booklore.service.library;
 
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.mapper.LibraryMapper;
+import org.booklore.service.audit.AuditService;
 import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.dto.Library;
 import org.booklore.model.dto.LibraryPath;
@@ -23,7 +24,7 @@ import org.booklore.repository.LibraryPathRepository;
 import org.booklore.repository.UserRepository;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.service.NotificationService;
-import org.booklore.service.monitoring.MonitoringService;
+import org.booklore.service.monitoring.LibraryWatchService;
 import org.booklore.util.FileService;
 
 import java.util.Collections;
@@ -55,11 +56,13 @@ class LibraryServiceIconTest {
     @Mock
     private FileService fileService;
     @Mock
-    private MonitoringService monitoringService;
+    private LibraryWatchService libraryWatchService;
     @Mock
     private AuthenticationService authenticationService;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private LibraryService libraryService;

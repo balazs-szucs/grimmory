@@ -1,11 +1,11 @@
 # Stage 1: Build the Angular app
-FROM node:22-alpine AS angular-build
+FROM node:24-alpine AS angular-build
 
 WORKDIR /angular-app
 
 COPY ./booklore-ui/package.json ./booklore-ui/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm config set registry http://registry.npmjs.org/ \
+    npm config set registry https://registry.npmjs.org/ \
     && npm ci --force
 
 COPY ./booklore-ui /angular-app/
@@ -25,6 +25,9 @@ RUN --mount=type=cache,target=/home/gradle/.gradle \
     gradle dependencies --no-daemon
 
 COPY ./booklore-api/src /springboot-app/src
+
+# Copy Angular dist into Spring Boot static resources so it's embedded in the JAR
+COPY --from=angular-build /angular-app/dist/booklore/browser /springboot-app/src/main/resources/static
 
 # Inject version into application.yaml using yq
 ARG APP_VERSION
@@ -51,16 +54,21 @@ LABEL org.opencontainers.image.title="BookLore" \
       org.opencontainers.image.licenses="GPL-3.0" \
       org.opencontainers.image.base.name="docker.io/library/eclipse-temurin:25-jre-alpine"
 
-ENV JAVA_TOOL_OPTIONS="-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+ENV JAVA_TOOL_OPTIONS="-XX:+UseG1GC -XX:+UseCompactObjectHeaders -XX:+UseStringDeduplication -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
 
-RUN apk update && apk add nginx gettext su-exec
+ARG TARGETARCH
+RUN apk update && apk add --no-cache su-exec libstdc++ libgcc && \
+    mkdir -p /bookdrop
 
-COPY ./nginx.conf /etc/nginx/nginx.conf
-COPY --from=angular-build /angular-app/dist/booklore/browser /usr/share/nginx/html
+COPY docker/unrar/unrar-${TARGETARCH} /usr/local/bin/unrar
+RUN chmod 755 /usr/local/bin/unrar
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 COPY --from=springboot-build /springboot-app/build/libs/booklore-api-0.0.1-SNAPSHOT.jar /app/app.jar
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
 
-EXPOSE 8080 80
+ARG BOOKLORE_PORT=6060
+EXPOSE ${BOOKLORE_PORT}
 
-CMD ["/start.sh"]
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["java", "-jar", "/app/app.jar"]

@@ -311,7 +311,7 @@ public class MetadataRefreshService {
         if (context.getMetadataUpdateWrapper() != null && context.getMetadataUpdateWrapper().getMetadata() != null) {
             bookMetadataUpdater.setBookMetadata(context);
 
-            Book book = bookMapper.toBook(context.getBookEntity());
+            Book book = bookMapper.toBookWithDescription(context.getBookEntity(), true);
             
             BookLoreUser user = authenticationService.getAuthenticatedUser();
             if (user != null && book.getShelves() != null) {
@@ -413,6 +413,11 @@ public class MetadataRefreshService {
 
     private FetchMetadataRequest buildFetchMetadataRequestFromBook(Book book) {
         BookMetadata metadata = book.getMetadata();
+        if (metadata == null) {
+            return FetchMetadataRequest.builder()
+                    .bookId(book.getId())
+                    .build();
+        }
         String isbn = metadata.getIsbn13();
         if (isbn == null || isbn.isBlank()) {
             isbn = metadata.getIsbn10();
@@ -614,6 +619,10 @@ public class MetadataRefreshService {
             metadata.setComicvineId(existingMetadata.getComicvineId());
         }
 
+        if (metadataMap.containsKey(Comicvine) && metadataMap.get(Comicvine).getComicMetadata() != null) {
+            metadata.setComicMetadata(metadataMap.get(Comicvine).getComicMetadata());
+        }
+
         if (enabledFields.isLubimyczytacId()) {
             if (metadataMap.containsKey(Lubimyczytac)) {
                 metadata.setLubimyczytacId(metadataMap.get(Lubimyczytac).getLubimyczytacId());
@@ -666,7 +675,7 @@ public class MetadataRefreshService {
             if (refreshOptions.isMergeCategories()) {
                 metadata.setCategories(getAllCategories(metadataMap, fieldOptions.getCategories(), BookMetadata::getCategories));
             } else {
-                metadata.setCategories(resolveFieldAsList(metadataMap, fieldOptions.getCategories(), BookMetadata::getCategories));
+                metadata.setCategories(resolveFieldAsSet(metadataMap, fieldOptions.getCategories(), BookMetadata::getCategories));
             }
         } else if (isReplaceAll && existingMetadata != null) {
             metadata.setCategories(existingMetadata.getCategories());
@@ -695,8 +704,16 @@ public class MetadataRefreshService {
         return resolveFieldWithProviders(metadataMap, fieldProvider, fieldValueExtractor::extract, Objects::nonNull);
     }
 
-    protected Set<String> resolveFieldAsList (Map < MetadataProvider, BookMetadata > metadataMap, MetadataRefreshOptions.FieldProvider fieldProvider, FieldValueExtractorList fieldValueExtractor){
-        return resolveFieldWithProviders(metadataMap, fieldProvider, fieldValueExtractor::extract, (value) -> value != null && !value.isEmpty());
+    protected List<String> resolveFieldAsList (Map < MetadataProvider, BookMetadata > metadataMap, MetadataRefreshOptions.FieldProvider fieldProvider, FieldValueExtractorList fieldValueExtractor){
+        Collection<String> result = resolveFieldWithProviders(metadataMap, fieldProvider, fieldValueExtractor::extract, (value) -> value != null && !value.isEmpty());
+        if (result == null) return null;
+        return result instanceof List<String> list ? list : new ArrayList<>(result);
+    }
+
+    protected Set<String> resolveFieldAsSet (Map < MetadataProvider, BookMetadata > metadataMap, MetadataRefreshOptions.FieldProvider fieldProvider, FieldValueExtractorList fieldValueExtractor){
+        Collection<String> result = resolveFieldWithProviders(metadataMap, fieldProvider, fieldValueExtractor::extract, (value) -> value != null && !value.isEmpty());
+        if (result == null) return null;
+        return result instanceof Set<String> set ? set : new HashSet<>(result);
     }
 
     private <T > T resolveFieldWithProviders(Map < MetadataProvider, BookMetadata > metadataMap, MetadataRefreshOptions.FieldProvider fieldProvider, Function < BookMetadata, T > extractor, Predicate < T > isValidValue) {
@@ -735,7 +752,7 @@ public class MetadataRefreshService {
 
         for (MetadataProvider provider : providers) {
             if (provider != null && metadataMap.containsKey(provider)) {
-                Set<String> extracted = fieldValueExtractor.extract(metadataMap.get(provider));
+                Collection<String> extracted = fieldValueExtractor.extract(metadataMap.get(provider));
                 if (extracted != null) {
                     uniqueCategories.addAll(extracted);
                 }

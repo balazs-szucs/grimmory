@@ -60,14 +60,16 @@ public class BookMetadata {
     private String externalUrl;
     private Instant coverUpdatedOn;
     private Instant audiobookCoverUpdatedOn;
-    private Set<String> authors;
-    @Singular
+    private List<String> authors;
     private Set<String> categories;
     private Set<String> moods;
     private Set<String> tags;
     private MetadataProvider provider;
     private String thumbnailUrl;
     private List<BookReview> bookReviews;
+    private Double rating;
+
+    private Boolean allMetadataLocked;
 
     private Boolean titleLocked;
     private Boolean subtitleLocked;

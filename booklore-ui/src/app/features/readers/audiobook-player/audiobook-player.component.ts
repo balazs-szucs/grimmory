@@ -12,6 +12,7 @@ import {Tooltip} from 'primeng/tooltip';
 import {MenuItem, MessageService} from 'primeng/api';
 import {SelectButton} from 'primeng/selectbutton';
 import {Menu} from 'primeng/menu';
+import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 import {AudiobookService} from './audiobook.service';
 import {AudiobookChapter, AudiobookInfo, AudiobookProgress, AudiobookTrack} from './audiobook.model';
@@ -33,7 +34,8 @@ import {API_CONFIG} from '../../../core/config/api-config';
     ProgressSpinner,
     Tooltip,
     SelectButton,
-    Menu
+    Menu,
+    TranslocoDirective
   ],
   templateUrl: './audiobook-player.component.html',
   styleUrls: ['./audiobook-player.component.scss']
@@ -51,6 +53,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   private messageService = inject(MessageService);
   private audiobookSessionService = inject(AudiobookSessionService);
   private pageTitle = inject(PageTitleService);
+  private readonly t = inject(TranslocoService);
 
   isLoading = true;
   audioLoading = false;
@@ -84,15 +87,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   private sleepTimerInterval?: ReturnType<typeof setInterval>;
   private originalVolume = 1;
 
-  sleepTimerOptions: MenuItem[] = [
-    {label: '15 minutes', command: () => this.setSleepTimer(15)},
-    {label: '30 minutes', command: () => this.setSleepTimer(30)},
-    {label: '45 minutes', command: () => this.setSleepTimer(45)},
-    {label: '60 minutes', command: () => this.setSleepTimer(60)},
-    {label: 'End of chapter', command: () => this.setSleepTimerEndOfChapter()},
-    {separator: true},
-    {label: 'Cancel timer', command: () => this.cancelSleepTimer(), visible: false}
-  ];
+  sleepTimerOptions: MenuItem[] = [];
 
   bookmarks: BookMark[] = [];
 
@@ -111,6 +106,16 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   private isSeeking = false;
 
   ngOnInit(): void {
+    this.sleepTimerOptions = [
+      {label: this.t.translate('readerAudiobook.sleepTimerMenu.minutes15'), command: () => this.setSleepTimer(15)},
+      {label: this.t.translate('readerAudiobook.sleepTimerMenu.minutes30'), command: () => this.setSleepTimer(30)},
+      {label: this.t.translate('readerAudiobook.sleepTimerMenu.minutes45'), command: () => this.setSleepTimer(45)},
+      {label: this.t.translate('readerAudiobook.sleepTimerMenu.minutes60'), command: () => this.setSleepTimer(60)},
+      {label: this.t.translate('readerAudiobook.sleepTimerMenu.endOfChapter'), command: () => this.setSleepTimerEndOfChapter()},
+      {separator: true},
+      {id: 'cancel-timer', label: this.t.translate('readerAudiobook.sleepTimerMenu.cancelTimer'), command: () => this.cancelSleepTimer(), visible: false}
+    ];
+
     this.route.paramMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
       this.bookId = +params.get('bookId')!;
       this.loadAudiobook();
@@ -162,7 +167,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
         }
 
         // Load cover URLs - prefer stored audiobook cover, fall back to embedded, then book cover
-        const token = this.authService.getInternalAccessToken() || this.authService.getOidcAccessToken();
+        const token = this.authService.getInternalAccessToken();
         this.bookCoverUrl = `${API_CONFIG.BASE_URL}/api/v1/media/book/${this.bookId}/cover?token=${encodeURIComponent(token || '')}`;
         this.coverUrl = `${API_CONFIG.BASE_URL}/api/v1/media/book/${this.bookId}/audiobook-cover?token=${encodeURIComponent(token || '')}`;
 
@@ -174,8 +179,8 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
       error: () => {
         this.messageService.add({
           severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to load audiobook'
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('readerAudiobook.toast.loadFailed')
         });
         this.isLoading = false;
         this.audioLoading = false;
@@ -345,8 +350,8 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     this.audioLoading = false;
     this.messageService.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'Failed to load audio'
+      summary: this.t.translate('common.error'),
+      detail: this.t.translate('readerAudiobook.toast.audioLoadFailed')
     });
   }
 
@@ -383,13 +388,16 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   private updateMediaSessionMetadata(): void {
     if (!('mediaSession' in navigator)) return;
 
+    const chapters = this.audiobookInfo.chapters;
+    const chapterTitle = chapters && chapters.length > 1 ? this.getCurrentChapter()?.title : null;
+
     const title = this.audiobookInfo.folderBased
       ? this.currentTrack?.title
-      : this.getCurrentChapter()?.title || this.audiobookInfo.title;
+      : chapterTitle || this.audiobookInfo.title;
 
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: title || 'Untitled',
-      artist: this.audiobookInfo.author || 'Unknown Author',
+      title: title || this.t.translate('readerAudiobook.untitled'),
+      artist: this.audiobookInfo.author || this.t.translate('readerAudiobook.unknownAuthor'),
       album: this.audiobookInfo.title,
       artwork: this.coverUrl
         ? [{src: this.coverUrl, sizes: '512x512', type: 'image/png'}]
@@ -850,8 +858,8 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
 
     this.messageService.add({
       severity: 'info',
-      summary: 'Sleep Timer',
-      detail: `Playback will stop in ${minutes} minutes`
+      summary: this.t.translate('readerAudiobook.extra.sleepTimer'),
+      detail: this.t.translate('readerAudiobook.toast.sleepTimerSet', {minutes})
     });
   }
 
@@ -865,8 +873,8 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
 
     this.messageService.add({
       severity: 'info',
-      summary: 'Sleep Timer',
-      detail: 'Playback will stop at end of chapter'
+      summary: this.t.translate('readerAudiobook.extra.sleepTimer'),
+      detail: this.t.translate('readerAudiobook.toast.sleepTimerEndOfChapter')
     });
   }
 
@@ -906,13 +914,13 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
 
     this.messageService.add({
       severity: 'info',
-      summary: 'Sleep Timer',
-      detail: 'Playback stopped by sleep timer'
+      summary: this.t.translate('readerAudiobook.extra.sleepTimer'),
+      detail: this.t.translate('readerAudiobook.toast.sleepTimerStopped')
     });
   }
 
   private updateSleepTimerMenuVisibility(): void {
-    const cancelItem = this.sleepTimerOptions.find(item => item.label === 'Cancel timer');
+    const cancelItem = this.sleepTimerOptions.find(item => item.id === 'cancel-timer');
     if (cancelItem) {
       cancelItem.visible = this.sleepTimerActive;
     }
@@ -920,7 +928,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
 
   formatSleepTimerRemaining(): string {
     if (this.sleepTimerEndOfChapter) {
-      return 'End of chapter';
+      return this.t.translate('readerAudiobook.extra.endOfChapter');
     }
     const minutes = Math.floor(this.sleepTimerRemaining / 60);
     const seconds = this.sleepTimerRemaining % 60;
@@ -964,7 +972,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     } else if (currentChapter) {
       title = `${currentChapter.title} - ${this.formatTime(this.currentTime)}`;
     } else {
-      title = `Bookmark at ${this.formatTime(this.currentTime)}`;
+      title = this.t.translate('readerAudiobook.bookmarks.bookmarkAt', {time: this.formatTime(this.currentTime)});
     }
 
     const request: CreateBookMarkRequest = {
@@ -981,7 +989,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
           this.bookmarks = [...this.bookmarks, bookmark];
           this.messageService.add({
             severity: 'success',
-            summary: 'Bookmark Added',
+            summary: this.t.translate('readerAudiobook.toast.bookmarkAdded'),
             detail: title
           });
         },
@@ -989,8 +997,8 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
           const isDuplicate = err?.status === 409;
           this.messageService.add({
             severity: isDuplicate ? 'warn' : 'error',
-            summary: isDuplicate ? 'Bookmark Exists' : 'Error',
-            detail: isDuplicate ? 'A bookmark already exists at this position' : 'Failed to add bookmark'
+            summary: isDuplicate ? this.t.translate('readerAudiobook.toast.bookmarkExists') : this.t.translate('common.error'),
+            detail: isDuplicate ? this.t.translate('readerAudiobook.toast.bookmarkExistsDetail') : this.t.translate('readerAudiobook.toast.bookmarkFailed')
           });
         }
       });
@@ -1079,7 +1087,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
         this.bookmarks = this.bookmarks.filter(b => b.id !== bookmarkId);
         this.messageService.add({
           severity: 'info',
-          summary: 'Bookmark Deleted'
+          summary: this.t.translate('readerAudiobook.toast.bookmarkDeleted')
         });
       });
   }

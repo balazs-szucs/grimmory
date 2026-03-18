@@ -2,6 +2,7 @@ package org.booklore.service.bookdrop;
 
 import org.booklore.config.AppProperties;
 import org.booklore.model.enums.BookFileExtension;
+import org.booklore.repository.BookdropFileRepository;
 import org.booklore.util.FileUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -10,6 +11,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -18,6 +22,7 @@ public class BookdropMonitoringService {
 
     private final AppProperties appProperties;
     private final BookdropEventHandlerService eventHandler;
+    private final BookdropFileRepository bookdropFileRepository;
 
     private Path bookdrop;
     private WatchService watchService;
@@ -25,36 +30,49 @@ public class BookdropMonitoringService {
     private volatile boolean running;
     private WatchKey watchKey;
     private volatile boolean paused;
+    private volatile boolean disabled;
 
-    public BookdropMonitoringService(AppProperties appProperties, BookdropEventHandlerService eventHandler) {
+    public BookdropMonitoringService(
+            AppProperties appProperties,
+            BookdropEventHandlerService eventHandler,
+            BookdropFileRepository bookdropFileRepository
+    ) {
         this.appProperties = appProperties;
         this.eventHandler = eventHandler;
+        this.bookdropFileRepository = bookdropFileRepository;
     }
 
     @PostConstruct
-    public void start() throws IOException {
+    public void start() {
         bookdrop = Path.of(appProperties.getBookdropFolder());
         if (Files.notExists(bookdrop)) {
             try {
                 Files.createDirectories(bookdrop);
                 log.info("Created missing bookdrop folder: {}", bookdrop);
             } catch (IOException e) {
-                log.error("Failed to create bookdrop folder: {}", bookdrop, e);
-                throw e;
+                log.warn("Bookdrop folder is not available at '{}'. Bookdrop monitoring is disabled. " +
+                        "Mount a volume at this path to enable it.", bookdrop);
+                this.disabled = true;
+                return;
             }
         }
 
-        log.info("Starting bookdrop folder monitor: {}", bookdrop);
-        this.watchService = FileSystems.getDefault().newWatchService();
-        this.watchKey = bookdrop.register(watchService,
-                StandardWatchEventKinds.ENTRY_CREATE,
-                StandardWatchEventKinds.ENTRY_DELETE);
-        this.running = true;
-        this.paused = false;
-        this.watchThread = new Thread(this::processEvents, "BookdropFolderWatcher");
-        this.watchThread.setDaemon(true);
-        this.watchThread.start();
-        scanExistingBookdropFiles();
+        try {
+            log.info("Starting bookdrop folder monitor: {}", bookdrop);
+            this.watchService = FileSystems.getDefault().newWatchService();
+            this.watchKey = bookdrop.register(watchService,
+                    StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_DELETE);
+            this.running = true;
+            this.paused = false;
+            this.watchThread = new Thread(this::processEvents, "BookdropFolderWatcher");
+            this.watchThread.setDaemon(true);
+            this.watchThread.start();
+            scanExistingBookdropFiles();
+        } catch (IOException e) {
+            log.warn("Failed to start bookdrop folder monitor. Bookdrop monitoring is disabled.", e);
+            this.disabled = true;
+        }
     }
 
     @PreDestroy
@@ -74,6 +92,7 @@ public class BookdropMonitoringService {
     }
 
     public synchronized void pauseMonitoring() {
+        if (disabled) return;
         if (!paused) {
             if (watchKey != null) {
                 watchKey.cancel();
@@ -87,6 +106,7 @@ public class BookdropMonitoringService {
     }
 
     public synchronized void resumeMonitoring() {
+        if (disabled) return;
         if (paused) {
             try {
                 watchKey = bookdrop.register(watchService,
@@ -180,21 +200,41 @@ public class BookdropMonitoringService {
     }
 
     public void rescanBookdropFolder() {
-        log.info("Manual rescan of Bookdrop folder triggered.");
+        if (disabled) {
+            log.warn("Bookdrop monitoring is disabled. Skipping rescan.");
+            return;
+        }
+        log.info("Rescan of Bookdrop folder triggered.");
         scanExistingBookdropFiles();
     }
 
     private void scanExistingBookdropFiles() {
+        List<Path> supportedFiles;
         try (Stream<Path> files = Files.walk(bookdrop)) {
-            files.filter(Files::isRegularFile)
+            supportedFiles = files.filter(Files::isRegularFile)
                     .filter(path -> !FileUtils.shouldIgnore(path))
                     .filter(path -> BookFileExtension.fromFileName(path.getFileName().toString()).isPresent())
-                    .forEach(file -> {
-                        log.info("Found existing supported file on startup: {}", file);
-                        eventHandler.enqueueFile(file, StandardWatchEventKinds.ENTRY_CREATE);
-                    });
+                    .toList();
         } catch (IOException e) {
-            log.error("Error scanning bookdrop folder on startup", e);
+            log.error("Error scanning bookdrop folder", e);
+            return;
+        }
+
+        if (!supportedFiles.isEmpty()) {
+            List<String> supportedFilePaths = supportedFiles.stream()
+                    .map(Path::toAbsolutePath)
+                    .map(Path::toString)
+                    .toList();
+            List<String> knownFilePaths = bookdropFileRepository.findAllFilePathsIn(supportedFilePaths);
+            Set<String> knownPaths = knownFilePaths == null ? Set.of() : new HashSet<>(knownFilePaths);
+
+            supportedFilePaths.stream()
+                    .filter(path -> !knownPaths.contains(path))
+                    .map(Path::of)
+                    .forEach(path -> {
+                        log.info("Found existing supported file: {}", path);
+                        eventHandler.enqueueFile(path, StandardWatchEventKinds.ENTRY_CREATE);
+                    });
         }
     }
 }

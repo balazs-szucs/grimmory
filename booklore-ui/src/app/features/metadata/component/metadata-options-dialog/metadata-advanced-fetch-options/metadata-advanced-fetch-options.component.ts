@@ -11,11 +11,12 @@ import {
   MetadataReplaceMode
 } from '../../../model/request/metadata-refresh-options.model';
 import {Tooltip} from 'primeng/tooltip';
+import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 @Component({
   selector: 'app-metadata-advanced-fetch-options',
   templateUrl: './metadata-advanced-fetch-options.component.html',
-  imports: [Select, FormsModule, Checkbox, Button, Tooltip],
+  imports: [Select, FormsModule, Checkbox, Button, Tooltip, TranslocoDirective],
   styleUrl: './metadata-advanced-fetch-options.component.scss',
   standalone: true
 })
@@ -32,7 +33,7 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
     'asin', 'amazonRating', 'amazonReviewCount',
     'googleId',
     'goodreadsId', 'goodreadsRating', 'goodreadsReviewCount',
-    'hardcoverId', 'hardcoverRating', 'hardcoverReviewCount', 'moods', 'tags',
+    'hardcoverId', 'hardcoverBookId', 'hardcoverRating', 'hardcoverReviewCount', 'moods', 'tags',
     'comicvineId',
     'lubimyczytacId', 'lubimyczytacRating',
     'ranobedbId', 'ranobedbRating',
@@ -43,7 +44,7 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
     'asin', 'amazonRating', 'amazonReviewCount',
     'googleId',
     'goodreadsId', 'goodreadsRating', 'goodreadsReviewCount',
-    'hardcoverId', 'hardcoverRating', 'hardcoverReviewCount', 'moods', 'tags',
+    'hardcoverId', 'hardcoverBookId', 'hardcoverRating', 'hardcoverReviewCount', 'moods', 'tags',
     'comicvineId',
     'lubimyczytacId', 'lubimyczytacRating',
     'ranobedbId', 'ranobedbRating',
@@ -64,11 +65,13 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
   reviewBeforeApply: boolean = false;
   replaceMode: MetadataReplaceMode = 'REPLACE_MISSING';
 
-  replaceModeOptions: { label: string; value: MetadataReplaceMode }[] = [
-    { label: 'Replace Missing Only', value: 'REPLACE_MISSING' },
-    { label: 'Replace All Fields', value: 'REPLACE_ALL' },
-    { label: 'Replace When Provided', value: 'REPLACE_WHEN_PROVIDED' }
-  ];
+  get replaceModeOptions(): { label: string; value: MetadataReplaceMode }[] {
+    return [
+      { label: this.t.translate('metadata.advancedFetchOptions.replaceMissingOnly'), value: 'REPLACE_MISSING' },
+      { label: this.t.translate('metadata.advancedFetchOptions.replaceAllFields'), value: 'REPLACE_ALL' },
+      { label: this.t.translate('metadata.advancedFetchOptions.replaceWhenProvided'), value: 'REPLACE_WHEN_PROVIDED' }
+    ];
+  }
 
   fieldOptions: FieldOptions = this.initializeFieldOptions();
   enabledFields: Record<keyof FieldOptions, boolean> = this.initializeEnabledFields();
@@ -79,6 +82,7 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
   bulkP4: string | null = null;
 
   private messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
 
   private justSubmitted = false;
 
@@ -93,7 +97,7 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
     'goodreadsId', 'goodreadsRating', 'goodreadsReviewCount',
 
     // Hardcover
-    'hardcoverId', 'hardcoverRating', 'hardcoverReviewCount',
+    'hardcoverId', 'hardcoverBookId', 'hardcoverRating', 'hardcoverReviewCount',
 
     // Comicvine
     'comicvineId',
@@ -191,8 +195,8 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
     } else {
       this.messageService.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'At least one provider (P1–P4) must be selected for each enabled book field.',
+        summary: this.t.translate('metadata.advancedFetchOptions.toast.providerRequiredSummary'),
+        detail: this.t.translate('metadata.advancedFetchOptions.toast.providerRequiredDetail'),
         life: 5000
       });
     }
@@ -268,6 +272,7 @@ export class MetadataAdvancedFetchOptionsComponent implements OnChanges {
       'goodreadsId': 'Goodreads ID',
       'comicvineId': 'Comicvine ID',
       'hardcoverId': 'Hardcover ID',
+      'hardcoverBookId': 'Hardcover Book ID',
       'googleId': 'Google Books ID',
       'amazonRating': 'Amazon Rating',
       'amazonReviewCount': 'Amazon Review Count',

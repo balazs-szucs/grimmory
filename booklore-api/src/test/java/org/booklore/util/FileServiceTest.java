@@ -12,12 +12,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import javax.imageio.ImageIO;
@@ -61,7 +63,9 @@ class FileServiceTest {
                 .build();
         lenient().when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
-        fileService = new FileService(appProperties, mock(RestTemplate.class), appSettingService);
+        RestTemplate mockRestTemplate = mock(RestTemplate.class);
+        RestTemplate mockNoRedirectRestTemplate = mock(RestTemplate.class);
+        fileService = new FileService(appProperties, mockRestTemplate, appSettingService, mockNoRedirectRestTemplate);
     }
 
     @Nested
@@ -374,9 +378,9 @@ class FileServiceTest {
             }
 
             @Test
-            void invalidData_returnsNull() throws IOException {
+            void invalidData_throwsException() {
                 byte[] invalidData = "not an image".getBytes();
-                assertNull(FileService.readImage(invalidData));
+                assertThrows(IOException.class, () -> FileService.readImage(invalidData));
             }
         }
 
@@ -485,11 +489,11 @@ class FileServiceTest {
             }
 
             @Test
-            void invalidImageData_skipsSave() {
+            void invalidImageData_throwsException() {
                 byte[] invalidData = "not an image".getBytes();
                 Path outputPath = tempDir.resolve("invalid.jpg");
 
-                assertDoesNotThrow(() ->
+                assertThrows(IOException.class, () ->
                         FileService.saveImage(invalidData, outputPath.toString()));
                 assertFalse(Files.exists(outputPath));
             }
@@ -913,12 +917,11 @@ class FileServiceTest {
             }
 
             @Test
-            void invalidImageBytes_skipsThumbnail() {
+            void invalidImageBytes_throwsException() {
                 byte[] invalidData = "not an image".getBytes();
 
-                assertDoesNotThrow(() ->
+                assertThrows(RuntimeException.class, () ->
                         fileService.createThumbnailFromBytes(16L, invalidData));
-                assertFalse(Files.exists(Path.of(fileService.getCoverFile(16L))));
             }
 
             @Test
@@ -1031,15 +1034,14 @@ class FileServiceTest {
             }
 
             @Test
-            void corruptImageData_skipsThumbnail() {
+            void corruptImageData_throwsException() {
                 // Valid MIME type but corrupt image data
                 byte[] corruptData = ("not an image but has jpeg mime type").getBytes();
                 MockMultipartFile corruptFile = new MockMultipartFile(
                         "file", "corrupt.jpg", "image/jpeg", corruptData);
 
-                assertDoesNotThrow(() ->
+                assertThrows(RuntimeException.class, () ->
                         fileService.createThumbnailFromFile(12L, corruptFile));
-                assertFalse(Files.exists(Path.of(fileService.getCoverFile(12L))));
             }
 
             @Test
@@ -1176,7 +1178,7 @@ class FileServiceTest {
                     .build();
             lenient().when(appSettingServiceForNetwork.getAppSettings()).thenReturn(appSettings);
 
-            fileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork);
+            fileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork, restTemplate);
         }
 
         @Nested
@@ -1187,17 +1189,17 @@ class FileServiceTest {
             @DisplayName("downloads and returns valid image")
             @Timeout(5)
             void downloadImageFromUrl_validImage_returnsBufferedImage() throws IOException {
-                String imageUrl = "http://example.com/image.jpg";
+                String imageUrl = "http://1.1.1.1/image.jpg";
                 BufferedImage testImage = createTestImage(100, 100);
                 byte[] imageBytes = imageToBytes(testImage);
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
                 AppSettingService mockAppSettingService = mock(AppSettingService.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, mockAppSettingService);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, mockAppSettingService, mockRestTemplate);
 
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(imageBytes);
                 when(mockRestTemplate.exchange(
-                        eq(imageUrl),
+                        anyString(),
                         eq(HttpMethod.GET),
                         any(HttpEntity.class),
                         eq(byte[].class)
@@ -1214,10 +1216,10 @@ class FileServiceTest {
             @DisplayName("throws exception when response body is null")
             @Timeout(5)
             void downloadImageFromUrl_nullBody_throwsException() {
-                String imageUrl = "http://example.com/image.jpg";
+                String imageUrl = "http://1.1.1.1/image.jpg";
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(null);
                 when(restTemplate.exchange(
-                        eq(imageUrl),
+                        anyString(),
                         eq(HttpMethod.GET),
                         any(HttpEntity.class),
                         eq(byte[].class)
@@ -1228,31 +1230,32 @@ class FileServiceTest {
             }
 
             @Test
-            @DisplayName("returns null when ImageIO cannot read bytes")
+            @DisplayName("throws IOException when ImageIO cannot read bytes")
             @Timeout(5)
-            void downloadImageFromUrl_invalidImageData_returnsNull() throws IOException {
-                String imageUrl = "http://example.com/image.jpg";
+            void downloadImageFromUrl_invalidImageData_throwsException() throws IOException {
+                String imageUrl = "http://1.1.1.1/image.jpg";
                 byte[] invalidBytes = "not an image".getBytes();
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(invalidBytes);
-                when(restTemplate.exchange(
-                        eq(imageUrl),
+                RestTemplate noRedirectMock = (RestTemplate) ReflectionTestUtils.getField(fileService, "noRedirectRestTemplate");
+
+                when(noRedirectMock.exchange(
+                        anyString(),
                         eq(HttpMethod.GET),
                         any(HttpEntity.class),
                         eq(byte[].class)
                 )).thenReturn(responseEntity);
 
-                BufferedImage result = fileService.downloadImageFromUrl(imageUrl);
-                assertNull(result);
+                assertThrows(IOException.class, () -> fileService.downloadImageFromUrl(imageUrl));
             }
 
             @Test
             @DisplayName("throws exception on HTTP error status")
             @Timeout(5)
             void downloadImageFromUrl_httpError_throwsException() {
-                String imageUrl = "http://example.com/image.jpg";
+                String imageUrl = "http://1.1.1.1/image.jpg";
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.notFound().build();
                 when(restTemplate.exchange(
-                        eq(imageUrl),
+                        anyString(),
                         eq(HttpMethod.GET),
                         any(HttpEntity.class),
                         eq(byte[].class)
@@ -1260,6 +1263,155 @@ class FileServiceTest {
 
                 assertThrows(IOException.class, () ->
                         fileService.downloadImageFromUrl(imageUrl));
+            }
+
+            @Test
+            @DisplayName("rewrites redirect URL to preserve hostname when CDN redirects to raw IP")
+            @Timeout(5)
+            void downloadImageFromUrl_redirectToRawIp_rewritesUrlWithOriginalHost() throws IOException {
+                String originalUrl = "http://example.com/cover.jpg";
+                String cdnIpRedirect = "http://3.168.64.124/cover.jpg";
+                BufferedImage testImage = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(testImage);
+
+                RestTemplate mockRestTemplate = mock(RestTemplate.class);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302)
+                        .header("Location", cdnIpRedirect).build();
+                ResponseEntity<byte[]> imageResponse = ResponseEntity.ok(imageBytes);
+
+                var urlCaptor = ArgumentCaptor.forClass(String.class);
+                when(mockRestTemplate.exchange(
+                        urlCaptor.capture(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
+                )).thenReturn(redirectResponse, imageResponse);
+
+                BufferedImage result = testFileService.downloadImageFromUrl(originalUrl);
+
+                assertNotNull(result);
+                assertEquals(originalUrl, urlCaptor.getAllValues().get(0));
+                assertEquals("http://example.com/cover.jpg", urlCaptor.getAllValues().get(1));
+            }
+
+            @Test
+            @DisplayName("preserves redirect path when rewriting raw IP URL back to hostname")
+            @Timeout(5)
+            void downloadImageFromUrl_redirectToRawIpDifferentPath_preservesPath() throws IOException {
+                String originalUrl = "http://example.com/images/cover.jpg";
+                String cdnIpRedirect = "http://3.168.64.124/cdn/optimized/cover.jpg?token=abc";
+                BufferedImage testImage = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(testImage);
+
+                RestTemplate mockRestTemplate = mock(RestTemplate.class);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302)
+                        .header("Location", cdnIpRedirect).build();
+                ResponseEntity<byte[]> imageResponse = ResponseEntity.ok(imageBytes);
+
+                var urlCaptor = ArgumentCaptor.forClass(String.class);
+                when(mockRestTemplate.exchange(
+                        urlCaptor.capture(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
+                )).thenReturn(redirectResponse, imageResponse);
+
+                testFileService.downloadImageFromUrl(originalUrl);
+
+                assertEquals("http://example.com/cdn/optimized/cover.jpg?token=abc", urlCaptor.getAllValues().get(1));
+            }
+
+            @Test
+            @DisplayName("does not rewrite URL when redirect target is a hostname")
+            @Timeout(5)
+            void downloadImageFromUrl_redirectToHostname_keepsRedirectUrl() throws IOException {
+                String originalUrl = "http://example.com/cover.jpg";
+                String hostnameRedirect = "http://www.example.com/cover.jpg";
+                BufferedImage testImage = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(testImage);
+
+                RestTemplate mockRestTemplate = mock(RestTemplate.class);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(301)
+                        .header("Location", hostnameRedirect).build();
+                ResponseEntity<byte[]> imageResponse = ResponseEntity.ok(imageBytes);
+
+                var urlCaptor = ArgumentCaptor.forClass(String.class);
+                when(mockRestTemplate.exchange(
+                        urlCaptor.capture(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
+                )).thenReturn(redirectResponse, imageResponse);
+
+                testFileService.downloadImageFromUrl(originalUrl);
+
+                assertEquals(hostnameRedirect, urlCaptor.getAllValues().get(1));
+            }
+
+            @Test
+            @DisplayName("chain: hostname -> hostname -> raw IP uses last hostname for rewrite")
+            @Timeout(5)
+            void downloadImageFromUrl_multipleRedirectsToRawIp_usesLastHostname() throws IOException {
+                String originalUrl = "http://example.com/cover.jpg";
+                String hostnameRedirect = "http://www.example.com/cover.jpg";
+                String ipRedirect = "http://52.84.12.99/cover.jpg";
+                BufferedImage testImage = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(testImage);
+
+                RestTemplate mockRestTemplate = mock(RestTemplate.class);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+
+                ResponseEntity<byte[]> redirect1 = ResponseEntity.status(301)
+                        .header("Location", hostnameRedirect).build();
+                ResponseEntity<byte[]> redirect2 = ResponseEntity.status(302)
+                        .header("Location", ipRedirect).build();
+                ResponseEntity<byte[]> imageResponse = ResponseEntity.ok(imageBytes);
+
+                var urlCaptor = ArgumentCaptor.forClass(String.class);
+                when(mockRestTemplate.exchange(
+                        urlCaptor.capture(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
+                )).thenReturn(redirect1, redirect2, imageResponse);
+
+                testFileService.downloadImageFromUrl(originalUrl);
+
+                assertEquals(originalUrl, urlCaptor.getAllValues().get(0));
+                assertEquals(hostnameRedirect, urlCaptor.getAllValues().get(1));
+                assertEquals("http://www.example.com/cover.jpg", urlCaptor.getAllValues().get(2));
+            }
+
+            @Test
+            @DisplayName("throws exception when redirect exceeds max limit")
+            @Timeout(5)
+            void downloadImageFromUrl_tooManyRedirects_throwsException() {
+                String imageUrl = "http://1.1.1.1/cover.jpg";
+
+                RestTemplate mockRestTemplate = mock(RestTemplate.class);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302)
+                        .header("Location", "http://2.2.2.2/cover.jpg")
+                        .build();
+
+                when(mockRestTemplate.exchange(
+                        anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
+                )).thenReturn(redirectResponse);
+
+                IOException ex = assertThrows(IOException.class, () ->
+                        testFileService.downloadImageFromUrl(imageUrl));
+                assertTrue(ex.getMessage().contains("Too many redirects"));
+            }
+
+            @Test
+            @DisplayName("throws exception when redirect has no Location header")
+            @Timeout(5)
+            void downloadImageFromUrl_redirectWithoutLocation_throwsException() {
+                String imageUrl = "http://1.1.1.1/image.jpg";
+
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302).build();
+                when(restTemplate.exchange(
+                        anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
+                )).thenReturn(redirectResponse);
+
+                IOException ex = assertThrows(IOException.class, () ->
+                        fileService.downloadImageFromUrl(imageUrl));
+                assertTrue(ex.getMessage().contains("Location"));
             }
         }
 
@@ -1271,14 +1423,14 @@ class FileServiceTest {
             @DisplayName("downloads and saves cover images successfully")
             @Timeout(5)
             void createThumbnailFromUrl_validImage_createsCoverAndThumbnail() throws IOException {
-                String imageUrl = "http://example.com/cover.jpg";
+                String imageUrl = "http://1.1.1.1/cover.jpg";
                 long bookId = 42L;
                 BufferedImage testImage = createTestImage(800, 1200); // Portrait image
                 byte[] imageBytes = imageToBytes(testImage);
 
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(imageBytes);
                 when(restTemplate.exchange(
-                        eq(imageUrl),
+                        anyString(),
                         eq(HttpMethod.GET),
                         any(HttpEntity.class),
                         eq(byte[].class)
@@ -1304,7 +1456,7 @@ class FileServiceTest {
                 long bookId = 42L;
 
                 when(restTemplate.exchange(
-                        eq(imageUrl),
+                        anyString(),
                         eq(HttpMethod.GET),
                         any(HttpEntity.class),
                         eq(byte[].class)

@@ -1,9 +1,7 @@
 package org.booklore.service.metadata.sidecar;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.config.AppProperties;
 import org.booklore.model.dto.settings.MetadataPersistenceSettings;
 import org.booklore.model.dto.settings.SidecarSettings;
 import org.booklore.model.dto.sidecar.SidecarMetadata;
@@ -12,6 +10,9 @@ import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.FileService;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,22 +23,27 @@ import java.nio.file.StandardCopyOption;
 @Service
 public class SidecarMetadataWriter {
 
+    private final AppProperties appProperties;
     private final SidecarMetadataMapper mapper;
     private final FileService fileService;
     private final AppSettingService appSettingService;
     private final ObjectMapper objectMapper;
 
-    public SidecarMetadataWriter(SidecarMetadataMapper mapper, FileService fileService, AppSettingService appSettingService) {
+    public SidecarMetadataWriter(AppProperties appProperties, SidecarMetadataMapper mapper, FileService fileService, AppSettingService appSettingService) {
+        this.appProperties = appProperties;
         this.mapper = mapper;
         this.fileService = fileService;
         this.appSettingService = appSettingService;
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.registerModule(new JavaTimeModule());
-        this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
-        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper = JsonMapper.builder()
+                .findAndAddModules()
+                .configure(SerializationFeature.INDENT_OUTPUT, true)
+                .build();
     }
 
     public void writeSidecarMetadata(BookEntity book) {
+        if (!appProperties.isLocalStorage()) {
+            return;
+        }
         if (book == null || book.getMetadata() == null) {
             log.warn("Cannot write sidecar metadata: book or metadata is null");
             return;

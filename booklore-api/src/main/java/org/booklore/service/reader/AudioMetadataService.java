@@ -1,10 +1,13 @@
 package org.booklore.service.reader;
 
+import org.booklore.model.dto.AudiobookMetadata;
 import org.booklore.model.dto.response.AudiobookChapter;
 import org.booklore.model.dto.response.AudiobookInfo;
 import org.booklore.model.dto.response.AudiobookTrack;
 import org.booklore.model.entity.BookFileEntity;
 import org.booklore.model.entity.BookMetadataEntity;
+import org.booklore.repository.BookFileRepository;
+import org.booklore.service.metadata.extractor.AudiobookMetadataExtractor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jaudiotagger.audio.AudioFile;
@@ -15,6 +18,7 @@ import org.jaudiotagger.tag.Tag;
 import org.jaudiotagger.tag.images.Artwork;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,6 +31,8 @@ import java.util.stream.Collectors;
 public class AudioMetadataService {
 
     private final AudioFileUtilityService audioFileUtility;
+    private final AudiobookMetadataExtractor audiobookMetadataExtractor;
+    private final BookFileRepository bookFileRepository;
 
     public AudiobookInfo getMetadata(BookFileEntity bookFile, Path audioPath) throws Exception {
         if (bookFile.isFolderBased()) {
@@ -40,7 +46,8 @@ public class AudioMetadataService {
         AudiobookInfo.AudiobookInfoBuilder builder = AudiobookInfo.builder()
                 .bookId(bookFile.getBook().getId())
                 .bookFileId(bookFile.getId())
-                .folderBased(false);
+                .folderBased(false)
+                .totalSizeBytes(bookFile.getFileSizeKb() != null ? bookFile.getFileSizeKb() * 1024 : Files.size(audioPath));
 
         if (bookFile.getDurationSeconds() != null) {
             BookMetadataEntity metadata = bookFile.getBook().getMetadata();
@@ -64,6 +71,8 @@ public class AudioMetadataService {
                                 .build())
                         .collect(Collectors.toList());
                 builder.chapters(chapters);
+            } else {
+                backfillChapters(bookFile, audioPath, builder);
             }
 
             if (metadata != null) {
@@ -131,11 +140,10 @@ public class AudioMetadataService {
                 totalDurationMs += trackDurationMs;
 
                 if (i == 0) {
-                    long bitrateValue = header.getBitRateAsNumber();
-                    bitrate = bitrateValue > 0 ? (int) bitrateValue : null;
-                    codec = header.getEncodingType();
-                    sampleRate = header.getSampleRateAsNumber();
-                    channels = parseChannels(header.getChannels());
+                    bitrate = safeBitrate(header, trackPath);
+                    codec = safeEncodingType(header, trackPath);
+                    sampleRate = safeSampleRate(header, trackPath);
+                    channels = parseChannels(safeChannels(header, trackPath));
                     if (tag != null) {
                         title = getTagValue(tag, FieldKey.ALBUM, FieldKey.TITLE);
                         author = getTagValue(tag, FieldKey.ALBUM_ARTIST, FieldKey.ARTIST);
@@ -195,10 +203,15 @@ public class AudioMetadataService {
             }
         }
 
+        long totalSizeBytes = tracks.stream()
+                .mapToLong(t -> t.getFileSizeBytes() != null ? t.getFileSizeBytes() : 0)
+                .sum();
+
         return builder
                 .title(title)
                 .author(author)
                 .durationMs(totalDurationMs)
+                .totalSizeBytes(totalSizeBytes > 0 ? totalSizeBytes : null)
                 .tracks(tracks)
                 .build();
     }
@@ -208,13 +221,12 @@ public class AudioMetadataService {
         AudioHeader header = audioFile.getAudioHeader();
         Tag tag = audioFile.getTag();
 
-        long durationMs = (long) (header.getPreciseTrackLength() * 1000);
-        long bitrateValue = header.getBitRateAsNumber();
+        long durationMs = safeDurationMs(header, audioPath);
         builder.durationMs(durationMs)
-                .bitrate(bitrateValue > 0 ? (int) bitrateValue : null)
-                .codec(header.getEncodingType())
-                .sampleRate(header.getSampleRateAsNumber())
-                .channels(parseChannels(header.getChannels()));
+                .bitrate(safeBitrate(header, audioPath))
+                .codec(safeEncodingType(header, audioPath))
+                .sampleRate(safeSampleRate(header, audioPath))
+                .channels(parseChannels(safeChannels(header, audioPath)));
 
         if (tag != null) {
             builder.title(getTagValue(tag, FieldKey.TITLE, FieldKey.ALBUM))
@@ -222,17 +234,61 @@ public class AudioMetadataService {
                     .narrator(getTagValue(tag, FieldKey.COMPOSER));
         }
 
-        List<AudiobookChapter> chapters = new ArrayList<>();
-        chapters.add(AudiobookChapter.builder()
-                .index(0)
-                .title("Full Audiobook")
-                .startTimeMs(0L)
-                .endTimeMs(durationMs)
-                .durationMs(durationMs)
-                .build());
+        List<AudiobookChapter> chapters = extractChaptersFromFile(audioPath.toFile(), durationMs);
         builder.chapters(chapters);
 
         return builder.build();
+    }
+
+    private void backfillChapters(BookFileEntity bookFile, Path audioPath, AudiobookInfo.AudiobookInfoBuilder builder) {
+        try {
+            List<AudiobookChapter> chapters = extractChaptersFromFile(
+                    audioPath.toFile(),
+                    bookFile.getDurationSeconds() != null ? bookFile.getDurationSeconds() * 1000 : 0
+            );
+            builder.chapters(chapters);
+
+            List<BookFileEntity.AudioFileChapter> entityChapters = chapters.stream()
+                    .map(ch -> BookFileEntity.AudioFileChapter.builder()
+                            .index(ch.getIndex())
+                            .title(ch.getTitle())
+                            .startTimeMs(ch.getStartTimeMs())
+                            .endTimeMs(ch.getEndTimeMs())
+                            .durationMs(ch.getDurationMs())
+                            .build())
+                    .collect(Collectors.toList());
+            bookFile.setChapters(entityChapters);
+            bookFile.setChapterCount(entityChapters.size());
+            bookFileRepository.save(bookFile);
+            log.info("Backfilled {} chapters for audiobook file id={}", entityChapters.size(), bookFile.getId());
+        } catch (Exception e) {
+            log.debug("Failed to backfill chapters for audiobook file id={}: {}", bookFile.getId(), e.getMessage());
+        }
+    }
+
+    private List<AudiobookChapter> extractChaptersFromFile(File audioFile, long fallbackDurationMs) {
+        List<AudiobookMetadata.ChapterInfo> extracted = audiobookMetadataExtractor.extractChaptersFromFile(audioFile);
+        if (extracted != null && !extracted.isEmpty()) {
+            return extracted.stream()
+                    .map(ch -> AudiobookChapter.builder()
+                            .index(ch.getIndex())
+                            .title(ch.getTitle())
+                            .startTimeMs(ch.getStartTimeMs())
+                            .endTimeMs(ch.getEndTimeMs())
+                            .durationMs(ch.getDurationMs())
+                            .build())
+                    .collect(Collectors.toList());
+        }
+
+        List<AudiobookChapter> fallback = new ArrayList<>();
+        fallback.add(AudiobookChapter.builder()
+                .index(0)
+                .title("Full Audiobook")
+                .startTimeMs(0L)
+                .endTimeMs(fallbackDurationMs)
+                .durationMs(fallbackDurationMs)
+                .build());
+        return fallback;
     }
 
     public byte[] getEmbeddedCoverArt(Path audioPath) {
@@ -299,6 +355,54 @@ public class AudioMetadataService {
         try {
             return Integer.parseInt(channels.replaceAll("[^0-9]", ""));
         } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private long safeDurationMs(AudioHeader header, Path audioPath) {
+        try {
+            return (long) (header.getPreciseTrackLength() * 1000);
+        } catch (RuntimeException e) {
+            log.warn("Failed to read track duration from {}", audioPath, e);
+            return 0L;
+        }
+    }
+
+    private Integer safeBitrate(AudioHeader header, Path audioPath) {
+        try {
+            long bitrateValue = header.getBitRateAsNumber();
+            return bitrateValue > 0 ? (int) bitrateValue : null;
+        } catch (RuntimeException e) {
+            log.debug("Audio header has no bitrate for {}", audioPath, e);
+            return null;
+        }
+    }
+
+    private Integer safeSampleRate(AudioHeader header, Path audioPath) {
+        try {
+            int sampleRate = header.getSampleRateAsNumber();
+            return sampleRate > 0 ? sampleRate : null;
+        } catch (RuntimeException e) {
+            log.debug("Audio header has no sample rate for {}", audioPath, e);
+            return null;
+        }
+    }
+
+    private String safeEncodingType(AudioHeader header, Path audioPath) {
+        try {
+            String encodingType = header.getEncodingType();
+            return encodingType != null && !encodingType.isBlank() ? encodingType : null;
+        } catch (RuntimeException e) {
+            log.debug("Audio header has no encoding type for {}", audioPath, e);
+            return null;
+        }
+    }
+
+    private String safeChannels(AudioHeader header, Path audioPath) {
+        try {
+            return header.getChannels();
+        } catch (RuntimeException e) {
+            log.debug("Audio header has no channel info for {}", audioPath, e);
             return null;
         }
     }
