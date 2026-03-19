@@ -29,6 +29,9 @@ jobs:
     name: Test Suite
     needs: [resolve_ref]
     uses: ./.github/workflows/test-suite.yml
+    permissions:
+      contents: read
+      checks: write
     with:
       checkout_ref: ${{ needs.resolve_ref.outputs.commit_sha }}
 
