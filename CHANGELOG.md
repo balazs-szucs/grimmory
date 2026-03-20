@@ -1,3 +1,9 @@
+## [2.2.4](https://github.com/grimmory-tools/grimmory/compare/v2.2.3...v2.2.4) (2026-03-20)
+
+### Bug Fixes
+
+* **release:** publish stable images via reusable workflow ([03f4a8e](https://github.com/grimmory-tools/grimmory/commit/03f4a8e22a6993cf9edd29d510ec74d4b4bf98fe))
+
 ## [2.2.3](https://github.com/grimmory-tools/grimmory/compare/v2.2.2...v2.2.3) (2026-03-20)
 
 ### Bug Fixes
