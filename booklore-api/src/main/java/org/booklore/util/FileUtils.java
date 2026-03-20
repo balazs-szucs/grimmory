@@ -24,6 +24,81 @@ public class FileUtils {
 
     private final String FILE_NOT_FOUND_MESSAGE = "File does not exist: ";
 
+    public Path normalizeAbsolutePath(Path path) {
+        if (path == null) {
+            throw new IllegalArgumentException("Path cannot be null");
+        }
+        return path.toAbsolutePath().normalize();
+    }
+
+    public boolean containsParentTraversal(Path path) {
+        if (path == null) {
+            return false;
+        }
+        for (Path part : path) {
+            if ("..".equals(part.toString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Path requirePathWithinBase(Path candidatePath, Path basePath) {
+        if (basePath == null) {
+            throw new IllegalArgumentException("Base path cannot be null");
+        }
+        if (containsParentTraversal(candidatePath)) {
+            throw new IllegalArgumentException("Path contains traversal segments");
+        }
+
+        Path normalizedBase = normalizeAbsolutePath(basePath);
+        Path normalizedCandidate = normalizeAbsolutePath(candidatePath);
+        if (!normalizedCandidate.startsWith(normalizedBase)) {
+            throw new IllegalArgumentException("Resolved path escapes configured base path");
+        }
+
+        validateRealPathAnchorWithinBase(normalizedCandidate, normalizedBase);
+        return normalizedCandidate;
+    }
+
+    public Path resolvePathWithinBase(Path basePath, String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IllegalArgumentException("Relative path cannot be blank");
+        }
+
+        Path normalizedBase = normalizeAbsolutePath(basePath);
+        Path normalizedRelative = Path.of(relativePath).normalize();
+        if (normalizedRelative.isAbsolute() || containsParentTraversal(normalizedRelative)) {
+            throw new IllegalArgumentException("Relative path contains invalid traversal or absolute segments");
+        }
+
+        Path resolved = normalizedBase.resolve(normalizedRelative).normalize();
+        return requirePathWithinBase(resolved, normalizedBase);
+    }
+
+    private void validateRealPathAnchorWithinBase(Path normalizedCandidate, Path normalizedBase) {
+        try {
+            if (!Files.exists(normalizedBase)) {
+                return;
+            }
+
+            Path realBase = normalizedBase.toRealPath();
+            Path existingAnchor = Files.exists(normalizedCandidate)
+                    ? normalizedCandidate
+                    : normalizedCandidate.getParent();
+            if (existingAnchor == null || !Files.exists(existingAnchor)) {
+                return;
+            }
+
+            Path realAnchor = existingAnchor.toRealPath();
+            if (!realAnchor.startsWith(realBase)) {
+                throw new IllegalArgumentException("Resolved real path escapes configured base path");
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to resolve filesystem path for validation", e);
+        }
+    }
+
     public String getBookFullPath(BookEntity bookEntity) {
         BookFileEntity bookFile = bookEntity.getPrimaryBookFile();
         if (bookFile == null || bookEntity.getLibraryPath() == null) {

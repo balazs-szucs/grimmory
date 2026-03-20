@@ -30,7 +30,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -59,7 +58,8 @@ public class BookDownloadService {
             if (primaryFile == null) {
                 throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(bookId);
             }
-            Path file = Paths.get(FileUtils.getBookFullPath(bookEntity)).toAbsolutePath().normalize();
+            Path libraryRoot = Path.of(bookEntity.getLibraryPath().getPath());
+            Path file = FileUtils.requirePathWithinBase(primaryFile.getFullFilePath(), libraryRoot);
 
             if (!Files.exists(file)) {
                 throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(bookId);
@@ -258,7 +258,9 @@ public class BookDownloadService {
         int compressionPercentage = koboSettings.getConversionImageCompressionPercentage();
         Path tempDir = null;
         try {
-            File inputFile = new File(FileUtils.getBookFullPath(bookEntity));
+            Path libraryRoot = Path.of(bookEntity.getLibraryPath().getPath());
+            Path normalizedInputPath = FileUtils.requirePathWithinBase(primaryFile.getFullFilePath(), libraryRoot);
+            File inputFile = normalizedInputPath.toFile();
             File fileToSend = inputFile;
 
             if (convertCbxToEpub || convertEpubToKepub) {

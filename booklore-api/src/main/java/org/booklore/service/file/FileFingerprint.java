@@ -1,5 +1,7 @@
 package org.booklore.service.file;
 
+import org.booklore.util.FileUtils;
+
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
@@ -14,8 +16,9 @@ public class FileFingerprint {
     public static String generateHash(Path filePath) {
         final long base = 1024L;
         final int blockSize = 1024;
+        Path normalizedFilePath = validateReadableFilePath(filePath);
 
-        try (RandomAccessFile raf = new RandomAccessFile(filePath.toFile(), "r")) {
+        try (RandomAccessFile raf = new RandomAccessFile(normalizedFilePath.toFile(), "r")) {
             MessageDigest md5 = MessageDigest.getInstance("MD5");
             byte[] buffer = new byte[blockSize];
 
@@ -38,7 +41,7 @@ public class FileFingerprint {
             return result.toString();
 
         } catch (IOException | NoSuchAlgorithmException e) {
-            throw new RuntimeException("Failed to compute partial MD5 hash for: " + filePath, e);
+            throw new RuntimeException("Failed to compute partial MD5 hash for input file", e);
         }
     }
 
@@ -47,19 +50,19 @@ public class FileFingerprint {
      * Uses the first audio file's hash combined with the file count.
      */
     public static String generateFolderHash(Path folderPath) {
+        Path normalizedFolderPath = validateReadableFolderPath(folderPath);
         try {
-            if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
-                throw new RuntimeException("Folder does not exist: " + folderPath);
+            List<Path> audioFiles;
+            try (var files = Files.list(normalizedFolderPath)) {
+                audioFiles = files
+                        .filter(Files::isRegularFile)
+                        .filter(p -> isAudioFile(p.getFileName().toString()))
+                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                        .toList();
             }
 
-            List<Path> audioFiles = Files.list(folderPath)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> isAudioFile(p.getFileName().toString()))
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                    .toList();
-
             if (audioFiles.isEmpty()) {
-                throw new RuntimeException("No audio files in folder: " + folderPath);
+                throw new RuntimeException("No audio files found in folder");
             }
 
             // Hash first file and combine with file count for a representative hash
@@ -78,8 +81,40 @@ public class FileFingerprint {
             return result.toString();
 
         } catch (IOException | NoSuchAlgorithmException e) {
-            throw new RuntimeException("Failed to compute folder hash for: " + folderPath, e);
+            throw new RuntimeException("Failed to compute folder hash", e);
         }
+    }
+
+    private static Path validateReadableFilePath(Path filePath) {
+        if (filePath == null) {
+            throw new RuntimeException("File path cannot be null");
+        }
+        if (FileUtils.containsParentTraversal(filePath)) {
+            throw new RuntimeException("Invalid file path: traversal detected");
+        }
+
+        Path normalizedPath = FileUtils.normalizeAbsolutePath(filePath);
+        if (!Files.exists(normalizedPath) || !Files.isRegularFile(normalizedPath)) {
+            throw new RuntimeException("File does not exist or is not a regular file");
+        }
+
+        return normalizedPath;
+    }
+
+    private static Path validateReadableFolderPath(Path folderPath) {
+        if (folderPath == null) {
+            throw new RuntimeException("Folder path cannot be null");
+        }
+        if (FileUtils.containsParentTraversal(folderPath)) {
+            throw new RuntimeException("Invalid folder path: traversal detected");
+        }
+
+        Path normalizedPath = FileUtils.normalizeAbsolutePath(folderPath);
+        if (!Files.exists(normalizedPath) || !Files.isDirectory(normalizedPath)) {
+            throw new RuntimeException("Folder does not exist or is not a directory");
+        }
+
+        return normalizedPath;
     }
 
     private static boolean isAudioFile(String fileName) {
