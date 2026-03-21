@@ -103,12 +103,9 @@ public class BookdropMetadataService {
     }
 
     private boolean hasSearchableMetadata(BookMetadata metadata, BookdropFileEntity entity) {
-        // Any known identifier (cross-provider or provider-specific) enables a precise lookup
         if (hasAnyKnownIdentifier(metadata)) {
             return true;
         }
-        // Without an identifier, the title must be genuine — not derived from the filename fallback.
-        // Use strip+equalsIgnoreCase to handle any whitespace or case normalization during extraction.
         String title = metadata.getTitle();
         String filenameFallback = FilenameUtils.getBaseName(entity.getFileName());
         return title != null && !title.isBlank()
