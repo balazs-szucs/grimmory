@@ -16,7 +16,7 @@ import java.util.Set;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamicUpdate  // Many columns with locked fields; only UPDATE what changed
+@DynamicUpdate
 @Table(name = "comic_metadata")
 public class ComicMetadataEntity {
 

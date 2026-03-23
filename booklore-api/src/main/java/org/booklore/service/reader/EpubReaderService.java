@@ -652,7 +652,6 @@ public class EpubReaderService {
             throw new FileNotFoundException("Entry not found: " + entryPath);
         }
 
-        // Create a fresh DocumentBuilder — avoids ThreadLocal accumulation with virtual threads
         DocumentBuilder builder = createDocumentBuilder();
         try (InputStream is = zipFile.getInputStream(entry)) {
             return builder.parse(is);
