@@ -2,6 +2,7 @@ package org.booklore.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.List;
 import java.util.Objects;
@@ -41,6 +42,7 @@ public class AuthorEntity {
     private boolean photoLocked;
 
     @ManyToMany(mappedBy = "authors", fetch = FetchType.LAZY)
+    @BatchSize(size = 20)
     private List<BookMetadataEntity> bookMetadataEntityList;
 
     @Override

@@ -31,13 +31,13 @@ public class LibraryEntity {
     @Convert(converter = SortConverter.class)
     private Sort sort;
 
-    @OneToMany(mappedBy = "library", orphanRemoval = true)
+    @OneToMany(mappedBy = "library", orphanRemoval = true, fetch = FetchType.LAZY)
     private List<BookEntity> bookEntities;
 
     @OneToMany(mappedBy = "library", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<LibraryPathEntity> libraryPaths;
 
-    @ManyToMany(mappedBy = "libraries")
+    @ManyToMany(mappedBy = "libraries", fetch = FetchType.LAZY)
     private List<BookLoreUserEntity> users;
 
     private boolean watch;

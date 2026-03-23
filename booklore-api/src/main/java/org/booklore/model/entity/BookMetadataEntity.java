@@ -4,9 +4,8 @@ import org.booklore.util.BookUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.DynamicUpdate;
-import org.hibernate.annotations.Fetch;
-import org.hibernate.annotations.FetchMode;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,7 +20,7 @@ import java.util.Set;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@DynamicUpdate  // 93+ columns; only include changed columns in UPDATE SQL
+@DynamicUpdate
 @Table(name = "book_metadata")
 public class BookMetadataEntity {
 
@@ -372,7 +371,7 @@ public class BookMetadataEntity {
             name = "book_metadata_author_mapping",
             joinColumns = @JoinColumn(name = "book_id"),
             inverseJoinColumns = @JoinColumn(name = "author_id"))
-    @Fetch(FetchMode.SUBSELECT)
+    @BatchSize(size = 20)
     @OrderColumn(name = "sort_order")
     private List<AuthorEntity> authors;
 
@@ -382,7 +381,7 @@ public class BookMetadataEntity {
             joinColumns = @JoinColumn(name = "book_id"),
             inverseJoinColumns = @JoinColumn(name = "category_id")
     )
-    @Fetch(FetchMode.SUBSELECT)
+    @BatchSize(size = 20)
     private Set<CategoryEntity> categories;
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
@@ -391,7 +390,7 @@ public class BookMetadataEntity {
             joinColumns = @JoinColumn(name = "book_id"),
             inverseJoinColumns = @JoinColumn(name = "mood_id")
     )
-    @Fetch(FetchMode.SUBSELECT)
+    @BatchSize(size = 20)
     private Set<MoodEntity> moods;
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
@@ -400,11 +399,11 @@ public class BookMetadataEntity {
             joinColumns = @JoinColumn(name = "book_id"),
             inverseJoinColumns = @JoinColumn(name = "tag_id")
     )
-    @Fetch(FetchMode.SUBSELECT)
+    @BatchSize(size = 20)
     private Set<TagEntity> tags;
 
     @OneToMany(mappedBy = "bookMetadata", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @Fetch(FetchMode.SUBSELECT)
+    @BatchSize(size = 20)
     @Builder.Default
     private Set<BookReviewEntity> reviews = new HashSet<>();
 

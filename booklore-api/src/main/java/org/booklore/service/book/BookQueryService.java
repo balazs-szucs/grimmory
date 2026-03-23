@@ -4,15 +4,17 @@ import lombok.RequiredArgsConstructor;
 import org.booklore.mapper.v2.BookMapperV2;
 import org.booklore.model.dto.Book;
 import org.booklore.model.dto.BookMetadata;
+import org.booklore.model.dto.BookRecommendationLite;
 import org.booklore.model.dto.ComicMetadata;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.restriction.ContentRestrictionService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
@@ -35,6 +37,24 @@ public class BookQueryService {
         return mapBooksToDto(books, includeDescription, userId, !includeDescription);
     }
 
+    public Page<Book> getAllBooksPaged(Pageable pageable) {
+        Page<BookEntity> page = bookRepository.findAllWithMetadataPage(pageable);
+        return page.map(book -> mapBookToDto(book, false, null, true));
+    }
+
+    public Page<Book> getAllBooksByLibraryIdsPaged(Collection<Long> libraryIds, Long userId, Pageable pageable) {
+        Page<BookEntity> page = bookRepository.findAllWithMetadataByLibraryIdsPage(libraryIds, pageable);
+        return page.map(book -> mapBookToDto(book, false, userId, true));
+    }
+
+    public List<BookEntity> getAllFullBookEntitiesBatch(Pageable pageable) {
+        return bookRepository.findAllFullBooksBatch(pageable);
+    }
+
+    public long countAllNonDeleted() {
+        return bookRepository.countNonDeleted();
+    }
+
     public List<BookEntity> findAllWithMetadataByIds(Set<Long> bookIds) {
         return bookRepository.findAllWithMetadataByIds(bookIds);
     }
@@ -50,6 +70,22 @@ public class BookQueryService {
     @Transactional
     public void saveAll(List<BookEntity> books) {
         bookRepository.saveAll(books);
+    }
+
+    @Transactional
+    public void saveRecommendationsInBatches(Map<Long, Set<BookRecommendationLite>> recommendations, int batchSize) {
+        List<Long> bookIds = new ArrayList<>(recommendations.keySet());
+        for (int i = 0; i < bookIds.size(); i += batchSize) {
+            List<Long> batchIds = bookIds.subList(i, Math.min(i + batchSize, bookIds.size()));
+            List<BookEntity> batch = bookRepository.findAllById(batchIds);
+            for (BookEntity book : batch) {
+                Set<BookRecommendationLite> recs = recommendations.get(book.getId());
+                if (recs != null) {
+                    book.setSimilarBooksJson(recs);
+                }
+            }
+            bookRepository.saveAll(batch);
+        }
     }
 
     private List<Book> mapBooksToDto(List<BookEntity> books, boolean includeDescription, Long userId, boolean stripForListView) {

@@ -31,6 +31,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -101,6 +103,38 @@ public class BookService {
         });
 
         return books;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Book> getBookDTOsPaged(Pageable pageable) {
+        BookLoreUser user = authenticationService.getAuthenticatedUser();
+        boolean isAdmin = user.getPermissions().isAdmin();
+
+        Page<Book> bookPage = isAdmin
+                ? bookQueryService.getAllBooksPaged(pageable)
+                : bookQueryService.getAllBooksByLibraryIdsPaged(
+                getUserLibraryIds(user),
+                user.getId(),
+                pageable
+        );
+
+        Set<Long> bookIds = bookPage.getContent().stream().map(Book::getId).collect(Collectors.toSet());
+        Map<Long, UserBookProgressEntity> progressMap =
+                readingProgressService.fetchUserProgress(user.getId(), bookIds);
+        Map<Long, UserBookFileProgressEntity> fileProgressMap =
+                readingProgressService.fetchUserFileProgress(user.getId(), bookIds);
+
+        bookPage.getContent().forEach(book -> {
+            readingProgressService.enrichBookWithProgress(
+                    book,
+                    progressMap.get(book.getId()),
+                    fileProgressMap.get(book.getId())
+            );
+            Set<Shelf> filtered = filterShelvesByUserId(book.getShelves(), user.getId());
+            book.setShelves(filtered != null && filtered.isEmpty() ? null : filtered);
+        });
+
+        return bookPage;
     }
 
     private Set<Long> getUserLibraryIds(BookLoreUser user) {
