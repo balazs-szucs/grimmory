@@ -84,6 +84,8 @@ public interface KoboSnapshotBookRepository extends JpaRepository<KoboSnapshotBo
                   AND prev.snapshot.id = :prevSnapshotId
                   AND curr.fileHash = prev.fileHash
                   AND (curr.metadataUpdatedAt = prev.metadataUpdatedAt OR (curr.metadataUpdatedAt IS NULL AND prev.metadataUpdatedAt IS NULL))
+                  AND (curr.coverHash = prev.coverHash OR (curr.coverHash IS NULL AND prev.coverHash IS NULL))
+                  AND (curr.readProgressLastModified = prev.readProgressLastModified OR (curr.readProgressLastModified IS NULL AND prev.readProgressLastModified IS NULL))
             """)
     List<KoboSnapshotBookEntity> findUnchangedBooksBetweenSnapshots(
             @Param("prevSnapshotId") String prevSnapshotId,
@@ -102,9 +104,41 @@ public interface KoboSnapshotBookRepository extends JpaRepository<KoboSnapshotBo
                       curr.fileHash <> prev.fileHash
                       OR (curr.metadataUpdatedAt <> prev.metadataUpdatedAt AND curr.metadataUpdatedAt IS NOT NULL AND prev.metadataUpdatedAt IS NOT NULL)
                       OR (curr.metadataUpdatedAt IS NOT NULL AND prev.metadataUpdatedAt IS NULL)
+                      OR (curr.coverHash <> prev.coverHash AND curr.coverHash IS NOT NULL AND prev.coverHash IS NOT NULL)
+                      OR (curr.coverHash IS NOT NULL AND prev.coverHash IS NULL)
+                      OR (curr.bookFileSize <> prev.bookFileSize AND curr.bookFileSize IS NOT NULL AND prev.bookFileSize IS NOT NULL)
+                      OR (curr.bookFileSize IS NOT NULL AND prev.bookFileSize IS NULL)
                   )
             """)
     Page<KoboSnapshotBookEntity> findChangedBooks(
+            @Param("prevSnapshotId") String prevSnapshotId,
+            @Param("currSnapshotId") String currSnapshotId,
+            Pageable pageable
+    );
+
+    /**
+     * Find books that exist in both snapshots, are unchanged in file/metadata/cover,
+     * but whose read progress has changed. Mirrors Komga's findBooksReadProgressChanged.
+     */
+    @Query("""
+                SELECT curr
+                FROM KoboSnapshotBookEntity curr
+                JOIN KoboSnapshotBookEntity prev
+                    ON curr.bookId = prev.bookId
+                WHERE curr.snapshot.id = :currSnapshotId
+                  AND prev.snapshot.id = :prevSnapshotId
+                  AND curr.synced = false
+                  AND curr.fileHash = prev.fileHash
+                  AND (curr.metadataUpdatedAt = prev.metadataUpdatedAt OR (curr.metadataUpdatedAt IS NULL AND prev.metadataUpdatedAt IS NULL))
+                  AND (curr.coverHash = prev.coverHash OR (curr.coverHash IS NULL AND prev.coverHash IS NULL))
+                  AND (
+                      (curr.readProgressLastModified <> prev.readProgressLastModified
+                          AND curr.readProgressLastModified IS NOT NULL AND prev.readProgressLastModified IS NOT NULL)
+                      OR (curr.readProgressLastModified IS NOT NULL AND prev.readProgressLastModified IS NULL)
+                      OR (curr.readProgressLastModified IS NULL AND prev.readProgressLastModified IS NOT NULL)
+                  )
+            """)
+    Page<KoboSnapshotBookEntity> findBooksReadProgressChanged(
             @Param("prevSnapshotId") String prevSnapshotId,
             @Param("currSnapshotId") String currSnapshotId,
             Pageable pageable

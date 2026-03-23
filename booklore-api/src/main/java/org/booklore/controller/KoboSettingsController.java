@@ -46,4 +46,14 @@ public class KoboSettingsController {
         KoboSyncSettings updated = koboService.updateSettings(settings);
         return ResponseEntity.ok(updated);
     }
+
+    @Operation(summary = "Force full Kobo sync", description = "Force a full resync by deleting all snapshots and generating a new token. Use when Kobo device is out of sync or switching to a new device.")
+    @ApiResponse(responseCode = "200", description = "Full sync initiated successfully")
+    @PostMapping("/force-full-sync")
+    @PreAuthorize("@securityUtil.canSyncKobo() or @securityUtil.isAdmin()")
+    public ResponseEntity<KoboSyncSettings> forceFullSync() {
+        KoboSyncSettings updated = koboService.forceFullSync();
+        log.info("Force full sync initiated for current user");
+        return ResponseEntity.ok(updated);
+    }
 }

@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -27,15 +26,25 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+/**
+ * Kobo Store Proxy - Proxies requests to official Kobo store for hybrid sync.
+ * 
+ * Stability improvements ported from Komga:
+ * - ✅ Graceful fallback on proxy failure
+ * - ✅ Sync token merging (local + Kobo store)
+ * - ✅ Circuit breaker integration (NEW - prevents cascading failures)
+ * - ✅ Improved error logging with full details
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class KoboServerProxy {
 
     private static final Pattern KOBO_API_PREFIX_PATTERN = Pattern.compile("^/api/kobo/[^/]+");
-    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofMinutes(1)).build();
+    private final HttpClient koboHttpClient;  // Injected as bean (matches bean name)
     private final ObjectMapper objectMapper;
     private final BookloreSyncTokenGenerator bookloreSyncTokenGenerator;
+    private final KoboProxyCircuitBreaker circuitBreaker;  // NEW: Circuit breaker integration
 
     private static final Set<String> HEADERS_OUT_INCLUDE = Set.of(
             HttpHeaders.AUTHORIZATION.toLowerCase(),
@@ -54,6 +63,12 @@ public class KoboServerProxy {
     }
 
     public ResponseEntity<JsonNode> proxyCurrentRequest(Object body, boolean includeSyncToken) {
+        // Check circuit breaker before attempting proxy (NEW)
+        if (!circuitBreaker.canExecute()) {
+            log.debug("Kobo proxy circuit breaker is OPEN - skipping proxy request, returning empty response");
+            return ResponseEntity.ok().build();
+        }
+
         HttpServletRequest request = RequestUtils.getCurrentRequest();
         String path = KOBO_API_PREFIX_PATTERN.matcher(request.getRequestURI()).replaceFirst("");
 
@@ -61,7 +76,8 @@ public class KoboServerProxy {
         if (includeSyncToken) {
             syncToken = bookloreSyncTokenGenerator.fromRequestHeaders(request);
             if (syncToken == null || syncToken.getRawKoboSyncToken() == null || syncToken.getRawKoboSyncToken().isBlank()) {
-                //throw new IllegalStateException("Request must include sync token, but none found");
+                log.debug("Proxy request requires sync token but none found, returning empty response");
+                return ResponseEntity.ok().build();
             }
         }
 
@@ -82,15 +98,15 @@ public class KoboServerProxy {
 
             return new ResponseEntity<>(new ByteArrayResource(response.body()), headers, HttpStatus.valueOf(response.statusCode()));
         } catch (Exception e) {
-            log.error("Failed to proxy external Kobo CDN URL", e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to fetch image", e);
+            log.warn("Failed to proxy external Kobo CDN URL: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
         }
     }
 
     private ResponseEntity<JsonNode> executeProxyRequest(HttpServletRequest request, Object body, String path, boolean includeSyncToken, BookloreSyncToken syncToken) {
+        String koboBaseUrl = "https://storeapi.kobo.com";
+        
         try {
-            String koboBaseUrl = "https://storeapi.kobo.com";
-
             String queryString = request.getQueryString();
             String uriString = koboBaseUrl + path;
             if (queryString != null && !queryString.isBlank()) {
@@ -100,11 +116,18 @@ public class KoboServerProxy {
             URI uri = URI.create(uriString);
             log.debug("Kobo proxy URL: {}", uri);
 
-            String bodyString = body != null ? objectMapper.writeValueAsString(body) : "{}";
+            String method = request.getMethod();
+            HttpRequest.BodyPublisher bodyPublisher;
+            if ("GET".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method)) {
+                bodyPublisher = HttpRequest.BodyPublishers.noBody();
+            } else {
+                String bodyString = body != null ? objectMapper.writeValueAsString(body) : "{}";
+                bodyPublisher = HttpRequest.BodyPublishers.ofString(bodyString);
+            }
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(uri)
-                    .timeout(Duration.ofMinutes(1))
-                    .method(request.getMethod(), HttpRequest.BodyPublishers.ofString(bodyString))
+                    .timeout(Duration.ofSeconds(30))
+                    .method(method, bodyPublisher)
                     .header(HttpHeaders.CONTENT_TYPE, "application/json");
 
             Collections.list(request.getHeaderNames()).forEach(headerName -> {
@@ -120,7 +143,7 @@ public class KoboServerProxy {
             }
 
             HttpRequest httpRequest = builder.build();
-            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = koboHttpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
 
             JsonNode responseBody = response.body() != null && !response.body().isBlank()
                     ? objectMapper.readTree(response.body())
@@ -147,11 +170,34 @@ public class KoboServerProxy {
 
             log.debug("Kobo proxy response status: {}", response.statusCode());
 
+            // Record success with circuit breaker (NEW)
+            if (response.statusCode() >= 500) {
+                circuitBreaker.recordFailure();
+                log.warn("Kobo proxy returned server error ({}), recording failure for circuit breaker", response.statusCode());
+            } else {
+                circuitBreaker.recordSuccess();
+            }
+
             return new ResponseEntity<>(responseBody, responseHeaders, HttpStatus.valueOf(response.statusCode()));
 
+        } catch (InterruptedException e) {
+            // NEW: Improved error logging with full details
+            Thread.currentThread().interrupt();
+            circuitBreaker.recordFailure();
+            log.warn("Kobo proxy request interrupted (method: {}, path: {})", request.getMethod(), path, e);
+            return ResponseEntity.ok().build();
+        } catch (IOException e) {
+            // NEW: Improved error logging with full details
+            circuitBreaker.recordFailure();
+            log.warn("Kobo proxy network error (method: {}, path: {}, uri: {})", 
+                    request.getMethod(), path, koboBaseUrl + path, e);
+            return ResponseEntity.ok().build();
         } catch (Exception e) {
-            log.error("Failed to proxy request to Kobo", e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to proxy request to Kobo", e);
+            // NEW: Improved error logging with full details
+            circuitBreaker.recordFailure();
+            log.warn("Kobo proxy unexpected error (method: {}, path: {})", 
+                    request.getMethod(), path, e);
+            return ResponseEntity.ok().build();
         }
     }
 }

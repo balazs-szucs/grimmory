@@ -9,13 +9,16 @@ import org.booklore.repository.KoboDeletedBookProgressRepository;
 import org.booklore.repository.KoboLibrarySnapshotRepository;
 import org.booklore.repository.KoboSnapshotBookRepository;
 import org.booklore.repository.ShelfRepository;
+import org.booklore.repository.UserBookProgressRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @AllArgsConstructor
@@ -29,6 +32,7 @@ public class KoboLibrarySnapshotService {
     private final KoboDeletedBookProgressRepository koboDeletedBookProgressRepository;
     private final KoboCompatibilityService koboCompatibilityService;
     private final AuthenticationService authenticationService;
+    private final UserBookProgressRepository userBookProgressRepository;
 
     @Transactional(readOnly = true)
     public Optional<KoboLibrarySnapshotEntity> findByIdAndUserId(String id, Long userId) {
@@ -122,6 +126,24 @@ public class KoboLibrarySnapshotService {
         return page;
     }
 
+    /**
+     * Find books whose reading progress has changed between two snapshots.
+     * Mirrors Komga's SyncPointLifecycle.takeBooksReadProgressChanged.
+     */
+    @Transactional
+    public Page<KoboSnapshotBookEntity> getBooksReadProgressChanged(String previousSnapshotId, String currentSnapshotId, Pageable pageable) {
+        Page<KoboSnapshotBookEntity> page = koboSnapshotBookRepository.findBooksReadProgressChanged(previousSnapshotId, currentSnapshotId, pageable);
+        List<Long> bookIds = page.getContent().stream()
+                .map(KoboSnapshotBookEntity::getBookId)
+                .toList();
+
+        if (!bookIds.isEmpty()) {
+            koboSnapshotBookRepository.markBooksSynced(currentSnapshotId, bookIds);
+        }
+
+        return page;
+    }
+
     private ShelfEntity getKoboShelf(Long userId) {
         return shelfRepository
                 .findByUserIdAndName(userId, ShelfType.KOBO.getName())
@@ -133,17 +155,47 @@ public class KoboLibrarySnapshotService {
     private List<KoboSnapshotBookEntity> mapBooksToKoboSnapshotBook(ShelfEntity shelf, KoboLibrarySnapshotEntity snapshot) {
         Long userId = snapshot.getUserId();
 
-        return shelf.getBookEntities().stream()
+        List<BookEntity> eligibleBooks = shelf.getBookEntities().stream()
                 .filter(book -> isBookOwnedByUser(book, userId))
                 .filter(koboCompatibilityService::isBookSupportedForKobo)
+                .toList();
+
+        // Batch-load user progress for all eligible books to populate readProgressLastModified
+        Set<Long> bookIds = eligibleBooks.stream().map(BookEntity::getId).collect(Collectors.toSet());
+        Map<Long, UserBookProgressEntity> progressByBookId = userBookProgressRepository
+                .findByUserIdAndBookIdIn(userId, bookIds).stream()
+                .collect(Collectors.toMap(p -> p.getBook().getId(), Function.identity(), (a, b) -> a));
+
+        return eligibleBooks.stream()
                 .map(book -> {
                     KoboSnapshotBookEntity snapshotBook = mapper.toKoboSnapshotBook(book);
                     snapshotBook.setSnapshot(snapshot);
                     snapshotBook.setFileHash(book.getPrimaryBookFile().getCurrentHash());
                     snapshotBook.setMetadataUpdatedAt(book.getMetadataUpdatedAt());
+
+                    // Populate read progress last modified for delta sync detection
+                    UserBookProgressEntity progress = progressByBookId.get(book.getId());
+                    if (progress != null) {
+                        Instant readProgressModified = latestOf(
+                                progress.getLastReadTime(),
+                                progress.getKoboProgressReceivedTime(),
+                                progress.getReadStatusModifiedTime()
+                        );
+                        snapshotBook.setReadProgressLastModified(readProgressModified);
+                    }
                     return snapshotBook;
                 })
                 .collect(Collectors.toList());
+    }
+
+    private Instant latestOf(Instant... instants) {
+        Instant latest = null;
+        for (Instant instant : instants) {
+            if (instant != null && (latest == null || instant.isAfter(latest))) {
+                latest = instant;
+            }
+        }
+        return latest;
     }
 
     private boolean isBookOwnedByUser(BookEntity book, Long userId) {
@@ -160,6 +212,19 @@ public class KoboLibrarySnapshotService {
 
     public void deleteById(String id) {
         koboLibrarySnapshotRepository.deleteById(id);
+    }
+
+    /**
+     * Delete all snapshots for a user (used for force full sync).
+     * Ported from Komga's force full sync feature.
+     */
+    @Transactional
+    public void deleteAllSnapshotsForUser(Long userId) {
+        List<KoboLibrarySnapshotEntity> snapshots = koboLibrarySnapshotRepository.findByUserId(userId);
+        for (KoboLibrarySnapshotEntity snapshot : snapshots) {
+            koboLibrarySnapshotRepository.deleteById(snapshot.getId());
+        }
+        log.debug("Deleted {} snapshots for user {}", snapshots.size(), userId);
     }
 
 }

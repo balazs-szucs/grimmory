@@ -17,6 +17,7 @@ import org.booklore.model.enums.ReadStatus;
 import org.booklore.repository.*;
 import org.booklore.service.hardcover.HardcoverSyncService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -57,7 +58,7 @@ public class KoboReadingStateService {
     private final KoboReadingStateBuilder readingStateBuilder;
     private final HardcoverSyncService hardcoverSyncService;
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public KoboReadingStateResponse saveReadingState(List<KoboReadingState> readingStates) {
         normalizePutTimestamps(readingStates);
         List<KoboReadingState> koboReadingStates = saveAll(readingStates);
@@ -360,17 +361,20 @@ public class KoboReadingStateService {
         try {
             Instant instant = Instant.parse(trimmed).truncatedTo(ChronoUnit.SECONDS);
             return KOBO_TIMESTAMP_FORMAT.format(instant);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            // Try next format
         }
         try {
             OffsetDateTime offsetDateTime = OffsetDateTime.parse(trimmed);
             return KOBO_TIMESTAMP_FORMAT.format(offsetDateTime.toInstant().truncatedTo(ChronoUnit.SECONDS));
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            // Try next format
         }
         try {
             LocalDateTime localDateTime = LocalDateTime.parse(trimmed, LOCAL_TIMESTAMP_FORMAT);
             return KOBO_TIMESTAMP_FORMAT.format(localDateTime.toInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS));
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.debug("Could not parse timestamp value '{}', returning as-is", trimmed);
         }
         return value;
     }

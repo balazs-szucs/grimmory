@@ -24,17 +24,37 @@ public class BookloreSyncTokenGenerator {
 
     public BookloreSyncToken fromBase64(String base64Token) {
         try {
+            // Check for a BookLore token
             if (base64Token.startsWith(BOOKLORE_TOKEN_PREFIX)) {
                 byte[] decoded = base64Decoder.decode(base64Token.substring(BOOKLORE_TOKEN_PREFIX.length()));
                 return objectMapper.readValue(decoded, BookloreSyncToken.class);
             }
+
+            // Check for a Calibre-Web token (single base64 string without dots)
+            if (!base64Token.contains(".")) {
+                try {
+                    var json = objectMapper.readTree(base64Decoder.decode(base64Token));
+                    var dataNode = json.get("data");
+                    if (dataNode != null) {
+                        var rawTokenNode = dataNode.get("raw_kobo_store_token");
+                        if (rawTokenNode != null) {
+                            return BookloreSyncToken.builder()
+                                    .rawKoboSyncToken(rawTokenNode.asText())
+                                    .build();
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse potential Calibre-Web token");
+                }
+            }
+
+            // Check for a Kobo store token (format: base64.base64)
             if (base64Token.contains(".")) {
                 return BookloreSyncToken.builder()
                         .rawKoboSyncToken(base64Token)
                         .build();
             }
         } catch (Exception ignored) {
-
         }
         return new BookloreSyncToken();
     }

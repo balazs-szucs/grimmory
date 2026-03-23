@@ -112,6 +112,21 @@ public class KoboEntitlementService {
                 .toList();
     }
 
+    /**
+     * Generate ChangedReadingState DTOs for books identified by snapshot diff.
+     * Mirrors Komga's pattern of sending ChangedReadingState for books with changed reading progress.
+     */
+    public List<ChangedReadingState> generateChangedReadingStatesForBooks(Set<Long> bookIds, Long userId) {
+        if (bookIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<UserBookProgressEntity> progressEntries = progressRepository.findByUserIdAndBookIdIn(userId, bookIds);
+        if (progressEntries.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return generateChangedReadingStates(progressEntries);
+    }
+
     public List<KoboTagWrapper> generateTags() {
         Long userId = authenticationService.getAuthenticatedUser().getId();
         Set<Long> koboBookIDs = shelfRepository.findByUserIdAndName(userId, ShelfType.KOBO.getName())

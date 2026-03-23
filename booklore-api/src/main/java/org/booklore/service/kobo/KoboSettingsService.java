@@ -28,6 +28,7 @@ public class KoboSettingsService {
     private final AuthenticationService authenticationService;
     private final ShelfService shelfService;
     private final HardcoverSyncSettingsService hardcoverSyncSettingsService;
+    private final KoboLibrarySnapshotService koboLibrarySnapshotService;  // Added for forceFullSync
 
     @Transactional(readOnly = true)
     public KoboSyncSettings getCurrentUserSettings() {
@@ -85,6 +86,9 @@ public class KoboSettingsService {
 
         entity.setAutoAddToShelf(settings.isAutoAddToShelf());
         entity.setTwoWayProgressSync(settings.isTwoWayProgressSync());
+        if (settings.getSyncItemLimit() > 0) {
+            entity.setSyncItemLimit(settings.getSyncItemLimit());
+        }
 
         repository.save(entity);
         return mapToDto(entity, hardcoverSyncSettingsService.getSettingsForUserId(user.getId()));
@@ -128,10 +132,12 @@ public class KoboSettingsService {
         dto.setUserId(entity.getUserId().toString());
         dto.setToken(entity.getToken());
         dto.setSyncEnabled(entity.isSyncEnabled());
+        dto.setKoboProxyEnabled(entity.isKoboProxyEnabled());  // NEW: Map proxy enabled
         dto.setProgressMarkAsReadingThreshold(entity.getProgressMarkAsReadingThreshold());
         dto.setProgressMarkAsFinishedThreshold(entity.getProgressMarkAsFinishedThreshold());
         dto.setAutoAddToShelf(entity.isAutoAddToShelf());
         dto.setTwoWayProgressSync(entity.isTwoWayProgressSync());
+        dto.setSyncItemLimit(entity.getSyncItemLimit());
         if (hardcoverSettings != null) {
             dto.setHardcoverApiKey(hardcoverSettings.getHardcoverApiKey());
             dto.setHardcoverSyncEnabled(hardcoverSettings.isHardcoverSyncEnabled());
@@ -149,6 +155,59 @@ public class KoboSettingsService {
         return repository.findByUserId(userId)
                 .map(this::mapToDto)
                 .orElse(null);
+    }
+
+    /**
+     * Check if Kobo proxy is enabled for current user.
+     * Used by KoboThumbnailService for CDN redirect.
+     */
+    @Transactional(readOnly = true)
+    public boolean isKoboProxyEnabled() {
+        BookLoreUser user = authenticationService.getAuthenticatedUser();
+        return repository.findByUserId(user.getId())
+                .map(KoboUserSettingsEntity::isKoboProxyEnabled)
+                .orElse(false);
+    }
+
+    /**
+     * Force full Kobo sync by resetting sync state.
+     * Deletes all snapshots and generates a new token, forcing the next sync to be a full initial sync.
+     * Ported from Komga's "Force full kobo sync" feature.
+     * 
+     * Use case: When Kobo device becomes out of sync or user switches to a new device.
+     * 
+     * @param token Optional token to target a specific device. If null, regenerates token for all devices.
+     * @return Updated settings with new token
+     */
+    @Transactional
+    public KoboSyncSettings forceFullSync(String token) {
+        BookLoreUser user = authenticationService.getAuthenticatedUser();
+        
+        // Generate new token (invalidates old sync tokens)
+        String newToken = generateToken();
+        
+        // Delete all snapshots for this user (forces full resync)
+        koboLibrarySnapshotService.deleteAllSnapshotsForUser(user.getId());
+        
+        // Update entity with new token
+        KoboUserSettingsEntity entity = repository.findByUserId(user.getId())
+                .orElseGet(() -> initDefaultSettings(user.getId()));
+        entity.setToken(newToken);
+        
+        repository.save(entity);
+        
+        log.info("Forced full Kobo sync for user {} (new token generated, all snapshots deleted)", user.getId());
+        
+        return mapToDto(entity, hardcoverSyncSettingsService.getSettingsForUserId(user.getId()));
+    }
+    
+    /**
+     * Force full Kobo sync for current user (all devices).
+     * Convenience method that regenerates token for all devices.
+     */
+    @Transactional
+    public KoboSyncSettings forceFullSync() {
+        return forceFullSync(null);
     }
 
 }

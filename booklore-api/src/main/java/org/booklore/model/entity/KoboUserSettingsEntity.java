@@ -26,6 +26,10 @@ public class KoboUserSettingsEntity {
     @Builder.Default
     private boolean syncEnabled = true;
 
+    @Column(name = "kobo_proxy_enabled")
+    @Builder.Default
+    private boolean koboProxyEnabled = false;  // NEW: Proxy to Kobo store (ported from Komga)
+
     @Column(name = "progress_mark_as_reading_threshold")
     @Builder.Default
     private Float progressMarkAsReadingThreshold = 1f;
@@ -48,4 +52,8 @@ public class KoboUserSettingsEntity {
     @Column(name = "two_way_progress_sync")
     @Builder.Default
     private boolean twoWayProgressSync = false;
+
+    @Column(name = "sync_item_limit")
+    @Builder.Default
+    private int syncItemLimit = 100;
 }

@@ -12,5 +12,7 @@ public interface BookEntityToKoboSnapshotBookMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "bookId", expression = "java(book.getId())")
     @Mapping(target = "synced", constant = "false")
+    @Mapping(target = "coverHash", expression = "java(book.getBookCoverHash())")
+    @Mapping(target = "bookFileSize", expression = "java(book.getPrimaryBookFile() != null ? book.getPrimaryBookFile().getFileSizeKb() : null)")
     KoboSnapshotBookEntity toKoboSnapshotBook(BookEntity book);
 }

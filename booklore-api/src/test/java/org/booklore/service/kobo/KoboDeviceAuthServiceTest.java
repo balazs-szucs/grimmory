@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import tools.jackson.databind.ObjectMapper;
@@ -20,10 +21,13 @@ class KoboDeviceAuthServiceTest {
     private KoboDeviceAuthService service;
     private ObjectMapper objectMapper;
 
+    @Mock
+    private KoboServerProxy koboServerProxy;
+
     @BeforeEach
     void setUp() {
         objectMapper = JsonMapper.builder().build();
-        service = new KoboDeviceAuthService(objectMapper);
+        service = new KoboDeviceAuthService(objectMapper, koboServerProxy);
     }
 
     @Test

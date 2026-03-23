@@ -36,7 +36,6 @@ import java.util.regex.Pattern;
 public class KoboController {
 
     private static final Pattern KOBO_V1_PRODUCTS_NEXTREAD_PATTERN = Pattern.compile(".*/v1/products/\\d+/nextread.*");
-    private String token;
     private final KoboServerProxy koboServerProxy;
     private final KoboInitializationService koboInitializationService;
     private final BookService bookService;
@@ -48,22 +47,17 @@ public class KoboController {
     private final ShelfService shelfService;
     private final BookDownloadService bookDownloadService;
 
-    @ModelAttribute
-    public void captureToken(@PathVariable("token") String token) {
-        this.token = token;
-    }
-
     @Operation(summary = "Initialize Kobo resources", description = "Initialize Kobo resources for the device.")
     @ApiResponse(responseCode = "200", description = "Initialization successful")
     @GetMapping("/v1/initialization")
-    public ResponseEntity<KoboResources> initialization() throws JacksonException {
+    public ResponseEntity<KoboResources> initialization(@PathVariable("token") String token) throws JacksonException {
         return koboInitializationService.initialize(token);
     }
 
     @Operation(summary = "Sync Kobo library", description = "Sync the user's Kobo library.")
     @ApiResponse(responseCode = "200", description = "Library synced successfully")
     @GetMapping("/v1/library/sync")
-    public ResponseEntity<?> syncLibrary(@AuthenticationPrincipal BookLoreUser user) {
+    public ResponseEntity<?> syncLibrary(@AuthenticationPrincipal BookLoreUser user, @PathVariable("token") String token) {
         return koboLibrarySyncService.syncLibrary(user, token);
     }
 
@@ -130,10 +124,32 @@ public class KoboController {
         return koboDeviceAuthService.authenticateDevice(body);
     }
 
+    @Operation(summary = "Refresh Kobo authentication token", description = "Refresh authentication token for Kobo device (firmware 4.38+).")
+    @ApiResponse(responseCode = "200", description = "Token refreshed successfully")
+    @PostMapping("/v1/auth/refresh")
+    public ResponseEntity<?> authRefresh(
+            @PathVariable("token") String token,
+            @RequestBody(required = false) JsonNode body) {
+        // Try proxy to real Kobo store first (firmware 4.38+ requirement)
+        try {
+            var proxyResponse = koboServerProxy.proxyCurrentRequest(body, false);
+            if (proxyResponse != null && proxyResponse.getStatusCode().is2xxSuccessful()) {
+                log.debug("Auth refresh proxied successfully to Kobo store");
+                return proxyResponse;
+            }
+        } catch (Exception e) {
+            log.debug("Auth refresh proxy failed, returning fallback: {}", e.getMessage());
+        }
+        // Fallback: return 200 with minimal response to keep device happy
+        // Device will continue syncing even with empty response
+        log.debug("Auth refresh returning fallback response");
+        return ResponseEntity.ok().build();
+    }
+
     @Operation(summary = "Get book metadata", description = "Retrieve metadata for a book in the Kobo library.")
     @ApiResponse(responseCode = "200", description = "Metadata returned successfully")
     @GetMapping("/v1/library/{bookId}/metadata")
-    public ResponseEntity<?> getBookMetadata(@Parameter(description = "Book ID") @PathVariable String bookId) {
+    public ResponseEntity<?> getBookMetadata(@PathVariable("token") String token, @Parameter(description = "Book ID") @PathVariable String bookId) {
         if (StringUtils.isNumeric(bookId)) {
             return ResponseEntity.ok(List.of(koboEntitlementService.getMetadataForBook(Long.parseLong(bookId), token)));
         } else {

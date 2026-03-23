@@ -16,6 +16,7 @@ import org.booklore.repository.KoboDeletedBookProgressRepository;
 import org.booklore.repository.KoboLibrarySnapshotRepository;
 import org.booklore.repository.KoboSnapshotBookRepository;
 import org.booklore.repository.ShelfRepository;
+import org.booklore.repository.UserBookProgressRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +58,9 @@ class KoboLibrarySnapshotServiceTest {
 
     @Mock
     private AuthenticationService authenticationService;
+
+    @Mock
+    private UserBookProgressRepository userBookProgressRepository;
 
     @InjectMocks
     private KoboLibrarySnapshotService service;

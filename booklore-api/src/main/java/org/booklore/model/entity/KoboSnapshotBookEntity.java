@@ -32,6 +32,15 @@ public class KoboSnapshotBookEntity {
     @Column(name = "metadata_updated_at")
     private Instant metadataUpdatedAt;
 
+    @Column(name = "cover_hash")
+    private String coverHash;
+
+    @Column(name = "book_file_size")
+    private Long bookFileSize;
+
+    @Column(name = "read_progress_last_modified")
+    private Instant readProgressLastModified;
+
     @Column(nullable = false)
     @Builder.Default
     private boolean synced = false;

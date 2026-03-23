@@ -22,7 +22,8 @@ public class KoboLibrarySnapshotEntity {
     private Long userId;
 
     @Column(name = "created_date", nullable = false)
-    private LocalDateTime createdDate;
+    @Builder.Default
+    private LocalDateTime createdDate = LocalDateTime.now();
 
     @OneToMany(mappedBy = "snapshot", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<KoboSnapshotBookEntity> books;

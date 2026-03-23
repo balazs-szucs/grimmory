@@ -37,11 +37,17 @@ public class KoboInitializationService {
 
         if (resources instanceof ObjectNode objectNode) {
             UriComponentsBuilder baseBuilder = koboUrlBuilder.baseBuilder();
+            String baseUrl = baseBuilder.build().toUriString();
 
-            objectNode.put("image_host", baseBuilder.build().toUriString());
+            objectNode.put("image_host", baseUrl);
             objectNode.put("image_url_template", koboUrlBuilder.imageUrlTemplate(token));
             objectNode.put("image_url_quality_template", koboUrlBuilder.imageUrlQualityTemplate(token));
             objectNode.put("library_sync", koboUrlBuilder.librarySyncUrl(token));
+            
+            // CRITICAL: Set reading_services_host to enable two-way progress sync
+            // Without this, Kobo devices send reading progress to Kobo's servers instead of BookLore
+            // See: https://komga.org/docs/guides/kobo/
+            objectNode.put("reading_services_host", baseUrl);
         }
 
         return ResponseEntity.ok()

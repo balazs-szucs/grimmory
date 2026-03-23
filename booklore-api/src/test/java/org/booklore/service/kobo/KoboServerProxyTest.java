@@ -264,14 +264,13 @@ class KoboServerProxyTest {
     }
 
     @Test
-    void proxyExternalUrl_withException_shouldThrowResponseStatusException() throws Exception {
+    void proxyExternalUrl_withException_shouldReturnNotFound() throws Exception {
         String testUrl = "https://cdn.kobo.com/image123.jpg";
-        
+
         when(httpClient.<byte[]>send(any(HttpRequest.class), any()))
                 .thenThrow(new java.io.IOException("Network error"));
 
-        assertThatThrownBy(() -> koboServerProxy.proxyExternalUrl(testUrl))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Failed to fetch image");
+        ResponseEntity<Resource> response = koboServerProxy.proxyExternalUrl(testUrl);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 }
