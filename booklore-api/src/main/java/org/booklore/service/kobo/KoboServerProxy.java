@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -41,6 +42,7 @@ import java.util.regex.Pattern;
 public class KoboServerProxy {
 
     private static final Pattern KOBO_API_PREFIX_PATTERN = Pattern.compile("^/api/kobo/[^/]+");
+    
     private final HttpClient koboHttpClient;  // Injected as bean (matches bean name)
     private final ObjectMapper objectMapper;
     private final BookloreSyncTokenGenerator bookloreSyncTokenGenerator;
@@ -91,7 +93,7 @@ public class KoboServerProxy {
                     .GET()
                     .build();
 
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> response = koboHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.IMAGE_JPEG);

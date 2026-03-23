@@ -2,11 +2,7 @@ package org.booklore.service.kobo;
 
 import tools.jackson.databind.ObjectMapper;
 import org.booklore.model.dto.kobo.KoboHeaders;
-import org.booklore.model.entity.BookEntity;
-import org.booklore.model.entity.BookFileEntity;
-import org.booklore.model.entity.BookLoreUserEntity;
-import org.booklore.model.entity.LibraryEntity;
-import org.booklore.model.entity.ShelfEntity;
+import org.booklore.model.entity.*;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.ShelfType;
 import org.booklore.repository.BookRepository;
@@ -18,13 +14,16 @@ import org.booklore.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -78,35 +77,60 @@ class KoboLibrarySyncServiceContinuationTest {
     @Autowired
     private KoboUserSettingsRepository koboUserSettingsRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private String authToken;
     private ShelfEntity koboShelf;
     private BookLoreUserEntity testUser;
+    private LibraryEntity library;
+    private LibraryPathEntity libraryPath;
 
     @BeforeEach
     void setUp() throws Exception {
+        // Create library first (no path field — uses LibraryPathEntity)
+        library = LibraryEntity.builder()
+                .name("Kobo Test Library")
+                .build();
+        entityManager.persist(library);
+        entityManager.flush();
+
+        // Create library path
+        libraryPath = LibraryPathEntity.builder()
+                .library(library)
+                .path("/test/books")
+                .build();
+        entityManager.persist(libraryPath);
+        entityManager.flush();
+
         // Create test user
-        testUser = new BookLoreUserEntity();
-        testUser.setEmail("kobo-test@example.com");
-        testUser.setName("Kobo Test User");
-        testUser = userRepository.save(testUser);
-        
-        // Create library
-        LibraryEntity library = new LibraryEntity();
-        library.setName("Kobo Test Library");
-        library.setPath("/test/books");
-        library = libraryRepository.save(library);
-        
-        // Add user to library
-        library.getUsers().add(testUser);
-        libraryRepository.save(library);
+        testUser = BookLoreUserEntity.builder()
+                .email("kobo-test@example.com")
+                .username("kobotest")
+                .passwordHash("$2a$10$dummyhash")
+                .name("Kobo Test User")
+                .createdAt(java.time.LocalDateTime.now())
+                .isDefaultPassword(false)
+                .libraries(new java.util.HashSet<>())
+                .build();
+        entityManager.persist(testUser);
+        entityManager.flush();
+
+        // Associate user with library (owning side is user)
+        testUser.getLibraries().add(library);
+        entityManager.merge(testUser);
+        entityManager.flush();
         
         // Create or get Kobo shelf
         koboShelf = shelfRepository.findByUserIdAndName(testUser.getId(), ShelfType.KOBO.getName())
                 .orElseGet(() -> {
-                    ShelfEntity shelf = new ShelfEntity();
-                    shelf.setName(ShelfType.KOBO.getName());
-                    shelf.setUser(testUser);
-                    return shelfRepository.save(shelf);
+                    ShelfEntity shelf = ShelfEntity.builder()
+                            .name(ShelfType.KOBO.getName())
+                            .user(testUser)
+                            .build();
+                    entityManager.persist(shelf);
+                    entityManager.flush();
+                    return shelf;
                 });
         
         // Generate auth token and register it in kobo_user_settings (required for security filter)
@@ -213,21 +237,44 @@ class KoboLibrarySyncServiceContinuationTest {
     }
 
     private BookEntity createTestBook(String title) {
-        BookEntity book = new BookEntity();
-        book.setTitle(title);
-        book.setAuthor("Test Author");
-        book.setPath("/test/books/" + title.replaceAll("\\s+", "_") + ".epub");
-        book.setLibrary(libraryRepository.findAll().get(0));
-        
-        // Create primary book file with currentHash (required to avoid NPE in snapshot creation)
-        BookFileEntity bookFile = new BookFileEntity();
-        bookFile.setBook(book);
-        bookFile.setFileType(BookFileType.EPUB);
-        bookFile.setPath("/test/books/" + title.replaceAll("\\s+", "_") + ".epub");
-        bookFile.setSize(1024L);
-        bookFile.setCurrentHash("test-hash-" + title.replaceAll("\\s+", "_"));
-        book.setPrimaryBookFile(bookFile);
-        
-        return bookRepository.save(book);
+        String safeTitle = title.replaceAll("\\s+", "_");
+
+        BookEntity book = BookEntity.builder()
+                .library(library)
+                .libraryPath(libraryPath)
+                .addedOn(Instant.now())
+                .deleted(false)
+                .bookFiles(new ArrayList<>())
+                .build();
+        entityManager.persist(book);
+        entityManager.flush();
+
+        // Create metadata (title/author live here)
+        BookMetadataEntity metadata = BookMetadataEntity.builder()
+                .book(book)
+                .bookId(book.getId())
+                .title(title)
+                .build();
+        entityManager.persist(metadata);
+        entityManager.flush();
+
+        // Create primary book file with currentHash (required for snapshot)
+        BookFileEntity bookFile = BookFileEntity.builder()
+                .book(book)
+                .bookType(BookFileType.EPUB)
+                .isBookFormat(true)
+                .fileName(safeTitle + ".epub")
+                .fileSubPath("")
+                .fileSizeKb(1L)
+                .currentHash("test-hash-" + safeTitle)
+                .build();
+        entityManager.persist(bookFile);
+        entityManager.flush();
+
+        book.getBookFiles().add(bookFile);
+        entityManager.merge(book);
+        entityManager.flush();
+
+        return book;
     }
 }

@@ -120,8 +120,13 @@ dependencies {
     // --- Test Dependencies ---
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-test-autoconfigure'
+    testImplementation 'org.springframework.boot:spring-boot-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-autoconfigure'
     testImplementation 'org.assertj:assertj-core:3.27.7'
     testImplementation "org.mockito:mockito-inline:5.2.0"
+    testCompileOnly 'org.projectlombok:lombok:1.18.42'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.42'
     testRuntimeOnly 'com.h2database:h2'
 }
 

@@ -45,7 +45,17 @@ public class KoreaderService {
     public KoreaderProgress getProgress(String bookHash) {
         KoreaderUserDetails authDetails = getAuthDetailsWithSyncCheck();
         BookEntity book = findBookByHash(bookHash);
-        UserBookProgressEntity progress = findUserProgress(authDetails.getBookLoreUserId(), book.getId());
+        UserBookProgressEntity progress = findUserProgressOrNull(authDetails.getBookLoreUserId(), book.getId());
+
+        if (progress == null) {
+            log.info("getProgress: no progress found for userId={} bookHash={}",
+                    authDetails.getBookLoreUserId(), bookHash);
+            return KoreaderProgress.builder()
+                    .document(bookHash)
+                    .device("BookLore")
+                    .device_id("BookLore")
+                    .build();
+        }
 
         log.info("getProgress: fetched progress='{}' percentage={} for userId={} bookHash={}",
                 progress.getKoreaderProgress(), progress.getKoreaderProgressPercent(),
@@ -223,9 +233,9 @@ public class KoreaderService {
                 .orElseThrow(() -> ApiError.GENERIC_NOT_FOUND.createException("User not found with id " + userId));
     }
 
-    private UserBookProgressEntity findUserProgress(long userId, Long bookId) {
+    private UserBookProgressEntity findUserProgressOrNull(long userId, Long bookId) {
         return progressRepository.findByUserIdAndBookId(userId, bookId)
-                .orElseThrow(() -> ApiError.GENERIC_NOT_FOUND.createException("No progress found for user and book"));
+                .orElse(null);
     }
 
     private UserBookProgressEntity getOrCreateUserProgress(BookLoreUserEntity user, BookEntity book) {

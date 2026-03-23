@@ -129,11 +129,19 @@ class KoreaderServiceTest {
     @Test
     void getProgress_noProgress() {
         when(details.isSyncEnabled()).thenReturn(true);
+        var book = new BookEntity();
+        book.setId(99L);
         when(bookRepo.findByCurrentHash("h"))
-                .thenReturn(Optional.of(new BookEntity()));
-        when(progressRepo.findByUserIdAndBookId(anyLong(), isNull()))
+                .thenReturn(Optional.of(book));
+        when(progressRepo.findByUserIdAndBookId(42L, 99L))
                 .thenReturn(Optional.empty());
-        assertThrows(APIException.class, () -> service.getProgress("h"));
+
+        KoreaderProgress out = service.getProgress("h");
+        assertEquals("h", out.getDocument());
+        assertNull(out.getProgress());
+        assertNull(out.getPercentage());
+        assertEquals("BookLore", out.getDevice());
+        assertEquals("BookLore", out.getDevice_id());
     }
 
     @Test

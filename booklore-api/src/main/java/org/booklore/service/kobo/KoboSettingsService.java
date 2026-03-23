@@ -14,6 +14,7 @@ import org.booklore.repository.KoboUserSettingsRepository;
 import org.booklore.service.ShelfService;
 import org.booklore.service.hardcover.HardcoverSyncSettingsService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class KoboSettingsService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(KoboSettingsService.class);
 
     private final KoboUserSettingsRepository repository;
     private final AuthenticationService authenticationService;
