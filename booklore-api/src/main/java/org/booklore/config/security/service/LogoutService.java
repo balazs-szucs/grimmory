@@ -17,6 +17,7 @@ import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.audit.AuditService;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Instant;
@@ -34,6 +35,7 @@ public class LogoutService {
     private final AuditService auditService;
     private final AuthenticationService authenticationService;
 
+    @Transactional
     public LogoutResponse logout(Authentication auth, String refreshToken, String origin) {
         BookLoreUserEntity user = resolveUser(auth, refreshToken);
 

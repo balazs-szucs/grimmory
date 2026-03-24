@@ -55,7 +55,7 @@ class BookCreatorServiceTest {
     void addAuthorsToBook_nullAuthors_doesNothing() {
         bookCreatorService.addAuthorsToBook(null, bookEntity);
 
-        assertNull(bookEntity.getMetadata().getAuthors());
+        assertTrue(bookEntity.getMetadata().getAuthors().isEmpty());
         verifyNoInteractions(authorRepository);
     }
 
@@ -63,7 +63,7 @@ class BookCreatorServiceTest {
     void addAuthorsToBook_emptyAuthors_doesNothing() {
         bookCreatorService.addAuthorsToBook(Set.of(), bookEntity);
 
-        assertNull(bookEntity.getMetadata().getAuthors());
+        assertTrue(bookEntity.getMetadata().getAuthors().isEmpty());
         verifyNoInteractions(authorRepository);
     }
 
@@ -80,7 +80,7 @@ class BookCreatorServiceTest {
 
     @Test
     void addAuthorsToBook_nullExistingAuthorsOnEntity_initializesSet() {
-        assertNull(bookEntity.getMetadata().getAuthors());
+        assertTrue(bookEntity.getMetadata().getAuthors().isEmpty());
 
         AuthorEntity author = AuthorEntity.builder().name("Author").build();
         when(authorRepository.findByName("Author")).thenReturn(Optional.of(author));
@@ -95,7 +95,7 @@ class BookCreatorServiceTest {
     void addCategoriesToBook_nullCategories_doesNothing() {
         bookCreatorService.addCategoriesToBook(null, bookEntity);
 
-        assertNull(bookEntity.getMetadata().getCategories());
+        assertTrue(bookEntity.getMetadata().getCategories().isEmpty());
         verifyNoInteractions(categoryRepository);
     }
 
@@ -103,7 +103,7 @@ class BookCreatorServiceTest {
     void addCategoriesToBook_emptyCategories_doesNothing() {
         bookCreatorService.addCategoriesToBook(Set.of(), bookEntity);
 
-        assertNull(bookEntity.getMetadata().getCategories());
+        assertTrue(bookEntity.getMetadata().getCategories().isEmpty());
         verifyNoInteractions(categoryRepository);
     }
 
@@ -122,7 +122,7 @@ class BookCreatorServiceTest {
     void addMoodsToBook_nullMoods_doesNothing() {
         bookCreatorService.addMoodsToBook(null, bookEntity);
 
-        assertNull(bookEntity.getMetadata().getMoods());
+        assertTrue(bookEntity.getMetadata().getMoods().isEmpty());
         verifyNoInteractions(moodRepository);
     }
 
@@ -130,7 +130,7 @@ class BookCreatorServiceTest {
     void addMoodsToBook_emptyMoods_doesNothing() {
         bookCreatorService.addMoodsToBook(Set.of(), bookEntity);
 
-        assertNull(bookEntity.getMetadata().getMoods());
+        assertTrue(bookEntity.getMetadata().getMoods().isEmpty());
         verifyNoInteractions(moodRepository);
     }
 
@@ -149,7 +149,7 @@ class BookCreatorServiceTest {
     void addTagsToBook_nullTags_doesNothing() {
         bookCreatorService.addTagsToBook(null, bookEntity);
 
-        assertNull(bookEntity.getMetadata().getTags());
+        assertTrue(bookEntity.getMetadata().getTags().isEmpty());
         verifyNoInteractions(tagRepository);
     }
 
@@ -157,7 +157,7 @@ class BookCreatorServiceTest {
     void addTagsToBook_emptyTags_doesNothing() {
         bookCreatorService.addTagsToBook(Set.of(), bookEntity);
 
-        assertNull(bookEntity.getMetadata().getTags());
+        assertTrue(bookEntity.getMetadata().getTags().isEmpty());
         verifyNoInteractions(tagRepository);
     }
 
