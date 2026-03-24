@@ -52,7 +52,8 @@ import static org.mockito.Mockito.mock;
         "spring.task.scheduling.enabled=false",
         "app.task.scan-library-cron=*/1 * * * * *",
         "app.task.process-bookdrop-cron=*/1 * * * * *",
-        "app.features.oidc-enabled=false"
+        "app.features.oidc-enabled=false",
+        "spring.jpa.properties.hibernate.connection.provider_disables_autocommit=false"
 })
 @Import(BookRuleEvaluatorFieldCoverageTest.TestConfig.class)
 class BookRuleEvaluatorFieldCoverageTest {

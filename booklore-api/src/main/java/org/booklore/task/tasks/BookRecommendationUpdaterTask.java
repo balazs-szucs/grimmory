@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -89,17 +88,12 @@ public class BookRecommendationUpdaterTask implements Task {
                 embeddingProgress++;
             }
 
-            // Save embedding vectors for this batch
+            // Save embedding vectors for this batch within a transaction
+            Map<Long, String> batchEmbeddingJson = new HashMap<>();
             for (BookEntity book : batch) {
-                if (book.getMetadata() != null) {
-                    String embeddingJson = vectorService.serializeVector(embeddings.get(book.getId()));
-                    if (!Objects.equals(book.getMetadata().getEmbeddingVector(), embeddingJson)) {
-                        book.getMetadata().setEmbeddingVector(embeddingJson);
-                        book.getMetadata().setEmbeddingUpdatedAt(Instant.now());
-                    }
-                }
+                batchEmbeddingJson.put(book.getId(), vectorService.serializeVector(embeddings.get(book.getId())));
             }
-            bookQueryService.saveAll(batch);
+            bookQueryService.compareAndSaveEmbeddings(batchEmbeddingJson);
 
             int progress = 5 + (int) (embeddingProgress * 30L / totalBooks);
             lastNotificationTime = sendTaskProgressNotification(taskId, progress,

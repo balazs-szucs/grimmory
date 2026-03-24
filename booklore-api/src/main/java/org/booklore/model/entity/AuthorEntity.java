@@ -4,8 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
 
-import java.util.List;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 @Entity
 @Getter
@@ -43,7 +44,8 @@ public class AuthorEntity {
 
     @ManyToMany(mappedBy = "authors", fetch = FetchType.LAZY)
     @BatchSize(size = 20)
-    private List<BookMetadataEntity> bookMetadataEntityList;
+    @Builder.Default
+    private Set<BookMetadataEntity> bookMetadataEntityList = new HashSet<>();
 
     @Override
     public boolean equals(Object o) {

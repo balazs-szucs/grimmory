@@ -97,7 +97,7 @@ class BookRecommendationUpdaterTaskTest {
         assertEquals("task-123", response.getTaskId());
         assertEquals(TaskStatus.COMPLETED, response.getStatus());
 
-        verify(bookQueryService).saveAll(books);
+        verify(bookQueryService).compareAndSaveEmbeddings(any());
         verify(vectorService, times(2)).generateEmbedding(any());
         verify(bookQueryService).saveRecommendationsInBatches(recommendationsCaptor.capture(), anyInt());
 

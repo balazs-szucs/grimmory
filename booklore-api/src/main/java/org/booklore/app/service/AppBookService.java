@@ -38,6 +38,7 @@ import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
+@Transactional(readOnly = true)
 public class AppBookService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -52,7 +53,6 @@ public class AppBookService {
     private final MagicShelfBookService magicShelfBookService;
     private final EntityManager entityManager;
 
-    @Transactional(readOnly = true)
     public AppPageResponse<AppBookSummary> getBooks(
             Integer page,
             Integer size,
@@ -86,7 +86,6 @@ public class AppBookService {
         return buildPageResponse(bookPage, userId, pageNum, pageSize);
     }
 
-    @Transactional(readOnly = true)
     public AppBookDetail getBookDetail(Long bookId) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
@@ -110,7 +109,6 @@ public class AppBookService {
         return mobileBookMapper.toDetail(book, progress, fileProgress);
     }
 
-    @Transactional(readOnly = true)
     public AppPageResponse<AppBookSummary> searchBooks(
             String query,
             Integer page,
@@ -140,7 +138,6 @@ public class AppBookService {
         return buildPageResponse(bookPage, userId, pageNum, pageSize);
     }
 
-    @Transactional(readOnly = true)
     public List<AppBookSummary> getContinueReading(Integer limit) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
@@ -184,7 +181,6 @@ public class AppBookService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public List<AppBookSummary> getContinueListening(Integer limit) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
@@ -228,7 +224,6 @@ public class AppBookService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public List<AppBookSummary> getRecentlyAdded(Integer limit) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
@@ -252,7 +247,6 @@ public class AppBookService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public List<AppBookSummary> getRecentlyScanned(Integer limit) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
@@ -275,7 +269,6 @@ public class AppBookService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public AppPageResponse<AppBookSummary> getRandomBooks(
             Integer page,
             Integer size,
@@ -305,7 +298,6 @@ public class AppBookService {
         return buildPageResponse(bookPage, userId, pageNum, pageSize);
     }
 
-    @Transactional(readOnly = true)
     public AppPageResponse<AppBookSummary> getBooksByMagicShelf(
             Long magicShelfId,
             Integer page,
@@ -338,7 +330,6 @@ public class AppBookService {
         return AppPageResponse.of(summaries, pageNum, pageSize, booksPage.getTotalElements());
     }
 
-    @Transactional(readOnly = true)
     public AppFilterOptions getFilterOptions(Long libraryId, Long shelfId, Long magicShelfId) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();

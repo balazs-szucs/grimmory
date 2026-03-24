@@ -29,6 +29,7 @@ public class MetadataTaskService {
     private final FetchedProposalMapper fetchedProposalMapper;
     private final AuthenticationService authenticationService;
 
+    @Transactional(readOnly = true)
     public Optional<MetadataTaskDetailsResponse> getTaskWithProposals(String taskId) {
         return metadataFetchTaskRepository.findById(taskId)
                 .map(this::buildTaskDetailsResponse);

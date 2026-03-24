@@ -65,12 +65,8 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     @Query("SELECT b.id FROM BookEntity b WHERE b.libraryPath.id IN :libraryPathIds AND (b.deleted IS NULL OR b.deleted = false)")
     List<Long> findAllBookIdsByLibraryPathIdIn(@Param("libraryPathIds") Collection<Long> libraryPathIds);
 
-    @EntityGraph(attributePaths = {
-        "metadata", "metadata.comicMetadata",
-        "metadata.comicMetadata.characters", "metadata.comicMetadata.teams", "metadata.comicMetadata.locations", "metadata.comicMetadata.creatorMappings",
-        "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags",
-        "shelves", "libraryPath", "library", "bookFiles"
-    })
+    // Only ToOne paths in EntityGraph; collections (authors, categories, moods, tags, shelves, bookFiles) loaded via @BatchSize.
+    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "library"})
     @Query("SELECT b FROM BookEntity b WHERE (b.deleted IS NULL OR b.deleted = false)")
     List<BookEntity> findAllWithMetadata();
 
@@ -82,15 +78,6 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     })
     @Query("SELECT b FROM BookEntity b WHERE b.id IN :bookIds AND (b.deleted IS NULL OR b.deleted = false)")
     List<BookEntity> findAllWithMetadataByIds(@Param("bookIds") Set<Long> bookIds);
-
-    @EntityGraph(attributePaths = {
-        "metadata", "metadata.comicMetadata",
-        "metadata.comicMetadata.characters", "metadata.comicMetadata.teams", "metadata.comicMetadata.locations", "metadata.comicMetadata.creatorMappings",
-        "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags",
-        "shelves", "libraryPath", "library", "bookFiles"
-    })
-    @Query("SELECT b FROM BookEntity b WHERE b.id IN :bookIds AND (b.deleted IS NULL OR b.deleted = false)")
-    List<BookEntity> findWithMetadataByIdsWithPagination(@Param("bookIds") Set<Long> bookIds, Pageable pageable);
 
     @EntityGraph(attributePaths = {
         "metadata", "metadata.comicMetadata",
@@ -118,12 +105,8 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     @Query("SELECT b FROM BookEntity b WHERE b.library.id = :libraryId AND (b.deleted IS NULL OR b.deleted = false)")
     List<BookEntity> findAllForDuplicateDetection(@Param("libraryId") Long libraryId);
 
-    @EntityGraph(attributePaths = {
-        "metadata", "metadata.comicMetadata",
-        "metadata.comicMetadata.characters", "metadata.comicMetadata.teams", "metadata.comicMetadata.locations", "metadata.comicMetadata.creatorMappings",
-        "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags",
-        "shelves", "libraryPath", "library", "bookFiles"
-    })
+    // Only ToOne paths in EntityGraph; collections (authors, categories, moods, tags, shelves, bookFiles) loaded via @BatchSize.
+    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "library"})
     @Query("SELECT b FROM BookEntity b WHERE b.library.id IN :libraryIds AND (b.deleted IS NULL OR b.deleted = false)")
     List<BookEntity> findAllWithMetadataByLibraryIds(@Param("libraryIds") Collection<Long> libraryIds);
 

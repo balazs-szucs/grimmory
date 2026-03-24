@@ -11,7 +11,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Getter
@@ -32,13 +34,16 @@ public class LibraryEntity {
     private Sort sort;
 
     @OneToMany(mappedBy = "library", orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<BookEntity> bookEntities;
+    @Builder.Default
+    private List<BookEntity> bookEntities = new ArrayList<>();
 
     @OneToMany(mappedBy = "library", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<LibraryPathEntity> libraryPaths;
+    @Builder.Default
+    private List<LibraryPathEntity> libraryPaths = new ArrayList<>();
 
     @ManyToMany(mappedBy = "libraries", fetch = FetchType.LAZY)
-    private List<BookLoreUserEntity> users;
+    @Builder.Default
+    private Set<BookLoreUserEntity> users = new HashSet<>();
 
     private boolean watch;
 

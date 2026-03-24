@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.annotations.LazyGroup;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -299,12 +300,16 @@ public class BookMetadataEntity {
     @Builder.Default
     private Boolean abridgedLocked = Boolean.FALSE;
 
+    @Basic(fetch = FetchType.LAZY)
+    @LazyGroup("embedding")
     @Column(name = "embedding_vector", columnDefinition = "TEXT")
     private String embeddingVector;
 
     @Column(name = "embedding_updated_at")
     private Instant embeddingUpdatedAt;
 
+    @Basic(fetch = FetchType.LAZY)
+    @LazyGroup("heavyText")
     @Column(name = "search_text", columnDefinition = "TEXT")
     private String searchText;
 
@@ -373,7 +378,8 @@ public class BookMetadataEntity {
             inverseJoinColumns = @JoinColumn(name = "author_id"))
     @BatchSize(size = 20)
     @OrderColumn(name = "sort_order")
-    private List<AuthorEntity> authors;
+    @Builder.Default
+    private List<AuthorEntity> authors = new ArrayList<>();
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
@@ -382,7 +388,8 @@ public class BookMetadataEntity {
             inverseJoinColumns = @JoinColumn(name = "category_id")
     )
     @BatchSize(size = 20)
-    private Set<CategoryEntity> categories;
+    @Builder.Default
+    private Set<CategoryEntity> categories = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
@@ -391,7 +398,8 @@ public class BookMetadataEntity {
             inverseJoinColumns = @JoinColumn(name = "mood_id")
     )
     @BatchSize(size = 20)
-    private Set<MoodEntity> moods;
+    @Builder.Default
+    private Set<MoodEntity> moods = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
@@ -400,7 +408,8 @@ public class BookMetadataEntity {
             inverseJoinColumns = @JoinColumn(name = "tag_id")
     )
     @BatchSize(size = 20)
-    private Set<TagEntity> tags;
+    @Builder.Default
+    private Set<TagEntity> tags = new HashSet<>();
 
     @OneToMany(mappedBy = "bookMetadata", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @BatchSize(size = 20)

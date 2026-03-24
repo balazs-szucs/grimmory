@@ -9,6 +9,7 @@ import org.booklore.model.dto.ComicMetadata;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.restriction.ContentRestrictionService;
+import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -48,7 +49,14 @@ public class BookQueryService {
     }
 
     public List<BookEntity> getAllFullBookEntitiesBatch(Pageable pageable) {
-        return bookRepository.findAllFullBooksBatch(pageable);
+        List<BookEntity> books = bookRepository.findAllFullBooksBatch(pageable);
+        for (BookEntity book : books) {
+            if (book.getMetadata() != null) {
+                Hibernate.initialize(book.getMetadata().getAuthors());
+                Hibernate.initialize(book.getMetadata().getCategories());
+            }
+        }
+        return books;
     }
 
     public long countAllNonDeleted() {
@@ -70,6 +78,20 @@ public class BookQueryService {
     @Transactional
     public void saveAll(List<BookEntity> books) {
         bookRepository.saveAll(books);
+    }
+
+    @Transactional
+    public void compareAndSaveEmbeddings(Map<Long, String> embeddingJsonByBookId) {
+        List<BookEntity> books = bookRepository.findAllWithMetadataByIds(new HashSet<>(embeddingJsonByBookId.keySet()));
+        for (BookEntity book : books) {
+            String embeddingJson = embeddingJsonByBookId.get(book.getId());
+            if (embeddingJson != null && book.getMetadata() != null) {
+                if (!Objects.equals(book.getMetadata().getEmbeddingVector(), embeddingJson)) {
+                    book.getMetadata().setEmbeddingVector(embeddingJson);
+                    book.getMetadata().setEmbeddingUpdatedAt(java.time.Instant.now());
+                }
+            }
+        }
     }
 
     @Transactional

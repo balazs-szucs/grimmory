@@ -51,6 +51,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @AllArgsConstructor
 @Service
+@Transactional(readOnly = true)
 public class BookService {
 
     private final BookRepository bookRepository;
@@ -73,7 +74,6 @@ public class BookService {
     private final AuditService auditService;
 
 
-    @Transactional(readOnly = true)
     public List<Book> getBookDTOs(boolean includeDescription) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         boolean isAdmin = user.getPermissions().isAdmin();
@@ -105,7 +105,6 @@ public class BookService {
         return books;
     }
 
-    @Transactional(readOnly = true)
     public Page<Book> getBookDTOsPaged(Pageable pageable) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         boolean isAdmin = user.getPermissions().isAdmin();
@@ -142,7 +141,6 @@ public class BookService {
                 .map(Library::getId)
                 .collect(Collectors.toSet());
     }
-    @Transactional(readOnly = true)
     public List<Book> getBooksByIds(Set<Long> bookIds, boolean withDescription) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         boolean isAdmin = user.getPermissions().isAdmin();
@@ -175,7 +173,6 @@ public class BookService {
         }).collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public Book getBook(long bookId, boolean withDescription) {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
@@ -200,7 +197,6 @@ public class BookService {
     }
 
 
-    @Transactional(readOnly = true)
     public BookViewerSettings getBookViewerSetting(long bookId, long bookFileId) {
         BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
         BookLoreUser user = authenticationService.getAuthenticatedUser();
@@ -264,6 +260,7 @@ public class BookService {
         return settingsBuilder.build();
     }
 
+    @Transactional
     public void updateBookViewerSetting(long bookId, BookViewerSettings bookViewerSettings) {
         bookUpdateService.updateBookViewerSetting(bookId, bookViewerSettings);
     }
