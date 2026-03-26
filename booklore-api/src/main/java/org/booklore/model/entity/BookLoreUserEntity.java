@@ -3,6 +3,7 @@ package org.booklore.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.booklore.model.enums.ProvisioningMethod;
+import org.hibernate.Hibernate;
 import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDateTime;
