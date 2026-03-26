@@ -4,9 +4,13 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.booklore.model.enums.ProvisioningMethod;
 import org.hibernate.annotations.BatchSize;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Getter
@@ -16,7 +20,7 @@ import java.util.Set;
 @NoArgsConstructor
 @Entity
 @Table(name = "users")
-public class BookLoreUserEntity {
+public class BookLoreUserEntity implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -63,11 +67,7 @@ public class BookLoreUserEntity {
 
     @BatchSize(size = 20)
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "user_library_mapping",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "library_id")
-    )
+    @JoinTable(name = "user_library_mapping", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "library_id"))
     @Builder.Default
     private Set<LibraryEntity> libraries = new HashSet<>();
 
@@ -92,5 +92,35 @@ public class BookLoreUserEntity {
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of();
+    }
+
+    @Override
+    public String getPassword() {
+        return passwordHash;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
     }
 }
