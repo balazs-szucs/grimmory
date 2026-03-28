@@ -22,6 +22,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
@@ -79,8 +81,6 @@ class BookCreatorServiceTest {
         assertTrue(bookEntity.getMetadata().getAuthors().isEmpty());
         verifyNoInteractions(authorRepository);
     }
-        verifyNoInteractions(authorRepository);
-    }
 
     @Test
     void addAuthorsToBook_validAuthors_addsToBook() {
@@ -122,8 +122,6 @@ class BookCreatorServiceTest {
         assertTrue(bookEntity.getMetadata().getCategories().isEmpty());
         verifyNoInteractions(categoryRepository);
     }
-        verifyNoInteractions(categoryRepository);
-    }
 
     @Test
     void addCategoriesToBook_validCategories_addsToBook() {
@@ -153,8 +151,6 @@ class BookCreatorServiceTest {
         assertTrue(bookEntity.getMetadata().getMoods().isEmpty());
         verifyNoInteractions(moodRepository);
     }
-        verifyNoInteractions(moodRepository);
-    }
 
     @Test
     void addMoodsToBook_validMoods_addsToBook() {
@@ -173,6 +169,10 @@ class BookCreatorServiceTest {
     void addTagsToBook_givenNullOrEmptySet_doesNothing(Set<String> tags) {
         bookCreatorService.addTagsToBook(tags, bookEntity);
 
+        assertTrue(bookEntity.getMetadata().getTags().isEmpty());
+        verifyNoInteractions(tagRepository);
+    }
+
     @Test
     void addTagsToBook_nullTags_doesNothing() {
         bookCreatorService.addTagsToBook(null, bookEntity);
@@ -186,8 +186,6 @@ class BookCreatorServiceTest {
         bookCreatorService.addTagsToBook(Set.of(), bookEntity);
 
         assertTrue(bookEntity.getMetadata().getTags().isEmpty());
-        verifyNoInteractions(tagRepository);
-    }
         verifyNoInteractions(tagRepository);
     }
 
