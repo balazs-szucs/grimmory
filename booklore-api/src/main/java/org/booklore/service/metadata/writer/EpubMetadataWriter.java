@@ -210,7 +210,7 @@ public class EpubMetadataWriter implements MetadataWriter {
                 }
             }
 
-            if (!hasChanges[0] && hasBookloreMetadataChanges(metadataElement, metadata, isEpub3(opfDoc))) {
+            if (!hasChanges[0] && hasBookloreMetadataChanges(metadataElement, metadata)) {
                 hasChanges[0] = true;
             }
 
@@ -762,7 +762,7 @@ public class EpubMetadataWriter implements MetadataWriter {
         return version != null && version.trim().startsWith("3");
     }
 
-    private boolean hasBookloreMetadataChanges(Element metadataElement, BookMetadataEntity metadata, boolean epub3) {
+    private boolean hasBookloreMetadataChanges(Element metadataElement, BookMetadataEntity metadata) {
         Map<String, String> existing = new TreeMap<>();
         NodeList metas = metadataElement.getElementsByTagNameNS("*", "meta");
         for (int i = 0; i < metas.getLength(); i++) {
@@ -771,7 +771,10 @@ public class EpubMetadataWriter implements MetadataWriter {
             String name = meta.getAttribute("name");
             String key = property.startsWith("booklore:") ? property : (name.startsWith("booklore:") ? name : null);
             if (key != null) {
-                existing.put(key, meta.getAttribute("content").isEmpty() ? meta.getTextContent() : meta.getAttribute("content"));
+                String value = meta.getAttribute("content").isEmpty() ? meta.getTextContent() : meta.getAttribute("content");
+                if (!isEffectivelyZeroOrBlank(value)) {
+                    existing.put(key, value);
+                }
             }
         }
 
@@ -831,6 +834,15 @@ public class EpubMetadataWriter implements MetadataWriter {
         }
 
         return !existing.equals(expected);
+    }
+
+    private static boolean isEffectivelyZeroOrBlank(String value) {
+        if (value == null || value.isBlank()) return true;
+        try {
+            return Double.parseDouble(value) <= 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private void removeAllBookloreMetadata(Element metadataElement) {
@@ -1030,16 +1042,18 @@ public class EpubMetadataWriter implements MetadataWriter {
         }
         
         if (metadata.getMoods() != null && !metadata.getMoods().isEmpty()) {
-            String moodsJson = "[" + String.join(", ", metadata.getMoods().stream()
+            String moodsJson = "[" + metadata.getMoods().stream()
                 .map(mood -> "\"" + mood.getName().replace("\"", "\\\"") + "\"")
-                .toList()) + "]";
+                .sorted()
+                .collect(Collectors.joining(", ")) + "]";
             metadataElement.appendChild(createBookloreMetaElement(doc, "moods", moodsJson, epub3));
         }
-        
+
         if (metadata.getTags() != null && !metadata.getTags().isEmpty()) {
-            String tagsJson = "[" + String.join(", ", metadata.getTags().stream()
+            String tagsJson = "[" + metadata.getTags().stream()
                 .map(tag -> "\"" + tag.getName().replace("\"", "\\\"") + "\"")
-                .toList()) + "]";
+                .sorted()
+                .collect(Collectors.joining(", ")) + "]";
             metadataElement.appendChild(createBookloreMetaElement(doc, "tags", tagsJson, epub3));
         }
 
