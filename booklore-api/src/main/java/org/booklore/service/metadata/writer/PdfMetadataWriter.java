@@ -2,14 +2,8 @@ package org.booklore.service.metadata.writer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.io.IOUtils;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDDocumentInformation;
-import org.apache.pdfbox.pdmodel.common.PDMetadata;
-import org.apache.xmpbox.XMPMetadata;
-import org.apache.xmpbox.schema.DublinCoreSchema;
-import org.apache.xmpbox.xml.XmpSerializer;
+import org.grimmory.pdfium4j.PdfDocument;
+import org.grimmory.pdfium4j.model.MetadataTag;
 import org.booklore.model.MetadataClearFlags;
 import org.booklore.model.dto.settings.MetadataPersistenceSettings;
 import org.booklore.model.entity.BookMetadataEntity;
@@ -31,10 +25,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.*;
 
@@ -70,12 +64,10 @@ public class PdfMetadataWriter implements MetadataWriter {
             log.warn("Could not create PDF temp backup for {}: {}", file.getName(), e.getMessage());
         }
 
-        try (PDDocument pdf = Loader.loadPDF(file, IOUtils.createTempFileOnlyStreamCache())) {
-            pdf.setAllSecurityToBeRemoved(true);
-            applyMetadataToDocument(pdf, metadataEntity, clear);
+        try (PdfDocument doc = PdfDocument.open(filePath)) {
+            applyMetadataToDocument(doc, metadataEntity, clear);
             tempFile = File.createTempFile("pdfmeta-", ".pdf");
-            // PDFBox 3.x saves in compressed mode by default
-            pdf.save(tempFile);
+            doc.save(tempFile.toPath());
             Files.move(tempFile.toPath(), filePath, StandardCopyOption.REPLACE_EXISTING);
             tempFile = null; // Prevent deletion in finally block after successful move
             log.info("Successfully embedded metadata into PDF: {}", file.getName());
@@ -129,12 +121,10 @@ public class PdfMetadataWriter implements MetadataWriter {
     // Maximum length for PDF Info Dictionary keywords (some older PDF specs limit to 255 bytes)
     private static final int MAX_INFO_KEYWORDS_LENGTH = 255;
 
-    private void applyMetadataToDocument(PDDocument pdf, BookMetadataEntity entity, MetadataClearFlags clear) {
-        PDDocumentInformation info = pdf.getDocumentInformation();
+    private void applyMetadataToDocument(PdfDocument doc, BookMetadataEntity entity, MetadataClearFlags clear) {
         MetadataCopyHelper helper = new MetadataCopyHelper(entity);
 
-        // Build categories-only keywords for PDF legacy compatibility (Info Dictionary)
-        // Moods and tags are stored separately in XMP booklore namespace, so they should NOT be in Info Dict keywords
+        // --- PDF Info Dictionary (legacy) via PDFium4j ---
         StringBuilder keywordsBuilder = new StringBuilder();
         helper.copyCategories(clear != null && clear.isCategories(), cats -> {
             if (cats != null && !cats.isEmpty()) {
@@ -142,100 +132,137 @@ public class PdfMetadataWriter implements MetadataWriter {
             }
         });
 
-        helper.copyTitle(clear != null && clear.isTitle(), title -> info.setTitle(title != null ? title : ""));
-        helper.copyPublisher(clear != null && clear.isPublisher(), pub -> info.setProducer(pub != null ? pub : ""));
-        helper.copyAuthors(clear != null && clear.isAuthors(), authors -> info.setAuthor(authors != null ? String.join(", ", authors) : ""));
+        helper.copyTitle(clear != null && clear.isTitle(), title -> doc.setMetadata(MetadataTag.TITLE, title != null ? title : ""));
+        helper.copyPublisher(clear != null && clear.isPublisher(), pub -> doc.setMetadata(MetadataTag.PRODUCER, pub != null ? pub : ""));
+        helper.copyAuthors(clear != null && clear.isAuthors(), authors -> doc.setMetadata(MetadataTag.AUTHOR, authors != null ? String.join(", ", authors) : ""));
         helper.copyPublishedDate(clear != null && clear.isPublishedDate(), date -> {
-            Calendar cal = Calendar.getInstance();
-            cal.setTimeInMillis((date != null ? date : ZonedDateTime.now().toLocalDate())
-                    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli());
-            info.setCreationDate(cal);
+            if (date != null) {
+                // PDF date format: D:YYYYMMDDHHmmSS
+                String pdfDate = String.format("D:%04d%02d%02d000000", date.getYear(), date.getMonthValue(), date.getDayOfMonth());
+                doc.setMetadata(MetadataTag.CREATION_DATE, pdfDate);
+            }
         });
-        
-        // Truncate keywords for legacy PDF Info Dictionary (255 byte limit in older specs)
+
         String keywords = keywordsBuilder.toString();
         if (keywords.length() > MAX_INFO_KEYWORDS_LENGTH) {
             keywords = keywords.substring(0, MAX_INFO_KEYWORDS_LENGTH - 3) + "...";
             log.debug("PDF keywords truncated from {} to {} characters for legacy compatibility", 
                 keywordsBuilder.length(), keywords.length());
         }
-        info.setKeywords(keywords);
+        doc.setMetadata(MetadataTag.KEYWORDS, keywords);
 
+        // --- XMP metadata via raw XML ---
         try {
-            XMPMetadata xmp = XMPMetadata.createXMPMetadata();
-            DublinCoreSchema dc = xmp.createAndAddDublinCoreSchema();
-
-            helper.copyTitle(clear != null && clear.isTitle(), title -> dc.setTitle(title != null ? title : ""));
-            helper.copyDescription(clear != null && clear.isDescription(), desc -> dc.setDescription(desc != null ? desc : ""));
-            helper.copyPublisher(clear != null && clear.isPublisher(), pub -> dc.addPublisher(pub != null ? pub : ""));
-            
-            // Write language as provided by user
-            helper.copyLanguage(clear != null && clear.isLanguage(), lang -> {
-                if (lang != null && !lang.isBlank()) {
-                    dc.addLanguage(lang);
-                }
-            });
-            
-            // Use date-only format for dc:date (YYYY-MM-DD)
-            helper.copyPublishedDate(clear != null && clear.isPublishedDate(), date -> {
-                if (date != null) {
-                    // XMPBox requires Calendar, but we can create one with just the date (no time)
-                    Calendar cal = Calendar.getInstance();
-                    cal.clear(); // Clear time fields
-                    cal.set(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth());
-                    dc.addDate(cal);
-                }
-            });
-
-            // Clean author names (normalize whitespace)
-            helper.copyAuthors(clear != null && clear.isAuthors(), authors -> {
-                if (authors != null && !authors.isEmpty()) {
-                    authors.stream()
-                        .map(name -> name.replaceAll("\\s+", " ").trim())
-                        .filter(name -> !name.isBlank())
-                        .forEach(dc::addCreator);
-                }
-            });
-
-            // Add categories as dc:subject
-            helper.copyCategories(clear != null && clear.isCategories(), cats -> {
-                if (cats != null && !cats.isEmpty()) {
-                    cats.forEach(dc::addSubject);
-                }
-            });
-            
-            // Note: BookLore custom fields (subtitle, ratings, moods, tags as separate field) 
-            // are added via raw XML manipulation in addCustomIdentifiersToXmp to avoid XMPBox namespace issues
-            // Moods and tags are stored separately in booklore namespace to avoid confusion with categories
-
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            new XmpSerializer().serialize(xmp, baos, true);
-            byte[] baseXmpBytes = baos.toByteArray();
-
+            byte[] baseXmpBytes = buildDublinCoreXmp(helper, clear);
             byte[] newXmpBytes = addCustomIdentifiersToXmp(baseXmpBytes, entity, helper, clear);
 
-            byte[] existingXmpBytes = null;
-            PDMetadata existingMetadata = pdf.getDocumentCatalog().getMetadata();
-            if (existingMetadata != null) {
-                try {
-                    existingXmpBytes = existingMetadata.toByteArray();
-                } catch (IOException ignore) {
-                }
-            }
+            String existingXmp = doc.xmpMetadataString();
+            byte[] existingXmpBytes = (existingXmp != null && !existingXmp.isBlank()) 
+                    ? existingXmp.getBytes(StandardCharsets.UTF_8) : null;
 
             if (!isXmpMetadataDifferent(existingXmpBytes, newXmpBytes)) {
                 log.info("XMP metadata unchanged, skipping write");
                 return;
             }
 
-            PDMetadata pdMetadata = new PDMetadata(pdf);
-            pdMetadata.importXMPMetadata(newXmpBytes);
-            pdf.getDocumentCatalog().setMetadata(pdMetadata);
-
+            doc.setXmpMetadata(new String(newXmpBytes, StandardCharsets.UTF_8));
             log.info("XMP metadata updated for PDF");
         } catch (Exception e) {
             log.warn("Failed to embed XMP metadata: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * Builds a Dublin Core XMP document as a base for further custom field additions.
+     * Replaces the old XMPBox-based approach with direct DOM construction.
+     */
+    private byte[] buildDublinCoreXmp(MetadataCopyHelper helper, MetadataClearFlags clear) throws Exception {
+        DocumentBuilder builder = SecureXmlUtils.createSecureDocumentBuilder(true);
+        Document doc = builder.newDocument();
+
+        Element xmpmeta = doc.createElementNS("adobe:ns:meta/", "x:xmpmeta");
+        doc.appendChild(xmpmeta);
+
+        Element rdf = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:RDF");
+        xmpmeta.appendChild(rdf);
+
+        Element dcDesc = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:Description");
+        dcDesc.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:dc", "http://purl.org/dc/elements/1.1/");
+        dcDesc.setAttributeNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:about", "");
+
+        helper.copyTitle(clear != null && clear.isTitle(), title -> {
+            if (title != null) appendDcAlt(doc, dcDesc, "dc:title", title);
+        });
+        helper.copyDescription(clear != null && clear.isDescription(), desc -> {
+            if (desc != null) appendDcAlt(doc, dcDesc, "dc:description", desc);
+        });
+        helper.copyPublisher(clear != null && clear.isPublisher(), pub -> {
+            if (pub != null) appendDcBag(doc, dcDesc, "dc:publisher", List.of(pub));
+        });
+        helper.copyLanguage(clear != null && clear.isLanguage(), lang -> {
+            if (lang != null && !lang.isBlank()) appendDcBag(doc, dcDesc, "dc:language", List.of(lang));
+        });
+        helper.copyPublishedDate(clear != null && clear.isPublishedDate(), date -> {
+            if (date != null) appendDcSeq(doc, dcDesc, "dc:date", List.of(date.toString()));
+        });
+        helper.copyAuthors(clear != null && clear.isAuthors(), authors -> {
+            if (authors != null && !authors.isEmpty()) {
+                List<String> cleaned = authors.stream()
+                        .map(name -> name.replaceAll("\\s+", " ").trim())
+                        .filter(name -> !name.isBlank())
+                        .toList();
+                if (!cleaned.isEmpty()) appendDcSeq(doc, dcDesc, "dc:creator", cleaned);
+            }
+        });
+        helper.copyCategories(clear != null && clear.isCategories(), cats -> {
+            if (cats != null && !cats.isEmpty()) appendDcBag(doc, dcDesc, "dc:subject", new ArrayList<>(cats));
+        });
+
+        if (dcDesc.hasChildNodes()) {
+            rdf.appendChild(dcDesc);
+        }
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Transformer tf = TransformerFactory.newInstance().newTransformer();
+        tf.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        tf.setOutputProperty(OutputKeys.INDENT, "yes");
+        tf.transform(new DOMSource(doc), new StreamResult(baos));
+        return baos.toByteArray();
+    }
+
+    private void appendDcAlt(Document doc, Element parent, String tagName, String value) {
+        Element elem = doc.createElementNS("http://purl.org/dc/elements/1.1/", tagName);
+        Element alt = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:Alt");
+        Element li = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:li");
+        li.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:lang", "x-default");
+        li.setTextContent(value);
+        alt.appendChild(li);
+        elem.appendChild(alt);
+        parent.appendChild(elem);
+    }
+
+    private void appendDcSeq(Document doc, Element parent, String tagName, List<String> values) {
+        Element elem = doc.createElementNS("http://purl.org/dc/elements/1.1/", tagName);
+        Element seq = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:Seq");
+        for (String v : values) {
+            Element li = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:li");
+            li.setTextContent(v);
+            seq.appendChild(li);
+        }
+        elem.appendChild(seq);
+        parent.appendChild(elem);
+    }
+
+    private void appendDcBag(Document doc, Element parent, String tagName, List<String> values) {
+        Element elem = doc.createElementNS("http://purl.org/dc/elements/1.1/", tagName);
+        Element bag = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:Bag");
+        for (String v : values) {
+            Element li = doc.createElementNS("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:li");
+            li.setTextContent(v);
+            bag.appendChild(li);
+        }
+        elem.appendChild(bag);
+        parent.appendChild(elem);
     }
 
 
@@ -401,7 +428,20 @@ public class PdfMetadataWriter implements MetadataWriter {
         tf.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
         tf.setOutputProperty(OutputKeys.INDENT, "yes");
         tf.transform(new DOMSource(doc), new StreamResult(baos));
-        return baos.toByteArray();
+
+        // Wrap in xpacket PIs required by PDF XMP specification
+        byte[] xmpBody = baos.toByteArray();
+        ByteArrayOutputStream wrapped = new ByteArrayOutputStream(xmpBody.length + 2200);
+        wrapped.write("<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n".getBytes(StandardCharsets.UTF_8));
+        wrapped.write(xmpBody);
+        // Padding for in-place editing (PDF spec recommendation)
+        wrapped.write("\n".getBytes(StandardCharsets.UTF_8));
+        byte[] pad = new byte[2048];
+        java.util.Arrays.fill(pad, (byte) ' ');
+        pad[pad.length - 1] = '\n';
+        wrapped.write(pad);
+        wrapped.write("<?xpacket end=\"w\"?>".getBytes(StandardCharsets.UTF_8));
+        return wrapped.toByteArray();
     }
 
     private Element createXmpElement(Document doc, String name, String content) {

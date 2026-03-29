@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.pdfbox.io.IOUtils;
 import org.booklore.exception.ApiError;
 import org.booklore.model.dto.response.CbxPageInfo;
 import org.booklore.model.entity.BookEntity;
@@ -334,7 +333,7 @@ public class CbxReaderService {
             ZipArchiveEntry entry = zipFile.getEntry(entryName);
             if (entry != null) {
                 try (InputStream in = zipFile.getInputStream(entry)) {
-                    IOUtils.copy(in, outputStream);
+                    in.transferTo(outputStream);
                 }
                 return true;
             }
