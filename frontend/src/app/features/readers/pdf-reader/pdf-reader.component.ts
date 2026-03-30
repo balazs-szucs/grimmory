@@ -229,12 +229,13 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async setViewerMode(mode: 'book' | 'document') {
+    if (mode !== 'document' && this.embedPdfViewerInstance) {
+      await this.saveEmbedPdfDocument();
+      this.embedPdfViewerInstance = null;
+    }
     this.viewerMode = mode;
     if (mode === 'document') {
       setTimeout(() => this.initEmbedPdf(), 100);
-    } else {
-      // DOM is destroyed by @if, so discard the stale instance
-      this.embedPdfViewerInstance = null;
     }
   }
 
@@ -453,6 +454,46 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     inject();
   }
 
+  private async saveEmbedPdfDocument(): Promise<void> {
+    try {
+      const container = document.querySelector('embedpdf-container') as any;
+      if (!container?.registry) return;
+
+      const registry = await container.registry;
+      const exportPlugin = registry.plugins.get('export')?.provides();
+      if (!exportPlugin) return;
+
+      const state = registry.store.getState();
+      const activeDocId = Object.keys(state.core.documents)[0];
+      if (!activeDocId) return;
+
+      const buffer: ArrayBuffer = await new Promise((resolve, reject) => {
+        exportPlugin.saveAsCopy(activeDocId).wait(
+          (result: ArrayBuffer) => resolve(result),
+          (err: any) => reject(err)
+        );
+      });
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/pdf' };
+      if (this.authorization) {
+        headers['Authorization'] = this.authorization;
+      }
+
+      const url = this.altBookType
+        ? `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content?bookType=${this.altBookType}`
+        : `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content`;
+
+      await fetch(url, {
+        method: 'PUT',
+        headers,
+        credentials: 'include',
+        body: buffer
+      });
+    } catch (err) {
+      console.error('[EmbedPDF] Failed to save document:', err);
+    }
+  }
+
   onPageChange(page: number): void {
     if (page !== this.page) {
       this.page = page;
@@ -630,9 +671,12 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     this.rotation = ((this.rotation + 90) % 360) as 0 | 90 | 180 | 270;
   }
 
-  closeReader = (): void => {
-    // Save annotations while the PDF viewer is still alive (ngOnDestroy is too late)
-    this.persistAnnotations();
+  closeReader = async (): Promise<void> => {
+    if (this.embedPdfViewerInstance) {
+      await this.saveEmbedPdfDocument();
+    } else {
+      this.persistAnnotations();
+    }
     if (this.readingSessionService.isSessionActive()) {
       const percentage = this.totalPages > 0 ? Math.round((this.page / this.totalPages) * 1000) / 10 : 0;
       this.readingSessionService.endSession(this.page.toString(), percentage);
@@ -664,7 +708,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private persistAnnotations(): void {
-    if (!this.annotationsLoaded || !this.bookId) {
+    if (!this.annotationsLoaded || !this.bookId || this.viewerMode === 'document') {
       return;
     }
     try {
