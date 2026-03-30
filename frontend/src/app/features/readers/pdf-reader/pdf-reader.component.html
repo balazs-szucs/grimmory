@@ -16,6 +16,10 @@
   }
 
   @if (viewerMode === 'document') {
+  <button class="embed-close-btn icon-btn close-btn" [title]="'readerPdf.toolbar.closePdfReader' | transloco"
+    (click)="closeReader()">
+    <app-reader-icon name="close" [size]="20" />
+  </button>
   <div id="embedpdf-viewer"></div>
   }
 

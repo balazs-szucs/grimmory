@@ -232,6 +232,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     this.viewerMode = mode;
     if (mode === 'document') {
       setTimeout(() => this.initEmbedPdf(), 100);
+    } else {
+      // DOM is destroyed by @if, so discard the stale instance
+      this.embedPdfViewerInstance = null;
     }
   }
 
@@ -263,6 +266,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
       const targetEl = document.getElementById('embedpdf-viewer');
       if (!targetEl) throw new Error('#embedpdf-viewer not found');
 
+      // Hide container until styles are injected to avoid default-theme flash
+      targetEl.style.visibility = 'hidden';
+
       this.embedPdfViewerInstance = EmbedPDF.init({
         type: 'container',
         target: targetEl,
@@ -274,7 +280,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
-      // Restyle EmbedPDF chrome to match book viewer colour scheme
+      // Inject Grimmory styles, then reveal
       this.styleEmbedPdfChrome(targetEl);
 
     } catch (err) {
@@ -329,6 +335,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
           background: linear-gradient(135deg, #2d2d2d 0%, #1f1f1f 100%) !important;
           border-bottom-color: #404040 !important;
           box-shadow: 0 2px 8px rgba(0,0,0,0.30) !important;
+          height: 38px !important;
+          padding-right: 48px !important; /* room for Grimmory close button */
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          box-sizing: border-box !important;
         }
 
         :host([data-color-scheme="light"]) [class*="border-b"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"] {
@@ -337,14 +348,109 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
           box-shadow: 0 2px 8px rgba(0,0,0,0.10) !important;
         }
 
+
         /* Hide EmbedPDF bottom bar (page controls) - Grimmory footer handles navigation */
         [class*="border-t"][class*="bg-bg-surface"][class*="px-4"][class*="py-1"] {
           display: none !important;
         }
+
+        /* Hide open/close document buttons from toolbar */
+        [data-epdf-i="open-document"],
+        [data-epdf-i="close-document"],
+        button[title="Open Document"],
+        button[title="Close Document"] {
+          display: none !important;
+        }
+        .pdf-btn-open {
+          display: none !important;
+        }
+
+        /* Style dropdown/popover menus to match book viewer */
+        [role="menu"],
+        [role="dialog"],
+        [class*="rounded-lg"][class*="shadow"],
+        [class*="rounded-md"][class*="shadow"] {
+          background: #2d2d2d !important;
+          border: 1px solid #404040 !important;
+          border-radius: 0 0 8px 8px !important;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.40) !important;
+          color: rgba(255,255,255,0.95) !important;
+        }
+
+        :host([data-color-scheme="light"]) [role="menu"],
+        :host([data-color-scheme="light"]) [role="dialog"],
+        :host([data-color-scheme="light"]) [class*="rounded-lg"][class*="shadow"],
+        :host([data-color-scheme="light"]) [class*="rounded-md"][class*="shadow"] {
+          background: #ffffff !important;
+          border: 1px solid #d0d0d0 !important;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
+          color: rgba(0,0,0,0.87) !important;
+        }
+
+        /* Style dropdown menu items */
+        [role="menuitem"],
+        [role="menuitemcheckbox"],
+        [role="menuitemradio"] {
+          border-radius: 6px !important;
+          transition: background 150ms ease !important;
+        }
+
+        [role="menuitem"]:hover,
+        [role="menuitemcheckbox"]:hover,
+        [role="menuitemradio"]:hover {
+          background: rgba(255,255,255,0.12) !important;
+        }
+
+        :host([data-color-scheme="light"]) [role="menuitem"]:hover,
+        :host([data-color-scheme="light"]) [role="menuitemcheckbox"]:hover,
+        :host([data-color-scheme="light"]) [role="menuitemradio"]:hover {
+          background: rgba(0,0,0,0.06) !important;
+        }
+
+        /* Active/selected menu items */
+        [role="menuitemcheckbox"][aria-checked="true"],
+        [role="menuitemradio"][aria-checked="true"] {
+          color: #4a90e2 !important;
+          background: rgba(74,144,226,0.15) !important;
+        }
+
+        /* Toolbar button hover and active states */
+        button[class*="hover:bg-interactive-hover"]:hover {
+          background: rgba(255,255,255,0.12) !important;
+        }
+
+        :host([data-color-scheme="light"]) button[class*="hover:bg-interactive-hover"]:hover {
+          background: rgba(0,0,0,0.06) !important;
+        }
+
+        /* Separator lines in menus */
+        [role="separator"],
+        [class*="bg-border-default"][class*="h-6"][class*="w-px"] {
+          background: rgba(255,255,255,0.15) !important;
+        }
+
+        :host([data-color-scheme="light"]) [role="separator"],
+        :host([data-color-scheme="light"]) [class*="bg-border-default"][class*="h-6"][class*="w-px"] {
+          background: rgba(0,0,0,0.12) !important;
+        }
+
+        /* Tooltip styling */
+        [class*="bg-tooltip-bg"] {
+          background: #2d2d2d !important;
+          color: rgba(255,255,255,0.95) !important;
+          border: 1px solid #404040 !important;
+        }
+
+        :host([data-color-scheme="light"]) [class*="bg-tooltip-bg"] {
+          background: #ffffff !important;
+          color: rgba(0,0,0,0.87) !important;
+          border: 1px solid #d0d0d0 !important;
+        }
       `;
       shadowRoot.appendChild(style);
+      targetEl.style.visibility = '';
     };
-    setTimeout(inject, 300);
+    inject();
   }
 
   onPageChange(page: number): void {
