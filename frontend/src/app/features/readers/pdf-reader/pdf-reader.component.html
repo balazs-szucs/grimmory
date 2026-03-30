@@ -7,20 +7,15 @@
 @if (!isLoading) {
 <div class="pdf-reader-container" [class.dark]="isDarkTheme">
 
+  <!-- Footer trigger zone -->
+  <div class="footer-trigger-zone" [class.inactive]="footerVisible" (mouseenter)="onFooterTriggerZoneEnter()"></div>
+
   @if (viewerMode === 'book') {
   <!-- Header trigger zone -->
   <div class="header-trigger-zone" [class.inactive]="headerVisible" (mouseenter)="onHeaderTriggerZoneEnter()"></div>
-
-  <!-- Footer trigger zone -->
-  <div class="footer-trigger-zone" [class.inactive]="footerVisible" (mouseenter)="onFooterTriggerZoneEnter()"></div>
   }
 
   @if (viewerMode === 'document') {
-  <button class="icon-btn"
-    style="position: absolute; top: 1rem; left: 1rem; z-index: 5000; background: var(--surface-card); box-shadow: 0 4px 6px rgba(0,0,0,0.3); border-radius: 50%; padding: 0.5rem;"
-    (click)="setViewerMode('book')" title="Back to Book Viewer">
-    <app-reader-icon name="close" [size]="20" />
-  </button>
   <div id="embedpdf-viewer"></div>
   }
 
@@ -90,8 +85,7 @@
     </div>
   </ng-template>
 
-  @if (viewerMode === 'book') {
-  <!-- Footer -->
+  <!-- Footer (shared across both viewer modes) -->
   <div class="pdf-footer" [class.visible]="footerVisible">
     <div class="page-nav-left">
       <button class="nav-btn" (click)="goToFirstPage()" [disabled]="page <= 1"
@@ -141,15 +135,14 @@
     <div class="footer-spacer"></div>
 
     <div class="viewer-mode-toggle">
-      <button class="toggle-btn toggle-book active" (click)="setViewerMode('book')">
+      <button class="toggle-btn toggle-book" [class.active]="viewerMode === 'book'" (click)="setViewerMode('book')">
         <i class="pi pi-book"></i><span>Book Viewer</span>
       </button>
-      <button class="toggle-btn toggle-doc" (click)="setViewerMode('document')">
+      <button class="toggle-btn toggle-doc" [class.active]="viewerMode === 'document'" (click)="setViewerMode('document')">
         <i class="pi pi-file"></i><span>Doc Viewer</span>
       </button>
     </div>
   </div>
-  }
 
 </div>
 }

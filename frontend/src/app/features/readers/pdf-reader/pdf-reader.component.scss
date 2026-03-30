@@ -460,34 +460,6 @@ $transition-fast: 150ms ease;
   }
 }
 
-// Prevent arbitrary "Open Document" uploads in EmbedPDF
-:host ::ng-deep {
-  .pdf-btn-open {
-    display: none !important;
-  }
-}
-
-.document-mode-topbar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--surface-ground, #1e1e1e);
-  border-bottom: 1px solid var(--surface-border);
-  min-height: 48px;
-
-  .header-right {
-    display: flex;
-    align-items: center;
-  }
-
-  .separator {
-    width: 1px;
-    height: 24px;
-    background-color: var(--surface-border);
-    margin: 0 12px;
-  }
-}
 
 .goto-page {
   display: flex;

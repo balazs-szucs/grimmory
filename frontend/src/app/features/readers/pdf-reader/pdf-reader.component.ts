@@ -236,136 +236,46 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async initEmbedPdf() {
-    console.log('[EmbedPDF] initEmbedPdf() called. Instance exists?', !!this.embedPdfViewerInstance);
     if (this.embedPdfViewerInstance) return;
 
     try {
-      // 1. Check Cross-Origin isolation (required for SharedArrayBuffer / pdfium WASM threads)
-      const crossOriginIsolated = (self as any).crossOriginIsolated;
-      console.log('[EmbedPDF] crossOriginIsolated:', crossOriginIsolated);
-      if (!crossOriginIsolated) {
-        console.warn(
-          '[EmbedPDF] Page is NOT cross-origin isolated. ' +
-          'pdfium WASM requires COOP/COEP headers:\n' +
-          '  Cross-Origin-Opener-Policy: same-origin\n' +
-          '  Cross-Origin-Embedder-Policy: require-corp\n' +
-          'The viewer will stall during WASM instantiation without these.'
-        );
+      if (!(self as any).crossOriginIsolated) {
+        console.warn('[EmbedPDF] Page is NOT cross-origin isolated. pdfium WASM needs COOP/COEP headers.');
       }
 
-      // 2. Verify pdfium WASM is reachable
       const wasmUrl = '/assets/pdfium/pdfium.wasm';
-      try {
-        const wasmCheck = await fetch(wasmUrl, { method: 'HEAD' });
-        console.log('[EmbedPDF] pdfium.wasm reachable:', wasmCheck.ok, `(${wasmCheck.status})`);
-        if (!wasmCheck.ok) {
-          console.error('[EmbedPDF] pdfium.wasm not found at', wasmUrl);
-        }
-      } catch (wasmErr) {
-        console.error('[EmbedPDF] pdfium.wasm fetch failed:', wasmErr);
-      }
-
-      // 3. Fetch PDF content
-      console.log(`[EmbedPDF] Fetching PDF from: ${this.bookData}`);
       const headers: Record<string, string> = {};
       if (this.authorization) {
         headers['Authorization'] = this.authorization;
       }
 
-      const response = await fetch(this.bookData, {
-        headers,
-        credentials: 'include'
-      });
-      console.log(`[EmbedPDF] PDF fetch status: ${response.status}`);
-
+      const response = await fetch(this.bookData, { headers, credentials: 'include' });
       if (!response.ok) throw new Error(`PDF fetch failed: ${response.status}`);
 
       const buffer = await response.arrayBuffer();
-      console.log(`[EmbedPDF] PDF buffer size: ${buffer.byteLength} bytes`);
-
       const blob = new Blob([buffer], { type: 'application/pdf' });
       const objectUrl = URL.createObjectURL(blob);
 
-      // 4. Import EmbedPDF snippet
-      console.log('[EmbedPDF] Importing @embedpdf/snippet...');
       // @ts-ignore
       const module = await import('@embedpdf/snippet');
       const EmbedPDF = module.default;
-      console.log('[EmbedPDF] Module loaded. version:', EmbedPDF?.version, 'init:', typeof EmbedPDF?.init);
 
       const targetEl = document.getElementById('embedpdf-viewer');
-      if (!targetEl) {
-        throw new Error('#embedpdf-viewer element not found in DOM');
-      }
-      console.log('[EmbedPDF] Target element dimensions:', targetEl.clientWidth, 'x', targetEl.clientHeight);
+      if (!targetEl) throw new Error('#embedpdf-viewer not found');
 
-      // 5. Initialize viewer
-      console.log('[EmbedPDF] Calling EmbedPDF.init()');
       this.embedPdfViewerInstance = EmbedPDF.init({
         type: 'container',
         target: targetEl,
         src: objectUrl,
         wasmUrl,
-        worker: false, // Disable worker - relative worker imports fail under Angular/Vite bundler
+        worker: false,
         theme: {
           preference: this.isDarkTheme ? 'dark' : 'light'
         }
       });
-      console.log('[EmbedPDF] init() returned:', typeof this.embedPdfViewerInstance);
 
-      // 6. Monitor rendering progress
-      const checkRendering = (attempt: number) => {
-        const container = targetEl.querySelector('embedpdf-container') as any;
-        const shadowRoot = container?.shadowRoot;
-
-        console.log(`[EmbedPDF] Render check #${attempt}:`);
-
-        // Check engine and document-manager state via registry
-        if (container?.registry) {
-          container.registry.then((reg: any) => {
-            const engine = reg.engine;
-            const store = reg.store;
-            const state = store?.getState?.();
-            console.log('[EmbedPDF]   engine:', engine);
-            console.log('[EmbedPDF]   engine.executor:', engine?.executor);
-            console.log('[EmbedPDF]   store state core:', state?.core);
-            console.log('[EmbedPDF]   store state core.documents:', state?.core?.documents);
-
-            // Check document-manager plugin state
-            const dmState = state?.plugins?.['document-manager'];
-            console.log('[EmbedPDF]   document-manager plugin state:', dmState);
-
-            // Check all plugin statuses
-            const statuses: Record<string, string> = {};
-            reg.status.forEach((v: string, k: string) => { statuses[k] = v; });
-            console.log('[EmbedPDF]   plugin statuses:', statuses);
-
-            // Try to get the document-manager plugin provides
-            const dmPlugin = reg.plugins.get('document-manager');
-            console.log('[EmbedPDF]   document-manager plugin:', dmPlugin);
-
-            // Check for pending document loads
-            const dmConfig = reg.configurations.get('document-manager');
-            console.log('[EmbedPDF]   document-manager config:', dmConfig);
-          }).catch((err: any) => {
-            console.error('[EmbedPDF]   registry REJECTED:', err);
-          });
-        }
-
-        // Check shadow DOM for loading/error indicators
-        if (shadowRoot) {
-          const allText = shadowRoot.textContent?.trim();
-          const loadingEls = shadowRoot.querySelectorAll('[class*="loading"], [class*="spinner"], [class*="error"]');
-          console.log(`[EmbedPDF]   shadow text (first 200): "${allText?.substring(0, 200)}"`);
-          console.log(`[EmbedPDF]   loading/error elements: ${loadingEls.length}`);
-          (Array.from(loadingEls) as Element[]).forEach((el, i) => {
-            console.log(`[EmbedPDF]     [${i}] ${el.tagName}.${el.className}: "${el.textContent?.trim().substring(0, 100)}"`);
-          });
-        }
-      };
-
-      setTimeout(() => checkRendering(1), 3000);
-      setTimeout(() => checkRendering(2), 8000);
+      // Restyle EmbedPDF chrome to match book viewer colour scheme
+      this.styleEmbedPdfChrome(targetEl);
 
     } catch (err) {
       console.error('[EmbedPDF] FATAL:', err);
@@ -375,6 +285,66 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         detail: 'Failed to load Document Viewer. Check browser console for details.'
       });
     }
+  }
+
+  private styleEmbedPdfChrome(targetEl: HTMLElement): void {
+    const inject = () => {
+      const container = targetEl.querySelector('embedpdf-container') as HTMLElement;
+      const shadowRoot = container?.shadowRoot;
+      if (!shadowRoot) {
+        setTimeout(inject, 200);
+        return;
+      }
+
+      // Already injected?
+      if (shadowRoot.querySelector('style[data-grimmory]')) return;
+
+      const style = document.createElement('style');
+      style.setAttribute('data-grimmory', '');
+      style.textContent = `
+        /* ── Grimmory theme overrides ── */
+
+        /* Match the book viewer background */
+        :host {
+          --ep-background-app: #1a1a1a;
+          --ep-background-surface: #2d2d2d;
+          --ep-border-default: #404040;
+          --ep-border-subtle: #333333;
+          --ep-foreground-primary: rgba(255,255,255,0.95);
+          --ep-foreground-secondary: rgba(255,255,255,0.60);
+          --ep-accent-primary: #4a90e2;
+        }
+
+        :host([data-color-scheme="light"]) {
+          --ep-background-app: #f5f5f5;
+          --ep-background-surface: #ffffff;
+          --ep-border-default: #d0d0d0;
+          --ep-border-subtle: #e0e0e0;
+          --ep-foreground-primary: rgba(0,0,0,0.87);
+          --ep-foreground-secondary: rgba(0,0,0,0.54);
+        }
+
+        /* Restyle the top toolbar to match book viewer header */
+        [class*="border-b"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"] {
+          background: linear-gradient(135deg, #2d2d2d 0%, #1f1f1f 100%) !important;
+          border-bottom-color: #404040 !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.30) !important;
+        }
+
+        :host([data-color-scheme="light"]) [class*="border-b"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"] {
+          background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%) !important;
+          border-bottom-color: #d0d0d0 !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.10) !important;
+        }
+
+        /* Hide EmbedPDF bottom bar (page controls) - Grimmory footer handles navigation */
+        [class*="border-t"][class*="bg-bg-surface"][class*="px-4"][class*="py-1"] {
+          display: none !important;
+        }
+      `;
+      shadowRoot.appendChild(style);
+    };
+    setTimeout(inject, 300);
   }
 
   onPageChange(page: number): void {
@@ -403,6 +373,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   toggleDarkTheme(): void {
     this.isDarkTheme = !this.isDarkTheme;
     this.updateViewerSetting();
+    // Sync EmbedPDF theme if active
+    if (this.embedPdfViewerInstance) {
+      this.embedPdfViewerInstance.setTheme?.(this.isDarkTheme ? 'dark' : 'light');
+    }
   }
 
   private updateViewerSetting(): void {
