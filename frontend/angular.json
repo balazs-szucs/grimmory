@@ -108,6 +108,12 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "headers": {
+              "Cross-Origin-Opener-Policy": "same-origin",
+              "Cross-Origin-Embedder-Policy": "credentialless"
+            }
+          },
           "configurations": {
             "production": {
               "buildTarget": "grimmory:build:production"

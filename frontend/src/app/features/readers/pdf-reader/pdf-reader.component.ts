@@ -236,69 +236,143 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async initEmbedPdf() {
-    console.log('[EmbedPDF-DEBUG] initEmbedPdf() called. Current instance exists?', !!this.embedPdfViewerInstance);
+    console.log('[EmbedPDF] initEmbedPdf() called. Instance exists?', !!this.embedPdfViewerInstance);
     if (this.embedPdfViewerInstance) return;
 
     try {
-      console.log(`[EmbedPDF-DEBUG] Proceeding to fetch buffer. URL: ${this.bookData}`);
-      console.log(`[EmbedPDF-DEBUG] Does authorization token exist?`, !!this.authorization);
+      // 1. Check Cross-Origin isolation (required for SharedArrayBuffer / pdfium WASM threads)
+      const crossOriginIsolated = (self as any).crossOriginIsolated;
+      console.log('[EmbedPDF] crossOriginIsolated:', crossOriginIsolated);
+      if (!crossOriginIsolated) {
+        console.warn(
+          '[EmbedPDF] Page is NOT cross-origin isolated. ' +
+          'pdfium WASM requires COOP/COEP headers:\n' +
+          '  Cross-Origin-Opener-Policy: same-origin\n' +
+          '  Cross-Origin-Embedder-Policy: require-corp\n' +
+          'The viewer will stall during WASM instantiation without these.'
+        );
+      }
+
+      // 2. Verify pdfium WASM is reachable
+      const wasmUrl = '/assets/pdfium/pdfium.wasm';
+      try {
+        const wasmCheck = await fetch(wasmUrl, { method: 'HEAD' });
+        console.log('[EmbedPDF] pdfium.wasm reachable:', wasmCheck.ok, `(${wasmCheck.status})`);
+        if (!wasmCheck.ok) {
+          console.error('[EmbedPDF] pdfium.wasm not found at', wasmUrl);
+        }
+      } catch (wasmErr) {
+        console.error('[EmbedPDF] pdfium.wasm fetch failed:', wasmErr);
+      }
+
+      // 3. Fetch PDF content
+      console.log(`[EmbedPDF] Fetching PDF from: ${this.bookData}`);
       const headers: Record<string, string> = {};
       if (this.authorization) {
         headers['Authorization'] = this.authorization;
       }
 
-      console.log('[EmbedPDF-DEBUG] Initiating explicit JS fetch with credentials="include"');
       const response = await fetch(this.bookData, {
         headers,
-        credentials: 'include' // crucial for Grimmory APIs without token strings
+        credentials: 'include'
       });
-      console.log(`[EmbedPDF-DEBUG] Fetch response received. Status: ${response.status} ${response.statusText}`);
+      console.log(`[EmbedPDF] PDF fetch status: ${response.status}`);
 
-      if (!response.ok) throw new Error(`Failed to fetch PDF content via authenticated fetch: ${response.status}`);
+      if (!response.ok) throw new Error(`PDF fetch failed: ${response.status}`);
 
       const buffer = await response.arrayBuffer();
-      console.log(`[EmbedPDF-DEBUG] ArrayBuffer acquired. Byte length: ${buffer.byteLength}`);
+      console.log(`[EmbedPDF] PDF buffer size: ${buffer.byteLength} bytes`);
 
       const blob = new Blob([buffer], { type: 'application/pdf' });
       const objectUrl = URL.createObjectURL(blob);
-      console.log('[EmbedPDF-DEBUG] Blob ObjectURL physically generated successfully:', objectUrl);
 
-      console.log('[EmbedPDF-DEBUG] Dynamically importing @embedpdf/snippet module...');
+      // 4. Import EmbedPDF snippet
+      console.log('[EmbedPDF] Importing @embedpdf/snippet...');
       // @ts-ignore
       const module = await import('@embedpdf/snippet');
       const EmbedPDF = module.default;
-      console.log('[EmbedPDF-DEBUG] @embedpdf/snippet defaults imported:', !!EmbedPDF);
+      console.log('[EmbedPDF] Module loaded. version:', EmbedPDF?.version, 'init:', typeof EmbedPDF?.init);
 
       const targetEl = document.getElementById('embedpdf-viewer');
-      console.log('[EmbedPDF-DEBUG] Checked DOM for #embedpdf-viewer:', !!targetEl);
+      if (!targetEl) {
+        throw new Error('#embedpdf-viewer element not found in DOM');
+      }
+      console.log('[EmbedPDF] Target element dimensions:', targetEl.clientWidth, 'x', targetEl.clientHeight);
 
-      console.log('[EmbedPDF-DEBUG] Handing control to EmbedPDF.init() with payload');
+      // 5. Initialize viewer
+      console.log('[EmbedPDF] Calling EmbedPDF.init()');
       this.embedPdfViewerInstance = EmbedPDF.init({
         type: 'container',
-        target: targetEl!,
+        target: targetEl,
         src: objectUrl,
-        wasmUrl: '/assets/pdfium/pdfium.wasm',
+        wasmUrl,
+        worker: false, // Disable worker - relative worker imports fail under Angular/Vite bundler
         theme: {
           preference: this.isDarkTheme ? 'dark' : 'light'
         }
       });
-      console.log('[EmbedPDF-DEBUG] Synchronous EmbedPDF.init() call complete! Viewer instance assigned.');
+      console.log('[EmbedPDF] init() returned:', typeof this.embedPdfViewerInstance);
 
-      setTimeout(() => {
-        console.log('[EmbedPDF-DEBUG] DOM Interrogation 2s later...');
-        console.log('[EmbedPDF-DEBUG] Is targetEl still in DOM?', document.contains(targetEl));
-        console.log('[EmbedPDF-DEBUG] Parent dimensions:', targetEl?.parentElement?.clientWidth, 'x', targetEl?.parentElement?.clientHeight);
-        console.log('[EmbedPDF-DEBUG] TargetEl dimensions:', targetEl?.clientWidth, 'x', targetEl?.clientHeight);
-        console.log('[EmbedPDF-DEBUG] TargetEl innerHTML length:', targetEl?.innerHTML.length);
-        console.log('[EmbedPDF-DEBUG] TargetEl innerHTML (first 150 chars):', targetEl?.innerHTML.substring(0, 150));
-      }, 2000);
+      // 6. Monitor rendering progress
+      const checkRendering = (attempt: number) => {
+        const container = targetEl.querySelector('embedpdf-container') as any;
+        const shadowRoot = container?.shadowRoot;
+
+        console.log(`[EmbedPDF] Render check #${attempt}:`);
+
+        // Check engine and document-manager state via registry
+        if (container?.registry) {
+          container.registry.then((reg: any) => {
+            const engine = reg.engine;
+            const store = reg.store;
+            const state = store?.getState?.();
+            console.log('[EmbedPDF]   engine:', engine);
+            console.log('[EmbedPDF]   engine.executor:', engine?.executor);
+            console.log('[EmbedPDF]   store state core:', state?.core);
+            console.log('[EmbedPDF]   store state core.documents:', state?.core?.documents);
+
+            // Check document-manager plugin state
+            const dmState = state?.plugins?.['document-manager'];
+            console.log('[EmbedPDF]   document-manager plugin state:', dmState);
+
+            // Check all plugin statuses
+            const statuses: Record<string, string> = {};
+            reg.status.forEach((v: string, k: string) => { statuses[k] = v; });
+            console.log('[EmbedPDF]   plugin statuses:', statuses);
+
+            // Try to get the document-manager plugin provides
+            const dmPlugin = reg.plugins.get('document-manager');
+            console.log('[EmbedPDF]   document-manager plugin:', dmPlugin);
+
+            // Check for pending document loads
+            const dmConfig = reg.configurations.get('document-manager');
+            console.log('[EmbedPDF]   document-manager config:', dmConfig);
+          }).catch((err: any) => {
+            console.error('[EmbedPDF]   registry REJECTED:', err);
+          });
+        }
+
+        // Check shadow DOM for loading/error indicators
+        if (shadowRoot) {
+          const allText = shadowRoot.textContent?.trim();
+          const loadingEls = shadowRoot.querySelectorAll('[class*="loading"], [class*="spinner"], [class*="error"]');
+          console.log(`[EmbedPDF]   shadow text (first 200): "${allText?.substring(0, 200)}"`);
+          console.log(`[EmbedPDF]   loading/error elements: ${loadingEls.length}`);
+          (Array.from(loadingEls) as Element[]).forEach((el, i) => {
+            console.log(`[EmbedPDF]     [${i}] ${el.tagName}.${el.className}: "${el.textContent?.trim().substring(0, 100)}"`);
+          });
+        }
+      };
+
+      setTimeout(() => checkRendering(1), 3000);
+      setTimeout(() => checkRendering(2), 8000);
 
     } catch (err) {
-      console.error('[EmbedPDF-DEBUG] FATAL ERROR during initialization pipeline:', err);
+      console.error('[EmbedPDF] FATAL:', err);
       this.messageService.add({
         severity: 'error',
         summary: this.t.translate('common.error'),
-        detail: 'Failed to load Document Viewer. Check offline assets.'
+        detail: 'Failed to load Document Viewer. Check browser console for details.'
       });
     }
   }
