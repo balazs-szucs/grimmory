@@ -50,6 +50,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   bookFileId?: number;
   bookTitle = '';
   isFullscreen = false;
+  viewerMode: 'book' | 'document' = 'book';
+  private embedPdfViewerInstance: any;
 
   // Auto-hide chrome
   headerVisible = true;
@@ -224,6 +226,81 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
 
     wrapper.appendChild(btn);
     toolbar.prepend(wrapper);
+  }
+
+  async setViewerMode(mode: 'book' | 'document') {
+    this.viewerMode = mode;
+    if (mode === 'document') {
+      setTimeout(() => this.initEmbedPdf(), 100);
+    }
+  }
+
+  private async initEmbedPdf() {
+    console.log('[EmbedPDF-DEBUG] initEmbedPdf() called. Current instance exists?', !!this.embedPdfViewerInstance);
+    if (this.embedPdfViewerInstance) return;
+
+    try {
+      console.log(`[EmbedPDF-DEBUG] Proceeding to fetch buffer. URL: ${this.bookData}`);
+      console.log(`[EmbedPDF-DEBUG] Does authorization token exist?`, !!this.authorization);
+      const headers: Record<string, string> = {};
+      if (this.authorization) {
+        headers['Authorization'] = this.authorization;
+      }
+
+      console.log('[EmbedPDF-DEBUG] Initiating explicit JS fetch with credentials="include"');
+      const response = await fetch(this.bookData, {
+        headers,
+        credentials: 'include' // crucial for Grimmory APIs without token strings
+      });
+      console.log(`[EmbedPDF-DEBUG] Fetch response received. Status: ${response.status} ${response.statusText}`);
+
+      if (!response.ok) throw new Error(`Failed to fetch PDF content via authenticated fetch: ${response.status}`);
+
+      const buffer = await response.arrayBuffer();
+      console.log(`[EmbedPDF-DEBUG] ArrayBuffer acquired. Byte length: ${buffer.byteLength}`);
+
+      const blob = new Blob([buffer], { type: 'application/pdf' });
+      const objectUrl = URL.createObjectURL(blob);
+      console.log('[EmbedPDF-DEBUG] Blob ObjectURL physically generated successfully:', objectUrl);
+
+      console.log('[EmbedPDF-DEBUG] Dynamically importing @embedpdf/snippet module...');
+      // @ts-ignore
+      const module = await import('@embedpdf/snippet');
+      const EmbedPDF = module.default;
+      console.log('[EmbedPDF-DEBUG] @embedpdf/snippet defaults imported:', !!EmbedPDF);
+
+      const targetEl = document.getElementById('embedpdf-viewer');
+      console.log('[EmbedPDF-DEBUG] Checked DOM for #embedpdf-viewer:', !!targetEl);
+
+      console.log('[EmbedPDF-DEBUG] Handing control to EmbedPDF.init() with payload');
+      this.embedPdfViewerInstance = EmbedPDF.init({
+        type: 'container',
+        target: targetEl!,
+        src: objectUrl,
+        wasmUrl: '/assets/pdfium/pdfium.wasm',
+        theme: {
+          preference: this.isDarkTheme ? 'dark' : 'light'
+        }
+      });
+      console.log('[EmbedPDF-DEBUG] Synchronous EmbedPDF.init() call complete! Viewer instance assigned.');
+
+      setTimeout(() => {
+        console.log('[EmbedPDF-DEBUG] DOM Interrogation 2s later...');
+        console.log('[EmbedPDF-DEBUG] Is targetEl still in DOM?', document.contains(targetEl));
+        console.log('[EmbedPDF-DEBUG] Parent dimensions:', targetEl?.parentElement?.clientWidth, 'x', targetEl?.parentElement?.clientHeight);
+        console.log('[EmbedPDF-DEBUG] TargetEl dimensions:', targetEl?.clientWidth, 'x', targetEl?.clientHeight);
+        console.log('[EmbedPDF-DEBUG] TargetEl innerHTML length:', targetEl?.innerHTML.length);
+        console.log('[EmbedPDF-DEBUG] TargetEl innerHTML (first 150 chars):', targetEl?.innerHTML.substring(0, 150));
+      }, 2000);
+
+    } catch (err) {
+      console.error('[EmbedPDF-DEBUG] FATAL ERROR during initialization pipeline:', err);
+      this.messageService.add({
+        severity: 'error',
+        summary: this.t.translate('common.error'),
+        detail: 'Failed to load Document Viewer. Check offline assets.'
+      });
+    }
   }
 
   onPageChange(page: number): void {

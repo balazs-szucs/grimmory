@@ -47,6 +47,16 @@
                 "glob": "**/*",
                 "input": "libs/foliate-js",
                 "output": "/assets/foliate/"
+              },
+              {
+                "glob": "**/*",
+                "input": "node_modules/@embedpdf/pdfium/dist/",
+                "output": "/assets/pdfium/"
+              },
+              {
+                "glob": "**/*",
+                "input": "node_modules/@embedpdf/snippet/dist/",
+                "output": "/assets/embedpdf/"
               }
             ],
             "styles": [

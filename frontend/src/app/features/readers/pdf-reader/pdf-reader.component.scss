@@ -166,14 +166,13 @@ $transition-fast: 150ms ease;
     border: none !important;
     color: #fff !important;
     cursor: pointer;
-    padding: 6px 7px !important;
+    width: 30px !important;
+    height: 30px !important;
+    padding: 0 !important;
     border-radius: 6px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    min-width: 0 !important;
-    width: auto !important;
-    height: auto !important;
     transition: background $transition-fast !important;
     margin: 0 !important;
     box-shadow: none !important;
@@ -375,6 +374,118 @@ $transition-fast: 150ms ease;
         top: 0;
       }
     }
+  }
+}
+
+.viewer-mode-toggle {
+  display: flex;
+  align-items: center;
+
+  .toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    gap: 6px;
+    padding: 0 12px;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-card);
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    height: 30px;
+
+    &:hover {
+      color: var(--text-color);
+      background: var(--surface-hover);
+    }
+
+    &.active {
+      background: var(--primary-color);
+      color: var(--primary-color-text);
+      border-color: var(--primary-color);
+      z-index: 1;
+    }
+
+    &.toggle-book {
+      border-top-left-radius: 6px;
+      border-bottom-left-radius: 6px;
+      border-right: none;
+    }
+
+    &.toggle-doc {
+      border-top-right-radius: 6px;
+      border-bottom-right-radius: 6px;
+    }
+  }
+}
+
+.embed-pdf-warning {
+  position: absolute;
+  bottom: 80px;
+  left: 24px;
+  z-index: 1001;
+  background-color: var(--surface-card);
+  color: var(--text-color-secondary);
+  border: 1px solid var(--surface-border);
+  padding: 8px 16px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+
+  i {
+    font-size: 1rem;
+    color: var(--primary-color);
+  }
+}
+
+#embedpdf-viewer {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  display: flex;
+
+  embedpdf-container {
+    display: flex;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// Prevent arbitrary "Open Document" uploads in EmbedPDF
+:host ::ng-deep {
+  .pdf-btn-open {
+    display: none !important;
+  }
+}
+
+.document-mode-topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--surface-ground, #1e1e1e);
+  border-bottom: 1px solid var(--surface-border);
+  min-height: 48px;
+
+  .header-right {
+    display: flex;
+    align-items: center;
+  }
+
+  .separator {
+    width: 1px;
+    height: 24px;
+    background-color: var(--surface-border);
+    margin: 0 12px;
   }
 }
 
