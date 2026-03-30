@@ -199,11 +199,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     btn.onclick = () => {
-      // Dispatching ESC doesn't always work natively for pdf.js. 
+      // Dispatching ESC doesn't always work natively for pdf.js.
       // The most reliable way to close it is to click the tool that is currently active.
       const activeBtn = document.querySelector(`
-        #editorHighlight.toggled, 
-        #editorFreeText.toggled, 
+        #editorHighlight.toggled,
+        #editorFreeText.toggled,
         #editorInk.toggled,
         #editorStamp.toggled,
         .header-right button.toggled,
@@ -235,7 +235,12 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.viewerMode = mode;
     if (mode === 'document') {
+      // Pause the body-wide MutationObserver it causes massive lag when EmbedPDF mutates the DOM
+      this.annotationToolbarObserver?.disconnect();
       setTimeout(() => this.initEmbedPdf(), 100);
+    } else {
+      // Re-enable it for book mode
+      this.setupAnnotationToolbarCloseObserver();
     }
   }
 
