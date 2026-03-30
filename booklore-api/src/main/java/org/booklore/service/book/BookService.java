@@ -205,6 +205,7 @@ public class BookService {
                             .bookId(bookId)
                             .zoom(pdfPref.getZoom())
                             .spread(pdfPref.getSpread())
+                            .isDarkTheme(pdfPref.getIsDarkTheme())
                             .build()));
             newPdfViewerPreferencesRepository.findByBookIdAndUserId(bookId, user.getId())
                     .ifPresent(pdfPref -> settingsBuilder.newPdfSettings(NewPdfViewerPreferences.builder()
