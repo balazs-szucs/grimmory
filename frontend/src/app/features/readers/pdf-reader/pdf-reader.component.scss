@@ -64,6 +64,7 @@ $transition-fast: 150ms ease;
 // Child element styles for .pdf-header-toolbar (positioning is in ::ng-deep #toolbarViewer)
 
 .pdf-header-toolbar {
+
   .header-left,
   .header-right {
     display: flex;
@@ -74,6 +75,7 @@ $transition-fast: 150ms ease;
   }
 
   .header-right {
+
     // Style zoom toolbar within header
     ::ng-deep {
       pdf-zoom-toolbar {
@@ -108,8 +110,10 @@ $transition-fast: 150ms ease;
   }
 
   .book-title {
-    flex: 1;
-    min-width: 0;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 40%;
     padding: 0 12px;
     text-align: center;
     font-size: 14px;
@@ -429,6 +433,7 @@ $transition-fast: 150ms ease;
 // --- Override pdf.js viewer inner styles ---
 
 ::ng-deep {
+
   // Make pdf viewer fill container
   ngx-extended-pdf-viewer {
     flex: 1;
@@ -447,7 +452,8 @@ $transition-fast: 150ms ease;
       right: 0 !important;
       height: $header-height !important;
       min-height: 0 !important;
-      padding: 0 12px !important;
+      box-sizing: border-box !important;
+      padding: 0 16px !important;
       display: flex !important;
       align-items: center !important;
       justify-content: space-between !important;
@@ -590,6 +596,39 @@ $transition-fast: 150ms ease;
           color: inherit !important;
         }
       }
+
+      // Injected close button wrapper
+      .custom-close-btn-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        width: 100%;
+        margin-bottom: 6px;
+        border-bottom: 1px solid rgb(255 255 255 / 10%);
+        padding-bottom: 6px;
+      }
+
+      // Injected close button
+      .custom-close-btn {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 34px !important;
+        height: 34px !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 4px !important;
+
+        svg {
+          display: block;
+        }
+
+        &:hover {
+          background: rgb(239 68 68 / 20%) !important;
+          color: #ef4444 !important;
+        }
+      }
     }
 
     // Style the secondary toolbar dropdown
@@ -689,7 +728,7 @@ $transition-fast: 150ms ease;
       .treeItem {
         color: #fff !important;
 
-        > a {
+        >a {
           color: #fff !important;
 
           &:hover {

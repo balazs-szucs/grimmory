@@ -1,24 +1,24 @@
-import {Component, HostListener, inject, OnDestroy, OnInit} from '@angular/core';
-import {ActivatedRoute} from '@angular/router';
-import {NgxExtendedPdfViewerModule, NgxExtendedPdfViewerService, pdfDefaultOptions, ZoomType} from 'ngx-extended-pdf-viewer';
-import {PageTitleService} from "../../../shared/service/page-title.service";
-import {BookService} from '../../book/service/book.service';
-import {forkJoin, from, Subject, Subscription} from 'rxjs';
-import {debounceTime, map, switchMap} from 'rxjs/operators';
-import {BookSetting} from '../../book/model/book.model';
-import {UserService} from '../../settings/user-management/user.service';
-import {AuthService} from '../../../shared/service/auth.service';
-import {API_CONFIG} from '../../../core/config/api-config';
-import {PdfAnnotationService} from '../../../shared/service/pdf-annotation.service';
-import {ReaderIconComponent} from '../../readers/ebook-reader/shared/icon.component';
+import { Component, HostListener, inject, OnDestroy, OnInit, AfterViewInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { NgxExtendedPdfViewerModule, NgxExtendedPdfViewerService, pdfDefaultOptions, ZoomType } from 'ngx-extended-pdf-viewer';
+import { PageTitleService } from "../../../shared/service/page-title.service";
+import { BookService } from '../../book/service/book.service';
+import { forkJoin, from, Subject, Subscription } from 'rxjs';
+import { debounceTime, map, switchMap } from 'rxjs/operators';
+import { BookSetting } from '../../book/model/book.model';
+import { UserService } from '../../settings/user-management/user.service';
+import { AuthService } from '../../../shared/service/auth.service';
+import { API_CONFIG } from '../../../core/config/api-config';
+import { PdfAnnotationService } from '../../../shared/service/pdf-annotation.service';
+import { ReaderIconComponent } from '../../readers/ebook-reader/shared/icon.component';
 
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {MessageService} from 'primeng/api';
-import {TranslocoService, TranslocoPipe} from '@jsverse/transloco';
-import {ReadingSessionService} from '../../../shared/service/reading-session.service';
-import {WakeLockService} from '../../../shared/service/wake-lock.service';
-import {Location} from '@angular/common';
-import {FormsModule} from '@angular/forms';
+import { ProgressSpinner } from 'primeng/progressspinner';
+import { MessageService } from 'primeng/api';
+import { TranslocoService, TranslocoPipe } from '@jsverse/transloco';
+import { ReadingSessionService } from '../../../shared/service/reading-session.service';
+import { WakeLockService } from '../../../shared/service/wake-lock.service';
+import { Location } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-pdf-reader',
@@ -27,7 +27,7 @@ import {FormsModule} from '@angular/forms';
   templateUrl: './pdf-reader.component.html',
   styleUrl: './pdf-reader.component.scss',
 })
-export class PdfReaderComponent implements OnInit, OnDestroy {
+export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   constructor() {
     pdfDefaultOptions.rangeChunkSize = 512 * 1024;
     pdfDefaultOptions.disableAutoFetch = true;
@@ -86,6 +86,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   private pdfAnnotationService = inject(PdfAnnotationService);
   private readonly t = inject(TranslocoService);
   private wakeLockService = inject(WakeLockService);
+  private annotationToolbarObserver?: MutationObserver;
 
   ngOnInit(): void {
     setTimeout(() => this.wakeLockService.enable(), 1000);
@@ -114,41 +115,115 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
             return forkJoin([
               this.bookService.getBookSetting(this.bookId, this.bookFileId!),
               this.userService.getMyself()
-            ]).pipe(map(([bookSetting, myself]) => ({book, bookSetting, myself})));
+            ]).pipe(map(([bookSetting, myself]) => ({ book, bookSetting, myself })));
           })
         );
       })
     ).subscribe({
-        next: ({book, bookSetting, myself}) => {
-          const pdfMeta = book;
-          const pdfPrefs = bookSetting;
+      next: ({ book, bookSetting, myself }) => {
+        const pdfMeta = book;
+        const pdfPrefs = bookSetting;
 
-          this.pageTitle.setBookPageTitle(pdfMeta);
-          this.bookTitle = pdfMeta.metadata?.title || '';
+        this.pageTitle.setBookPageTitle(pdfMeta);
+        this.bookTitle = pdfMeta.metadata?.title || '';
 
-          const globalOrIndividual = myself.userSettings.perBookSetting.pdf;
-          if (globalOrIndividual === 'Global') {
-            this.zoom = myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
-            this.spread = myself.userSettings.pdfReaderSetting.pageSpread || 'off';
-          } else {
-            this.zoom = pdfPrefs.pdfSettings?.zoom || myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
-            this.spread = pdfPrefs.pdfSettings?.spread || myself.userSettings.pdfReaderSetting.pageSpread || 'off';
-            this.isDarkTheme = pdfPrefs.pdfSettings?.isDarkTheme ?? true;
-          }
-          this.canPrint = myself.permissions.canDownload || myself.permissions.admin;
-          this.page = pdfMeta.pdfProgress?.page || 1;
-          this.bookData = this.altBookType
-            ? `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content?bookType=${this.altBookType}`
-            : `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content`;
-          const token = this.authService.getInternalAccessToken();
-          this.authorization = token ? `Bearer ${token}` : '';
-          this.isLoading = false;
-        },
-        error: () => {
-          this.messageService.add({severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('readerPdf.toast.failedToLoadBook')});
-          this.isLoading = false;
+        const globalOrIndividual = myself.userSettings.perBookSetting.pdf;
+        if (globalOrIndividual === 'Global') {
+          this.zoom = myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
+          this.spread = myself.userSettings.pdfReaderSetting.pageSpread || 'off';
+        } else {
+          this.zoom = pdfPrefs.pdfSettings?.zoom || myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
+          this.spread = pdfPrefs.pdfSettings?.spread || myself.userSettings.pdfReaderSetting.pageSpread || 'off';
+          this.isDarkTheme = pdfPrefs.pdfSettings?.isDarkTheme ?? true;
         }
+        this.canPrint = myself.permissions.canDownload || myself.permissions.admin;
+        this.page = pdfMeta.pdfProgress?.page || 1;
+        this.bookData = this.altBookType
+          ? `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content?bookType=${this.altBookType}`
+          : `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content`;
+        const token = this.authService.getInternalAccessToken();
+        this.authorization = token ? `Bearer ${token}` : '';
+        this.isLoading = false;
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('readerPdf.toast.failedToLoadBook') });
+        this.isLoading = false;
+      }
+    });
+  }
+
+  ngAfterViewInit(): void {
+    this.setupAnnotationToolbarCloseObserver();
+  }
+
+  private setupAnnotationToolbarCloseObserver(): void {
+    this.annotationToolbarObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof HTMLElement) {
+            if (node.classList.contains('editorParamsToolbar')) {
+              this.injectCloseButton(node);
+            }
+            const toolbars = node.querySelectorAll?.('.editorParamsToolbar');
+            toolbars?.forEach(t => this.injectCloseButton(t as HTMLElement));
+          }
+        });
       });
+    });
+
+    this.annotationToolbarObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Also check immediately in case they are already in the DOM
+    setTimeout(() => {
+      document.querySelectorAll('.editorParamsToolbar').forEach(t => this.injectCloseButton(t as HTMLElement));
+    }, 1000);
+  }
+
+  private injectCloseButton(toolbar: HTMLElement): void {
+    if (toolbar.querySelector('.custom-close-btn-wrapper') || toolbar.querySelector('.custom-close-btn')) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-close-btn-wrapper';
+
+    const btn = document.createElement('button');
+    btn.className = 'custom-close-btn icon-btn';
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+    // Attempt to translate, fallback to 'Close'
+    try {
+      btn.title = this.t.translate('common.close') || 'Close';
+    } catch {
+      btn.title = 'Close';
+    }
+
+    btn.onclick = () => {
+      // Dispatching ESC doesn't always work natively for pdf.js. 
+      // The most reliable way to close it is to click the tool that is currently active.
+      const activeBtn = document.querySelector(`
+        #editorHighlight.toggled, 
+        #editorFreeText.toggled, 
+        #editorInk.toggled,
+        #editorStamp.toggled,
+        .header-right button.toggled,
+        .header-right button[aria-pressed="true"]
+      `) as HTMLElement;
+
+      if (activeBtn) {
+        activeBtn.click();
+      } else {
+        // Fallback: dispatch a custom event or switch to hand tool if the button isn't found
+        const editorNone = document.querySelector('#editorNone') as HTMLElement;
+        if (editorNone) {
+          editorNone.click();
+        } else {
+          // Last resort: click outside
+          document.body.click();
+        }
+      }
+    };
+
+    wrapper.appendChild(btn);
+    toolbar.prepend(wrapper);
   }
 
   onPageChange(page: number): void {
@@ -213,6 +288,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.wakeLockService.disable();
     if (this.chromeAutoHideTimer) clearTimeout(this.chromeAutoHideTimer);
+    if (this.annotationToolbarObserver) this.annotationToolbarObserver.disconnect();
     if (this.readingSessionService.isSessionActive()) {
       const percentage = this.totalPages > 0 ? Math.round((this.page / this.totalPages) * 1000) / 10 : 0;
       this.readingSessionService.endSession(this.page.toString(), percentage);
