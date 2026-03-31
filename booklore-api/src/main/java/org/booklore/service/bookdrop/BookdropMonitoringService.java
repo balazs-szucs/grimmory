@@ -4,9 +4,8 @@ import org.booklore.config.AppProperties;
 import org.booklore.model.enums.BookFileExtension;
 import org.booklore.repository.BookdropFileRepository;
 import org.booklore.util.FileUtils;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -20,7 +19,9 @@ import java.util.stream.Stream;
 
 @Slf4j
 @Service
-public class BookdropMonitoringService {
+public class BookdropMonitoringService implements SmartLifecycle {
+
+    private static final int LIFECYCLE_PHASE = 20;
 
     private final AppProperties appProperties;
     private final BookdropEventHandlerService eventHandler;
@@ -45,7 +46,7 @@ public class BookdropMonitoringService {
         this.bookdropFileRepository = bookdropFileRepository;
     }
 
-    @PostConstruct
+    @Override
     public void start() {
         bookdrop = Path.of(appProperties.getBookdropFolder());
         if (Files.notExists(bookdrop)) {
@@ -78,7 +79,7 @@ public class BookdropMonitoringService {
         }
     }
 
-    @PreDestroy
+    @Override
     public void stop() {
         running = false;
         if (watchThread != null) {
@@ -92,6 +93,16 @@ public class BookdropMonitoringService {
             }
         }
         log.info("Stopped bookdrop folder monitor");
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running;
+    }
+
+    @Override
+    public int getPhase() {
+        return LIFECYCLE_PHASE;
     }
 
     public void pauseMonitoring() {

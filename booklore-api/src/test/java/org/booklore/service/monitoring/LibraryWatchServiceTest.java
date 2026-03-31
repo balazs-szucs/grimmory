@@ -35,7 +35,7 @@ class LibraryWatchServiceTest {
     @AfterEach
     void teardown() {
         try {
-            service.shutdown();
+            service.stop();
         } catch (Exception ignored) {}
     }
 
