@@ -2,6 +2,7 @@ package org.booklore.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -20,6 +21,7 @@ public class RestClientConfig {
     }
 
     @Bean
+    @Primary
     public RestTemplate restTemplate(HttpClient httpClient) {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(15));
