@@ -37,6 +37,11 @@ public class HardcoverParser implements BookParser {
     private final HardcoverBookSearchService hardcoverBookSearchService;
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Hardcover;
+    }
+
+    @Override
     public List<BookMetadata> fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         String isbnCleaned = ParserUtils.cleanIsbn(fetchMetadataRequest.getIsbn());
         boolean searchByIsbn = isbnCleaned != null && !isbnCleaned.isBlank();

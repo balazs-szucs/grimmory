@@ -52,6 +52,11 @@ public class GoodReadsParser implements BookParser, DetailedMetadataProvider {
     private record TitleInfo(String title, String subtitle) {}
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.GoodReads;
+    }
+
+    @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         String existingGoodreadsId = getExistingGoodreadsId(book);
         if (existingGoodreadsId != null) {

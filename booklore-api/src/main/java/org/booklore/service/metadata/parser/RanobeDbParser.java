@@ -47,6 +47,11 @@ public class RanobeDbParser implements BookParser {
     private final AtomicLong tokenCount = new AtomicLong(MAX_REQUESTS_PER_SECOND);
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Ranobedb;
+    }
+
+    @Override
     public List<BookMetadata> fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
 
         String searchTerm = getSearchTerm(book, fetchMetadataRequest);

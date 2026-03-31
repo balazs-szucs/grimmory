@@ -44,6 +44,11 @@ public class LubimyCzytacParser implements BookParser {
     private final AppSettingService appSettingService;
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Lubimyczytac;
+    }
+
+    @Override
     public List<BookMetadata> fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         log.info("Fetching LubimyCzytac metadata for book: {}", book.getTitle());
 

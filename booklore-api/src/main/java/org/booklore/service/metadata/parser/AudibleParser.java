@@ -66,6 +66,11 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
     private record LocaleInfo(String acceptLanguage, Locale locale) {}
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Audible;
+    }
+
+    @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         List<String> audibleIds = getAudibleIds(book, fetchMetadataRequest);
         if (audibleIds == null || audibleIds.isEmpty()) {

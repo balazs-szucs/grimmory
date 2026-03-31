@@ -10,7 +10,6 @@ import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.BookUtils;
 import org.jsoup.Jsoup;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.ObjectMapper;
@@ -48,15 +47,15 @@ public class GoogleParser implements BookParser {
     private static final String GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes";
     private final AtomicLong lastRequestTime = new AtomicLong(0);
 
-    @Autowired
-    public GoogleParser(ObjectMapper objectMapper, AppSettingService appSettingService) {
-        this(objectMapper, appSettingService, HttpClient.newHttpClient());
-    }
-
     public GoogleParser(ObjectMapper objectMapper, AppSettingService appSettingService, HttpClient httpClient) {
         this.objectMapper = objectMapper;
         this.appSettingService = appSettingService;
         this.httpClient = httpClient;
+    }
+
+    @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Google;
     }
 
     @Override

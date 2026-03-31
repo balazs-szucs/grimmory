@@ -32,6 +32,11 @@ public class AudnexusAuthorParser implements AuthorParser {
     }
 
     @Override
+    public AuthorMetadataSource getSource() {
+        return AuthorMetadataSource.AUDNEXUS;
+    }
+
+    @Override
     public List<AuthorSearchResult> searchAuthors(String name, String region) {
         try {
             waitForRateLimit();

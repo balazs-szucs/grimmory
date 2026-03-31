@@ -82,6 +82,11 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
     }
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Comicvine;
+    }
+
+    @Override
     public List<BookMetadata> fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         String isbn = ParserUtils.cleanIsbn(fetchMetadataRequest.getIsbn());
         if (isbn != null && !isbn.isEmpty()) {

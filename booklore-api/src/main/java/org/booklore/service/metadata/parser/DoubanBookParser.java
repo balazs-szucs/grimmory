@@ -52,6 +52,11 @@ public class DoubanBookParser implements BookParser {
     private final AppSettingService appSettingService;
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Douban;
+    }
+
+    @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         List<BookMetadata> searchResults = getDoubanSearchResults(book, fetchMetadataRequest);
         if (searchResults == null || searchResults.isEmpty()) {

@@ -95,6 +95,11 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
     private record SeriesInfo(String name, Float number, Integer total) {}
 
     @Override
+    public MetadataProvider getProvider() {
+        return MetadataProvider.Amazon;
+    }
+
+    @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         LinkedList<String> amazonBookIds = getAmazonBookIds(book, fetchMetadataRequest);
         if (amazonBookIds == null || amazonBookIds.isEmpty()) {
