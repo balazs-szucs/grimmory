@@ -136,9 +136,6 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   // Click-to-paginate overlay
   clickToPaginate = false;
-  showClickOverlay = false;
-  private clickOverlayTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly CLICK_OVERLAY_TIMEOUT = 3000;
 
   // Auto-close menu after interaction
   autoCloseMenu = false;
@@ -305,11 +302,11 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
                 // Restore new settings from per-book or global
                 const cbxSrc = global ? userSettings.cbxReaderSetting : bookSettings.cbxSettings;
                 if (cbxSrc) {
-                  this.pageSplitOption = (cbxSrc as any).pageSplitOption ?? this.pageSplitOption;
-                  this.brightness = (cbxSrc as any).brightness ?? 100;
-                  this.emulateBook = (cbxSrc as any).emulateBook ?? false;
-                  this.clickToPaginate = (cbxSrc as any).clickToPaginate ?? false;
-                  this.autoCloseMenu = (cbxSrc as any).autoCloseMenu ?? false;
+                  this.pageSplitOption = cbxSrc.pageSplitOption ?? this.pageSplitOption;
+                  this.brightness = cbxSrc.brightness ?? 100;
+                  this.emulateBook = cbxSrc.emulateBook ?? false;
+                  this.clickToPaginate = cbxSrc.clickToPaginate ?? false;
+                  this.autoCloseMenu = cbxSrc.autoCloseMenu ?? false;
                 }
 
                 this.currentPage = (book.cbxProgress?.page || 1) - 1;
@@ -1642,9 +1639,6 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     this.wakeLockService.disable();
     if (this.autoCloseMenuTimer) {
       clearTimeout(this.autoCloseMenuTimer);
-    }
-    if (this.clickOverlayTimer) {
-      clearTimeout(this.clickOverlayTimer);
     }
     this.destroy$.next();
     this.destroy$.complete();

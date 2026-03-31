@@ -622,10 +622,7 @@
 // Click-to-paginate overlay
 .click-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 5;
   display: flex;
   pointer-events: none;
@@ -673,9 +670,18 @@
   &.rtl-overlay {
     flex-direction: row-reverse;
   }
+
+  // Disable pointer events when magnifier is active so elementFromPoint can reach images
+  &.magnifier-disabled {
+    pointer-events: none;
+
+    .click-zone {
+      pointer-events: none;
+    }
+  }
 }
 
-// Emulate book mode — spine shadow in two-page view
+// Emulate book mode spine shadow in two-page view
 .image-container.emulate-book {
   .pages-wrapper,
   .current-page-layer {

@@ -214,7 +214,7 @@
         parent.postMessage({ type: 'ready' }, myOrigin);
       } catch (err) {
         log('Registry error:', err);
-        parent.postMessage({ type: 'error', error: String(err) }, myOrigin);
+        parent.postMessage({ type: 'documentError', error: String(err) }, myOrigin);
       }
 
       injectGrimmoryStyles(target);

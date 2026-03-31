@@ -86,14 +86,27 @@
             </div>
           </div>
           @if (clickToPaginate) {
-            <div class="click-overlay" [class.visible]="showClickOverlay"
-                 [class.rtl-overlay]="readingDirection === CbxReadingDirection.RTL">
-              <div class="click-zone click-zone-prev" (click)="onClickZonePrev($event)">
+            <div class="click-overlay visible"
+                 [class.rtl-overlay]="readingDirection === CbxReadingDirection.RTL"
+                 [class.magnifier-disabled]="isMagnifierActive">
+              <div class="click-zone click-zone-prev"
+                   role="button"
+                   tabindex="0"
+                   (click)="onClickZonePrev($event)"
+                   (keydown.enter)="onClickZonePrev($event)">
                 <span class="zone-arrow">&#9664;</span>
               </div>
-              <div class="click-zone click-zone-menu" (click)="onClickZoneMenu($event)">
+              <div class="click-zone click-zone-menu"
+                   role="button"
+                   tabindex="0"
+                   (click)="onClickZoneMenu($event)"
+                   (keydown.enter)="onClickZoneMenu($event)">
               </div>
-              <div class="click-zone click-zone-next" (click)="onClickZoneNext($event)">
+              <div class="click-zone click-zone-next"
+                   role="button"
+                   tabindex="0"
+                   (click)="onClickZoneNext($event)"
+                   (keydown.enter)="onClickZoneNext($event)">
                 <span class="zone-arrow">&#9654;</span>
               </div>
             </div>

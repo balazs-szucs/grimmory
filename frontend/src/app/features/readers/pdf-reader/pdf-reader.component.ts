@@ -20,6 +20,13 @@ import { WakeLockService } from '../../../shared/service/wake-lock.service';
 import { Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
+type EmbedPdfMessage =
+  | { type: 'ready' }
+  | { type: 'documentOpened'; pageCount?: number }
+  | { type: 'documentError'; error: string }
+  | { type: 'saved'; buffer?: ArrayBuffer }
+  | { type: 'saveError'; error: string };
+
 @Component({
   selector: 'app-pdf-reader',
   standalone: true,
@@ -54,6 +61,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   private embedPdfIframe: HTMLIFrameElement | null = null;
   private embedPdfMessageHandler?: (e: MessageEvent) => void;
   private embedPdfSaveResolve?: (buffer: ArrayBuffer | null) => void;
+  private embedPdfSaveTimer?: ReturnType<typeof setTimeout>;
   private embedPdfInitTime = 0;
 
   // Auto-hide chrome
@@ -232,9 +240,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async setViewerMode(mode: 'book' | 'document') {
-    if ((performance as any).memory) console.log('[EmbedPDF Memory] pre-setViewerMode: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
-    console.log('[EmbedPDF] setViewerMode:', mode, '| current:', this.viewerMode,
-      '| hasIframe:', !!this.embedPdfIframe);
     if (mode !== 'document' && this.embedPdfIframe) {
       await this.saveEmbedPdfDocument();
       await this.destroyEmbedPdf();
@@ -253,8 +258,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   private async initEmbedPdf() {
     if (this.embedPdfIframe) return;
 
-    if ((performance as any).memory) console.log('[EmbedPDF Memory] initEmbedPdf start: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
-
     const t0 = performance.now();
     this.embedPdfInitTime = t0;
 
@@ -268,9 +271,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!response.ok) throw new Error(`PDF fetch failed: ${response.status}`);
 
       const pdfBuffer = await response.arrayBuffer();
-      console.log('[EmbedPDF] PDF fetched:', (pdfBuffer.byteLength / 1024 / 1024).toFixed(1), 'MB in',
-        (performance.now() - t0).toFixed(0), 'ms');
-
       const targetEl = document.getElementById('embedpdf-viewer');
       if (!targetEl) throw new Error('#embedpdf-viewer not found');
 
@@ -305,8 +305,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         theme: this.isDarkTheme ? 'dark' : 'light'
       }, location.origin, [pdfBuffer]);
 
-      console.log('[EmbedPDF] iframe created, init message sent in', (performance.now() - t0).toFixed(0), 'ms');
-
     } catch (err) {
       console.error('[EmbedPDF] FATAL:', err);
       this.messageService.add({
@@ -318,13 +316,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Handle postMessage events from the EmbedPDF iframe */
-  private handleEmbedPdfMessage(msg: any): void {
+  private handleEmbedPdfMessage(msg: EmbedPdfMessage): void {
     switch (msg.type) {
       case 'ready':
-        console.log('[EmbedPDF] Iframe viewer ready');
         break;
       case 'documentOpened':
-        console.log('[EmbedPDF] Document opened, pages:', msg.pageCount);
         break;
       case 'documentError':
         console.error('[EmbedPDF] Document error:', msg.error);
@@ -338,20 +334,13 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         this.embedPdfSaveResolve?.(null);
         this.embedPdfSaveResolve = undefined;
         break;
-      case 'log':
-        console.log('[EmbedPDF-frame]', ...(msg.args || []));
-        break;
     }
   }
 
   private async saveEmbedPdfDocument(): Promise<void> {
     if (!this.embedPdfIframe?.contentWindow) {
-      console.log('[EmbedPDF] saveEmbedPdfDocument: no iframe, skipping');
       return;
     }
-
-    const t0 = performance.now();
-    console.log('[EmbedPDF] saveEmbedPdfDocument: requesting export via postMessage');
 
     try {
       // Request save from iframe and wait for response
@@ -359,23 +348,24 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         this.embedPdfSaveResolve = resolve;
         this.embedPdfIframe!.contentWindow!.postMessage({ type: 'save' }, location.origin);
         // Timeout after 30 seconds
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           if (this.embedPdfSaveResolve === resolve) {
-            console.warn('[EmbedPDF] Save timed out after 30s');
             resolve(null);
             this.embedPdfSaveResolve = undefined;
           }
         }, 30000);
+        // Store timer so we can clear it on success
+        this.embedPdfSaveTimer = timer;
       });
 
-      if (!buffer) {
-        console.log('[EmbedPDF] saveEmbedPdfDocument: no buffer returned, skipping upload');
-        return;
+      if (this.embedPdfSaveTimer) {
+        clearTimeout(this.embedPdfSaveTimer);
+        this.embedPdfSaveTimer = undefined;
       }
 
-      console.log('[EmbedPDF] saveEmbedPdfDocument: exported',
-        (buffer.byteLength / 1024 / 1024).toFixed(1), 'MB in',
-        (performance.now() - t0).toFixed(0), 'ms');
+      if (!buffer) {
+        return;
+      }
 
       const headers: Record<string, string> = { 'Content-Type': 'application/pdf' };
       if (this.authorization) {
@@ -386,14 +376,15 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         ? `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content?bookType=${this.altBookType}`
         : `${API_CONFIG.BASE_URL}/api/v1/books/${this.bookId}/content`;
 
-      await fetch(url, {
+      const uploadResponse = await fetch(url, {
         method: 'PUT',
         headers,
         credentials: 'include',
         body: buffer
       });
-      console.log('[EmbedPDF] saveEmbedPdfDocument: upload complete in',
-        (performance.now() - t0).toFixed(0), 'ms');
+      if (!uploadResponse.ok) {
+        console.error('[EmbedPDF] Upload failed:', uploadResponse.status);
+      }
     } catch (err) {
       console.error('[EmbedPDF] Failed to save document:', err);
     }
@@ -466,9 +457,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
-    if ((performance as any).memory) console.log('[EmbedPDF Memory] ngOnDestroy: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
-    console.log('[EmbedPDF] ngOnDestroy called | mode:', this.viewerMode,
-      '| hasIframe:', !!this.embedPdfIframe);
     this.wakeLockService.disable();
     if (this.chromeAutoHideTimer) clearTimeout(this.chromeAutoHideTimer);
     if (this.annotationToolbarObserver) this.annotationToolbarObserver.disconnect();
@@ -584,8 +572,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   closeReader = async (): Promise<void> => {
-    console.log('[EmbedPDF] closeReader called | mode:', this.viewerMode,
-      '| hasIframe:', !!this.embedPdfIframe);
     if (this.embedPdfIframe) {
       await this.saveEmbedPdfDocument();
       await this.destroyEmbedPdf();
@@ -623,10 +609,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async destroyEmbedPdf(): Promise<void> {
-    const t0 = performance.now();
-    const lifetime = this.embedPdfInitTime ? ((t0 - this.embedPdfInitTime) / 1000).toFixed(1) + 's' : 'n/a';
-    if ((performance as any).memory) console.log('[EmbedPDF Memory] pre-destroy: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
-    console.log('[EmbedPDF] destroyEmbedPdf | hasIframe:', !!this.embedPdfIframe, '| lifetime:', lifetime);
+
 
     // Remove message listener
     if (this.embedPdfMessageHandler) {
@@ -635,6 +618,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     // Cancel any pending save
+    if (this.embedPdfSaveTimer) {
+      clearTimeout(this.embedPdfSaveTimer);
+      this.embedPdfSaveTimer = undefined;
+    }
     this.embedPdfSaveResolve?.(null);
     this.embedPdfSaveResolve = undefined;
 
@@ -646,8 +633,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.embedPdfInitTime = 0;
-    console.log('[EmbedPDF] destroyEmbedPdf completed in', (performance.now() - t0).toFixed(0), 'ms');
-    if ((performance as any).memory) console.log('[EmbedPDF Memory] post-destroy: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
   }
 
   private persistAnnotations(): void {

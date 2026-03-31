@@ -27,6 +27,10 @@ describe('CbxQuickSettingsService', () => {
     service.setSlideshowInterval(CbxSlideshowInterval.TEN_SECONDS);
     service.setMagnifierZoom(CbxMagnifierZoom.ZOOM_4X);
     service.setMagnifierLensSize(CbxMagnifierLensSize.EXTRA_LARGE);
+    service.setBrightness(50);
+    service.setEmulateBook(true);
+    service.setClickToPaginate(true);
+    service.setAutoCloseMenu(true);
 
     expect(service.visible()).toBe(true);
     expect(service.state()).toEqual({
@@ -38,7 +42,11 @@ describe('CbxQuickSettingsService', () => {
       readingDirection: CbxReadingDirection.RTL,
       slideshowInterval: CbxSlideshowInterval.TEN_SECONDS,
       magnifierZoom: CbxMagnifierZoom.ZOOM_4X,
-      magnifierLensSize: CbxMagnifierLensSize.EXTRA_LARGE
+      magnifierLensSize: CbxMagnifierLensSize.EXTRA_LARGE,
+      brightness: 50,
+      emulateBook: true,
+      clickToPaginate: true,
+      autoCloseMenu: true
     });
 
     service.close();
@@ -55,7 +63,11 @@ describe('CbxQuickSettingsService', () => {
       readingDirection: CbxReadingDirection.LTR,
       slideshowInterval: CbxSlideshowInterval.FIVE_SECONDS,
       magnifierZoom: CbxMagnifierZoom.ZOOM_3X,
-      magnifierLensSize: CbxMagnifierLensSize.MEDIUM
+      magnifierLensSize: CbxMagnifierLensSize.MEDIUM,
+      brightness: 100,
+      emulateBook: false,
+      clickToPaginate: false,
+      autoCloseMenu: false
     });
   });
 

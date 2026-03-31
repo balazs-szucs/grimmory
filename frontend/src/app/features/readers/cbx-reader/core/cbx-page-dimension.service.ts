@@ -5,9 +5,7 @@ import {API_CONFIG} from '../../../../core/config/api-config';
 import {AuthService} from '../../../../shared/service/auth.service';
 import {CbxPageDimension} from '../models/cbx-page-dimension.model';
 
-export interface DoublePairs {
-  [pageIndex: number]: number;
-}
+export type DoublePairs = Record<number, number>;
 
 export interface WebtoonDetectionResult {
   isWebtoon: boolean;

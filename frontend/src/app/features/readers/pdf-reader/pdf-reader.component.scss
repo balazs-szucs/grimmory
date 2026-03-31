@@ -1,5 +1,7 @@
 @use 'sass:color';
 
+/* stylelint-disable selector-id-pattern, selector-class-pattern -- targets ngx-extended-pdf-viewer / pdf.js internals */
+
 // Design tokens matching CBX/E-Book readers
 $header-height: 38px;
 $footer-height: 52px;
@@ -64,7 +66,6 @@ $transition-fast: 150ms ease;
 // Child element styles for .pdf-header-toolbar (positioning is in ::ng-deep #toolbarViewer)
 
 .pdf-header-toolbar {
-
   .header-left,
   .header-right {
     display: flex;
@@ -75,7 +76,6 @@ $transition-fast: 150ms ease;
   }
 
   .header-right {
-
     // Style zoom toolbar within header
     ::ng-deep {
       pdf-zoom-toolbar {
@@ -437,7 +437,7 @@ $transition-fast: 150ms ease;
   gap: 8px;
   font-weight: 500;
   font-size: 0.85rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px rgb(0 0 0 / 10%);
   pointer-events: none;
 
   i {
@@ -524,7 +524,6 @@ $transition-fast: 150ms ease;
 // --- Override pdf.js viewer inner styles ---
 
 ::ng-deep {
-
   // Make pdf viewer fill container
   ngx-extended-pdf-viewer {
     flex: 1;
@@ -846,7 +845,7 @@ $transition-fast: 150ms ease;
 
 // --- Responsive ---
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .pdf-footer {
     height: auto;
     padding: 8px 12px;
