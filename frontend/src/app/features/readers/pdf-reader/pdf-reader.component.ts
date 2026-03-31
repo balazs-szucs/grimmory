@@ -51,7 +51,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   bookTitle = '';
   isFullscreen = false;
   viewerMode: 'book' | 'document' = 'book';
-  private embedPdfViewerInstance: any;
+  private embedPdfIframe: HTMLIFrameElement | null = null;
+  private embedPdfMessageHandler?: (e: MessageEvent) => void;
+  private embedPdfSaveResolve?: (buffer: ArrayBuffer | null) => void;
+  private embedPdfInitTime = 0;
 
   // Auto-hide chrome
   headerVisible = true;
@@ -229,9 +232,12 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async setViewerMode(mode: 'book' | 'document') {
-    if (mode !== 'document' && this.embedPdfViewerInstance) {
+    if ((performance as any).memory) console.log('[EmbedPDF Memory] pre-setViewerMode: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
+    console.log('[EmbedPDF] setViewerMode:', mode, '| current:', this.viewerMode,
+      '| hasIframe:', !!this.embedPdfIframe);
+    if (mode !== 'document' && this.embedPdfIframe) {
       await this.saveEmbedPdfDocument();
-      this.embedPdfViewerInstance = null;
+      await this.destroyEmbedPdf();
     }
     this.viewerMode = mode;
     if (mode === 'document') {
@@ -245,14 +251,14 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private async initEmbedPdf() {
-    if (this.embedPdfViewerInstance) return;
+    if (this.embedPdfIframe) return;
+
+    if ((performance as any).memory) console.log('[EmbedPDF Memory] initEmbedPdf start: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
+
+    const t0 = performance.now();
+    this.embedPdfInitTime = t0;
 
     try {
-      if (!(self as any).crossOriginIsolated) {
-        console.warn('[EmbedPDF] Page is NOT cross-origin isolated. pdfium WASM needs COOP/COEP headers.');
-      }
-
-      const wasmUrl = '/assets/pdfium/pdfium.wasm';
       const headers: Record<string, string> = {};
       if (this.authorization) {
         headers['Authorization'] = this.authorization;
@@ -261,33 +267,45 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
       const response = await fetch(this.bookData, { headers, credentials: 'include' });
       if (!response.ok) throw new Error(`PDF fetch failed: ${response.status}`);
 
-      const buffer = await response.arrayBuffer();
-      const blob = new Blob([buffer], { type: 'application/pdf' });
-      const objectUrl = URL.createObjectURL(blob);
-
-      // @ts-ignore
-      const module = await import('@embedpdf/snippet');
-      const EmbedPDF = module.default;
+      const pdfBuffer = await response.arrayBuffer();
+      console.log('[EmbedPDF] PDF fetched:', (pdfBuffer.byteLength / 1024 / 1024).toFixed(1), 'MB in',
+        (performance.now() - t0).toFixed(0), 'ms');
 
       const targetEl = document.getElementById('embedpdf-viewer');
       if (!targetEl) throw new Error('#embedpdf-viewer not found');
 
-      // Hide container until styles are injected to avoid default-theme flash
-      targetEl.style.visibility = 'hidden';
+      // Create iframe — EmbedPDF + its WASM memory live entirely inside the iframe.
+      // Destroying the iframe releases all WASM linear memory, solving the leak.
+      const iframe = document.createElement('iframe');
+      iframe.src = '/assets/embedpdf-frame.html';
+      iframe.style.cssText = 'width:100%;height:100%;border:none;';
+      iframe.setAttribute('allow', 'fullscreen');
 
-      this.embedPdfViewerInstance = EmbedPDF.init({
-        type: 'container',
-        target: targetEl,
-        src: objectUrl,
-        wasmUrl,
-        worker: false,
-        theme: {
-          preference: this.isDarkTheme ? 'dark' : 'light'
-        }
+      // Listen for messages from the iframe
+      this.embedPdfMessageHandler = (e: MessageEvent) => {
+        if (e.origin !== location.origin) return;
+        if (e.source !== iframe.contentWindow) return;
+        this.handleEmbedPdfMessage(e.data);
+      };
+      window.addEventListener('message', this.embedPdfMessageHandler);
+
+      // Wait for iframe to load before sending PDF data
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => resolve();
+        targetEl.appendChild(iframe);
       });
 
-      // Inject Grimmory styles, then reveal
-      this.styleEmbedPdfChrome(targetEl);
+      this.embedPdfIframe = iframe;
+
+      // Transfer the PDF buffer to the iframe (zero-copy via Transferable)
+      iframe.contentWindow!.postMessage({
+        type: 'init',
+        buffer: pdfBuffer,
+        wasmUrl: '/assets/pdfium/pdfium.wasm',
+        theme: this.isDarkTheme ? 'dark' : 'light'
+      }, location.origin, [pdfBuffer]);
+
+      console.log('[EmbedPDF] iframe created, init message sent in', (performance.now() - t0).toFixed(0), 'ms');
 
     } catch (err) {
       console.error('[EmbedPDF] FATAL:', err);
@@ -299,185 +317,65 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private styleEmbedPdfChrome(targetEl: HTMLElement): void {
-    const inject = () => {
-      const container = targetEl.querySelector('embedpdf-container') as HTMLElement;
-      const shadowRoot = container?.shadowRoot;
-      if (!shadowRoot) {
-        setTimeout(inject, 200);
-        return;
-      }
-
-      // Already injected?
-      if (shadowRoot.querySelector('style[data-grimmory]')) return;
-
-      const style = document.createElement('style');
-      style.setAttribute('data-grimmory', '');
-      style.textContent = `
-        /* ── Grimmory theme overrides ── */
-
-        /* Match the book viewer background */
-        :host {
-          --ep-background-app: #1a1a1a;
-          --ep-background-surface: #2d2d2d;
-          --ep-border-default: #404040;
-          --ep-border-subtle: #333333;
-          --ep-foreground-primary: rgba(255,255,255,0.95);
-          --ep-foreground-secondary: rgba(255,255,255,0.60);
-          --ep-accent-primary: #4a90e2;
-        }
-
-        :host([data-color-scheme="light"]) {
-          --ep-background-app: #f5f5f5;
-          --ep-background-surface: #ffffff;
-          --ep-border-default: #d0d0d0;
-          --ep-border-subtle: #e0e0e0;
-          --ep-foreground-primary: rgba(0,0,0,0.87);
-          --ep-foreground-secondary: rgba(0,0,0,0.54);
-        }
-
-        /* Restyle the top toolbar to match book viewer header */
-        [class*="border-b"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"] {
-          background: linear-gradient(135deg, #2d2d2d 0%, #1f1f1f 100%) !important;
-          border-bottom-color: #404040 !important;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.30) !important;
-          height: 38px !important;
-          padding-right: 48px !important; /* room for Grimmory close button */
-          padding-top: 0 !important;
-          padding-bottom: 0 !important;
-          box-sizing: border-box !important;
-        }
-
-        :host([data-color-scheme="light"]) [class*="border-b"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"] {
-          background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%) !important;
-          border-bottom-color: #d0d0d0 !important;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.10) !important;
-        }
-
-
-        /* Hide EmbedPDF bottom bar (page controls) - Grimmory footer handles navigation */
-        [class*="border-t"][class*="bg-bg-surface"][class*="px-4"][class*="py-1"] {
-          display: none !important;
-        }
-
-        /* Hide open/close document buttons from toolbar */
-        [data-epdf-i="open-document"],
-        [data-epdf-i="close-document"],
-        button[title="Open Document"],
-        button[title="Close Document"] {
-          display: none !important;
-        }
-        .pdf-btn-open {
-          display: none !important;
-        }
-
-        /* Style dropdown/popover menus to match book viewer */
-        [role="menu"],
-        [role="dialog"],
-        [class*="rounded-lg"][class*="shadow"],
-        [class*="rounded-md"][class*="shadow"] {
-          background: #2d2d2d !important;
-          border: 1px solid #404040 !important;
-          border-radius: 0 0 8px 8px !important;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.40) !important;
-          color: rgba(255,255,255,0.95) !important;
-        }
-
-        :host([data-color-scheme="light"]) [role="menu"],
-        :host([data-color-scheme="light"]) [role="dialog"],
-        :host([data-color-scheme="light"]) [class*="rounded-lg"][class*="shadow"],
-        :host([data-color-scheme="light"]) [class*="rounded-md"][class*="shadow"] {
-          background: #ffffff !important;
-          border: 1px solid #d0d0d0 !important;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
-          color: rgba(0,0,0,0.87) !important;
-        }
-
-        /* Style dropdown menu items */
-        [role="menuitem"],
-        [role="menuitemcheckbox"],
-        [role="menuitemradio"] {
-          border-radius: 6px !important;
-          transition: background 150ms ease !important;
-        }
-
-        [role="menuitem"]:hover,
-        [role="menuitemcheckbox"]:hover,
-        [role="menuitemradio"]:hover {
-          background: rgba(255,255,255,0.12) !important;
-        }
-
-        :host([data-color-scheme="light"]) [role="menuitem"]:hover,
-        :host([data-color-scheme="light"]) [role="menuitemcheckbox"]:hover,
-        :host([data-color-scheme="light"]) [role="menuitemradio"]:hover {
-          background: rgba(0,0,0,0.06) !important;
-        }
-
-        /* Active/selected menu items */
-        [role="menuitemcheckbox"][aria-checked="true"],
-        [role="menuitemradio"][aria-checked="true"] {
-          color: #4a90e2 !important;
-          background: rgba(74,144,226,0.15) !important;
-        }
-
-        /* Toolbar button hover and active states */
-        button[class*="hover:bg-interactive-hover"]:hover {
-          background: rgba(255,255,255,0.12) !important;
-        }
-
-        :host([data-color-scheme="light"]) button[class*="hover:bg-interactive-hover"]:hover {
-          background: rgba(0,0,0,0.06) !important;
-        }
-
-        /* Separator lines in menus */
-        [role="separator"],
-        [class*="bg-border-default"][class*="h-6"][class*="w-px"] {
-          background: rgba(255,255,255,0.15) !important;
-        }
-
-        :host([data-color-scheme="light"]) [role="separator"],
-        :host([data-color-scheme="light"]) [class*="bg-border-default"][class*="h-6"][class*="w-px"] {
-          background: rgba(0,0,0,0.12) !important;
-        }
-
-        /* Tooltip styling */
-        [class*="bg-tooltip-bg"] {
-          background: #2d2d2d !important;
-          color: rgba(255,255,255,0.95) !important;
-          border: 1px solid #404040 !important;
-        }
-
-        :host([data-color-scheme="light"]) [class*="bg-tooltip-bg"] {
-          background: #ffffff !important;
-          color: rgba(0,0,0,0.87) !important;
-          border: 1px solid #d0d0d0 !important;
-        }
-      `;
-      shadowRoot.appendChild(style);
-      targetEl.style.visibility = '';
-    };
-    inject();
+  /** Handle postMessage events from the EmbedPDF iframe */
+  private handleEmbedPdfMessage(msg: any): void {
+    switch (msg.type) {
+      case 'ready':
+        console.log('[EmbedPDF] Iframe viewer ready');
+        break;
+      case 'documentOpened':
+        console.log('[EmbedPDF] Document opened, pages:', msg.pageCount);
+        break;
+      case 'documentError':
+        console.error('[EmbedPDF] Document error:', msg.error);
+        break;
+      case 'saved':
+        this.embedPdfSaveResolve?.(msg.buffer ?? null);
+        this.embedPdfSaveResolve = undefined;
+        break;
+      case 'saveError':
+        console.error('[EmbedPDF] Save error:', msg.error);
+        this.embedPdfSaveResolve?.(null);
+        this.embedPdfSaveResolve = undefined;
+        break;
+      case 'log':
+        console.log('[EmbedPDF-frame]', ...(msg.args || []));
+        break;
+    }
   }
 
   private async saveEmbedPdfDocument(): Promise<void> {
+    if (!this.embedPdfIframe?.contentWindow) {
+      console.log('[EmbedPDF] saveEmbedPdfDocument: no iframe, skipping');
+      return;
+    }
+
+    const t0 = performance.now();
+    console.log('[EmbedPDF] saveEmbedPdfDocument: requesting export via postMessage');
+
     try {
-      const container = document.querySelector('embedpdf-container') as any;
-      if (!container?.registry) return;
-
-      const registry = await container.registry;
-      const exportPlugin = registry.plugins.get('export')?.provides();
-      if (!exportPlugin) return;
-
-      const state = registry.store.getState();
-      const activeDocId = Object.keys(state.core.documents)[0];
-      if (!activeDocId) return;
-
-      const buffer: ArrayBuffer = await new Promise((resolve, reject) => {
-        exportPlugin.saveAsCopy(activeDocId).wait(
-          (result: ArrayBuffer) => resolve(result),
-          (err: any) => reject(err)
-        );
+      // Request save from iframe and wait for response
+      const buffer: ArrayBuffer | null = await new Promise((resolve) => {
+        this.embedPdfSaveResolve = resolve;
+        this.embedPdfIframe!.contentWindow!.postMessage({ type: 'save' }, location.origin);
+        // Timeout after 30 seconds
+        setTimeout(() => {
+          if (this.embedPdfSaveResolve === resolve) {
+            console.warn('[EmbedPDF] Save timed out after 30s');
+            resolve(null);
+            this.embedPdfSaveResolve = undefined;
+          }
+        }, 30000);
       });
+
+      if (!buffer) {
+        console.log('[EmbedPDF] saveEmbedPdfDocument: no buffer returned, skipping upload');
+        return;
+      }
+
+      console.log('[EmbedPDF] saveEmbedPdfDocument: exported',
+        (buffer.byteLength / 1024 / 1024).toFixed(1), 'MB in',
+        (performance.now() - t0).toFixed(0), 'ms');
 
       const headers: Record<string, string> = { 'Content-Type': 'application/pdf' };
       if (this.authorization) {
@@ -494,6 +392,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         credentials: 'include',
         body: buffer
       });
+      console.log('[EmbedPDF] saveEmbedPdfDocument: upload complete in',
+        (performance.now() - t0).toFixed(0), 'ms');
     } catch (err) {
       console.error('[EmbedPDF] Failed to save document:', err);
     }
@@ -526,8 +426,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isDarkTheme = !this.isDarkTheme;
     this.updateViewerSetting();
     // Sync EmbedPDF theme if active
-    if (this.embedPdfViewerInstance) {
-      this.embedPdfViewerInstance.setTheme?.(this.isDarkTheme ? 'dark' : 'light');
+    if (this.embedPdfIframe?.contentWindow) {
+      this.embedPdfIframe.contentWindow.postMessage(
+        { type: 'setTheme', theme: this.isDarkTheme ? 'dark' : 'light' },
+        location.origin
+      );
     }
   }
 
@@ -563,6 +466,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
+    if ((performance as any).memory) console.log('[EmbedPDF Memory] ngOnDestroy: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
+    console.log('[EmbedPDF] ngOnDestroy called | mode:', this.viewerMode,
+      '| hasIframe:', !!this.embedPdfIframe);
     this.wakeLockService.disable();
     if (this.chromeAutoHideTimer) clearTimeout(this.chromeAutoHideTimer);
     if (this.annotationToolbarObserver) this.annotationToolbarObserver.disconnect();
@@ -573,6 +479,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.annotationSaveSubscription?.unsubscribe();
     this.persistAnnotations();
+    this.destroyEmbedPdf();
 
     if (this.appSettingsSubscription) {
       this.appSettingsSubscription.unsubscribe();
@@ -677,8 +584,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   closeReader = async (): Promise<void> => {
-    if (this.embedPdfViewerInstance) {
+    console.log('[EmbedPDF] closeReader called | mode:', this.viewerMode,
+      '| hasIframe:', !!this.embedPdfIframe);
+    if (this.embedPdfIframe) {
       await this.saveEmbedPdfDocument();
+      await this.destroyEmbedPdf();
     } else {
       this.persistAnnotations();
     }
@@ -710,6 +620,34 @@ export class PdfReaderComponent implements OnInit, OnDestroy, AfterViewInit {
         this.annotationsLoaded = true;
       }
     });
+  }
+
+  private async destroyEmbedPdf(): Promise<void> {
+    const t0 = performance.now();
+    const lifetime = this.embedPdfInitTime ? ((t0 - this.embedPdfInitTime) / 1000).toFixed(1) + 's' : 'n/a';
+    if ((performance as any).memory) console.log('[EmbedPDF Memory] pre-destroy: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
+    console.log('[EmbedPDF] destroyEmbedPdf | hasIframe:', !!this.embedPdfIframe, '| lifetime:', lifetime);
+
+    // Remove message listener
+    if (this.embedPdfMessageHandler) {
+      window.removeEventListener('message', this.embedPdfMessageHandler);
+      this.embedPdfMessageHandler = undefined;
+    }
+
+    // Cancel any pending save
+    this.embedPdfSaveResolve?.(null);
+    this.embedPdfSaveResolve = undefined;
+
+    // Remove the iframe — this destroys the entire browsing context,
+    // freeing all WASM linear memory, JS heap, and DOM within it.
+    if (this.embedPdfIframe) {
+      this.embedPdfIframe.remove();
+      this.embedPdfIframe = null;
+    }
+
+    this.embedPdfInitTime = 0;
+    console.log('[EmbedPDF] destroyEmbedPdf completed in', (performance.now() - t0).toFixed(0), 'ms');
+    if ((performance as any).memory) console.log('[EmbedPDF Memory] post-destroy: ', ((performance as any).memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
   }
 
   private persistAnnotations(): void {
