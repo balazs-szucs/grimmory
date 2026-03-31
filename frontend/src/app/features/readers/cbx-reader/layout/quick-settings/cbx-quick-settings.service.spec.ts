@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   CbxBackgroundColor,
@@ -11,7 +11,7 @@ import {
   CbxScrollMode,
   CbxSlideshowInterval,
 } from '../../../../settings/user-management/user.service';
-import {CbxQuickSettingsService} from './cbx-quick-settings.service';
+import { CbxQuickSettingsService } from './cbx-quick-settings.service';
 
 describe('CbxQuickSettingsService', () => {
   it('tracks visibility and settings state and resets cleanly', () => {
@@ -94,7 +94,7 @@ describe('CbxQuickSettingsService', () => {
     service.magnifierLensSizeChange$.subscribe(value => lensSizeEvents.push(value));
 
     service.emitFitModeChange(CbxFitMode.ACTUAL_SIZE);
-    service.emitScrollModeChange(CbxScrollMode.LONG_STRIP);
+    service.emitScrollModeChange(CbxScrollMode.INFINITE);
     service.emitPageViewModeChange(CbxPageViewMode.TWO_PAGE);
     service.emitPageSpreadChange(CbxPageSpread.EVEN);
     service.emitBackgroundColorChange(CbxBackgroundColor.WHITE);
@@ -104,7 +104,7 @@ describe('CbxQuickSettingsService', () => {
     service.emitMagnifierLensSizeChange(CbxMagnifierLensSize.LARGE);
 
     expect(fitModeEvents).toEqual([CbxFitMode.ACTUAL_SIZE]);
-    expect(scrollModeEvents).toEqual([CbxScrollMode.LONG_STRIP]);
+    expect(scrollModeEvents).toEqual([CbxScrollMode.INFINITE]);
     expect(pageViewEvents).toEqual([CbxPageViewMode.TWO_PAGE]);
     expect(pageSpreadEvents).toEqual([CbxPageSpread.EVEN]);
     expect(backgroundEvents).toEqual([CbxBackgroundColor.WHITE]);
