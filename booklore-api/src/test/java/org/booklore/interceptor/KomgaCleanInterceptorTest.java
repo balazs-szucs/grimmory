@@ -8,6 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -25,12 +28,14 @@ class KomgaCleanInterceptorTest {
     @BeforeEach
     void setup() {
         MockitoAnnotations.openMocks(this);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
         interceptor = new KomgaCleanInterceptor();
     }
 
     @AfterEach
     void cleanup() {
         KomgaCleanContext.clear();
+        RequestContextHolder.resetRequestAttributes();
     }
 
     @Test

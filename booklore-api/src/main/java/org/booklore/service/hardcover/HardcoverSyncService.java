@@ -6,7 +6,6 @@ import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.metadata.parser.hardcover.GraphQLRequest;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
@@ -37,10 +36,6 @@ public class HardcoverSyncService {
     private final HardcoverSyncSettingsService hardcoverSyncSettingsService;
     private final BookRepository bookRepository;
 
-    // Thread-local to hold the current API token for GraphQL requests
-    private final ThreadLocal<String> currentApiToken = new ThreadLocal<>();
-
-    @Autowired
     public HardcoverSyncService(HardcoverSyncSettingsService hardcoverSyncSettingsService, BookRepository bookRepository) {
         this.hardcoverSyncSettingsService = hardcoverSyncSettingsService;
         this.bookRepository = bookRepository;
@@ -70,75 +65,69 @@ public class HardcoverSyncService {
                 return;
             }
 
-            // Set the user's API token for this sync operation
-            try {
-                currentApiToken.set(userSettings.getHardcoverApiKey());
+            String apiToken = userSettings.getHardcoverApiKey();
 
-                if (progressPercent == null) {
-                    log.debug("Hardcover sync skipped: no progress to sync");
-                    return;
-                }
+            if (progressPercent == null) {
+                log.debug("Hardcover sync skipped: no progress to sync");
+                return;
+            }
 
-                // Fetch book fresh within the async context to avoid lazy loading issues
-                BookEntity book = bookRepository.findByIdWithMetadata(bookId).orElse(null);
-                if (book == null) {
-                    log.debug("Hardcover sync skipped: book {} not found", bookId);
-                    return;
-                }
+            // Fetch book fresh within the async context to avoid lazy loading issues
+            BookEntity book = bookRepository.findByIdWithMetadata(bookId).orElse(null);
+            if (book == null) {
+                log.debug("Hardcover sync skipped: book {} not found", bookId);
+                return;
+            }
 
-                BookMetadataEntity metadata = book.getMetadata();
-                if (metadata == null) {
-                    log.debug("Hardcover sync skipped: book {} has no metadata", bookId);
-                    return;
-                }
+            BookMetadataEntity metadata = book.getMetadata();
+            if (metadata == null) {
+                log.debug("Hardcover sync skipped: book {} has no metadata", bookId);
+                return;
+            }
 
-                String hardcoverBookId = metadata.getHardcoverBookId();
-                String isbn13 = metadata.getIsbn13();
-                String isbn10 = metadata.getIsbn10();
+            String hardcoverBookId = metadata.getHardcoverBookId();
+            String isbn13 = metadata.getIsbn13();
+            String isbn10 = metadata.getIsbn10();
 
-                // Find the book and closest edition on Hardcover
-                HardcoverBookInfo hardcoverBook = resolveHardcoverBook(hardcoverBookId, isbn13, isbn10);
-                
-                if (hardcoverBook == null) {
-                    log.debug("Hardcover sync skipped: book {} not found on Hardcover", bookId);
-                    return;
-                }
+            // Find the book and closest edition on Hardcover
+            HardcoverBookInfo hardcoverBook = resolveHardcoverBook(apiToken, hardcoverBookId, isbn13, isbn10);
+            
+            if (hardcoverBook == null) {
+                log.debug("Hardcover sync skipped: book {} not found on Hardcover", bookId);
+                return;
+            }
 
-                // Determine the status based on progress
-                int statusId = progressPercent >= 99.0f ? STATUS_READ : STATUS_CURRENTLY_READING;
+            // Determine the status based on progress
+            int statusId = progressPercent >= 99.0f ? STATUS_READ : STATUS_CURRENTLY_READING;
 
-                // Calculate progress in pages
-                int progressPages = 0;
-                if (hardcoverBook.pages == null || hardcoverBook.pages == 0) {
-                    log.warn("Hardcover sync failed: book {} has no page count information, cannot calculate progress in pages", bookId);
-                    return;
-                }
-      
-                progressPages = Math.round((progressPercent / 100.0f) * hardcoverBook.pages);
-                progressPages = Math.max(0, Math.min(hardcoverBook.pages, progressPages));
-                
-                log.info("Progress calculation: userId={}, progressPercent={}%, totalPages={}, progressPages={}", 
-                        userId, progressPercent, hardcoverBook.pages, progressPages);
+            // Calculate progress in pages
+            int progressPages = 0;
+            if (hardcoverBook.pages == null || hardcoverBook.pages == 0) {
+                log.warn("Hardcover sync failed: book {} has no page count information, cannot calculate progress in pages", bookId);
+                return;
+            }
+  
+            progressPages = Math.round((progressPercent / 100.0f) * hardcoverBook.pages);
+            progressPages = Math.max(0, Math.min(hardcoverBook.pages, progressPages));
+            
+            log.info("Progress calculation: userId={}, progressPercent={}%, totalPages={}, progressPages={}", 
+                    userId, progressPercent, hardcoverBook.pages, progressPages);
 
-                // Step 1: Add/update the book in user's library
-                Integer bookIdInt = Integer.parseInt(hardcoverBook.bookId);
-                Integer userBookId = insertOrGetUserBook(bookIdInt, hardcoverBook.editionId, statusId);
-                if (userBookId == null) {
-                    log.warn("Hardcover sync failed: could not get user_book_id for book {}", bookId);
-                    return;
-                }
+            // Step 1: Add/update the book in user's library
+            Integer bookIdInt = Integer.parseInt(hardcoverBook.bookId);
+            Integer userBookId = insertOrGetUserBook(apiToken, bookIdInt, hardcoverBook.editionId, statusId);
+            if (userBookId == null) {
+                log.warn("Hardcover sync failed: could not get user_book_id for book {}", bookId);
+                return;
+            }
 
-                // Step 2: Create or update the reading progress
-                boolean isFinished = progressPercent >= 99.0f;
-                boolean success = upsertReadingProgress(userBookId, hardcoverBook.editionId, progressPages, isFinished);
-                
-                if (success) {
-                    log.info("Synced progress to Hardcover: userId={}, book={}, hardcoverBookId={}, hardcoverEditionId={}, progress={}% ({}pages)", 
-                            userId, bookId, hardcoverBook.bookId, hardcoverBook.editionId, Math.round(progressPercent), progressPages);
-                }
-            } finally {
-                // Clean up thread-local
-                currentApiToken.remove();
+            // Step 2: Create or update the reading progress
+            boolean isFinished = progressPercent >= 99.0f;
+            boolean success = upsertReadingProgress(apiToken, userBookId, hardcoverBook.editionId, progressPages, isFinished);
+            
+            if (success) {
+                log.info("Synced progress to Hardcover: userId={}, book={}, hardcoverBookId={}, hardcoverEditionId={}, progress={}% ({}pages)", 
+                        userId, bookId, hardcoverBook.bookId, hardcoverBook.editionId, Math.round(progressPercent), progressPages);
             }
 
         } catch (Exception e) {
@@ -160,10 +149,6 @@ public class HardcoverSyncService {
                 && !userSettings.getHardcoverApiKey().isBlank();
     }
 
-    private String getApiToken() {
-        return currentApiToken.get();
-    }
-
     /**
      * Resolve Hardcover book information using bookId and/or ISBN.
      * Returns bookId, editionId, and page count based on the following logic:
@@ -171,12 +156,13 @@ public class HardcoverSyncService {
      * - If bookId only: Get book by ID, use default_ebook_edition, fallback to default_physical_edition
      * - If ISBN only: Find book with edition matching ISBN (with highest user_count)
      * 
+     * @param apiToken The user's Hardcover API token
      * @param hardcoverBookId The Hardcover book ID (can be null)
      * @param isbn13 The ISBN-13 (can be null)
      * @param isbn10 The ISBN-10 (can be null)
      * @return HardcoverBookInfo with bookId, editionId, and pages, or null if not found
      */
-    private HardcoverBookInfo resolveHardcoverBook(String hardcoverBookId, String isbn13, String isbn10) {
+    private HardcoverBookInfo resolveHardcoverBook(String apiToken, String hardcoverBookId, String isbn13, String isbn10) {
         // No identifiers at all, it's impossible to resolve
         if ((hardcoverBookId == null || hardcoverBookId.isBlank()) && 
             (isbn13 == null || isbn13.isBlank()) && 
@@ -188,7 +174,7 @@ public class HardcoverSyncService {
         // We have a specific bookId, try to resolve using it (with optional ISBN for edition matching)
         if (hardcoverBookId != null && !hardcoverBookId.isBlank()) {
             try {
-                return resolveByBookId(Integer.parseInt(hardcoverBookId), isbn13, isbn10);
+                return resolveByBookId(apiToken, Integer.parseInt(hardcoverBookId), isbn13, isbn10);
             } catch (NumberFormatException e) {
                 log.warn("Invalid Hardcover book ID format: {}", hardcoverBookId);
                 return null;
@@ -196,14 +182,14 @@ public class HardcoverSyncService {
         }
         
         // No bookId but we have ISBN, try to resolve book by ISBN
-        return resolveByIsbn(isbn13, isbn10);
+        return resolveByIsbn(apiToken, isbn13, isbn10);
     }
 
     /**
      * Resolve book information when we have a bookId.
      * Tries to match edition by ISBN, then falls back to default editions.
      */
-    private HardcoverBookInfo resolveByBookId(Integer bookId, String isbn13, String isbn10) {
+    private HardcoverBookInfo resolveByBookId(String apiToken, Integer bookId, String isbn13, String isbn10) {
         String query = """
             query GetBookWithEditions($bookId: Int!, $isbn13: String, $isbn10: String) {
               books(where: {id: {_eq: $bookId}}, limit: 1) {
@@ -239,7 +225,7 @@ public class HardcoverSyncService {
         request.setVariables(variables);
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             if (response == null) {
                 log.warn("No response from Hardcover for book ID {}", bookId);
                 return null;
@@ -312,7 +298,7 @@ public class HardcoverSyncService {
      * Resolve book information when we only have ISBN.
      * Finds books with matching edition and picks the one with highest user_count.
      */
-    private HardcoverBookInfo resolveByIsbn(String isbn13, String isbn10) {
+    private HardcoverBookInfo resolveByIsbn(String apiToken, String isbn13, String isbn10) {
         String query = """
             query GetBooksByIsbn($isbn13: String, $isbn10: String) {
               books(where: {
@@ -346,7 +332,7 @@ public class HardcoverSyncService {
         request.setVariables(variables);
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             if (response == null) {
                 log.warn("No response from Hardcover for ISBN {} / {}", isbn13, isbn10);
                 return null;
@@ -396,7 +382,7 @@ public class HardcoverSyncService {
     /**
      * Insert a book into the user's library or get existing user_book_id.
      */
-    private Integer insertOrGetUserBook(Integer bookId, Integer editionId, int statusId) {
+    private Integer insertOrGetUserBook(String apiToken, Integer bookId, Integer editionId, int statusId) {
         String mutation = """
             mutation InsertUserBook($object: UserBookCreateInput!) {
               insert_user_book(object: $object) {
@@ -421,7 +407,7 @@ public class HardcoverSyncService {
         request.setVariables(Map.of("object", bookInput));
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             log.debug("insert_user_book response: {}", response);
             if (response == null) return null;
 
@@ -435,7 +421,7 @@ public class HardcoverSyncService {
             String error = (String) insertResult.get("error");
             if (error != null && !error.isBlank()) {
                 log.debug("insert_user_book returned error: {} - book may already exist, trying to find it", error);
-                return findExistingUserBook(bookId);
+                return findExistingUserBook(apiToken, bookId);
             }
 
             Map<String, Object> userBook = (Map<String, Object>) insertResult.get("user_book");
@@ -451,14 +437,14 @@ public class HardcoverSyncService {
         } catch (RestClientException e) {
             log.warn("Failed to insert user_book: {}", e.getMessage());
             // Try to find existing
-            return findExistingUserBook(bookId);
+            return findExistingUserBook(apiToken, bookId);
         }
     }
 
     /**
      * Find an existing user_book entry for a book.
      */
-    private Integer findExistingUserBook(Integer bookId) {
+    private Integer findExistingUserBook(String apiToken, Integer bookId) {
         String query = """
             query FindUserBook($bookId: Int!) {
               me {
@@ -474,7 +460,7 @@ public class HardcoverSyncService {
         request.setVariables(Map.of("bookId", bookId));
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             if (response == null) return null;
 
             Map<String, Object> data = (Map<String, Object>) response.get("data");
@@ -502,25 +488,25 @@ public class HardcoverSyncService {
     /**
      * Create or update reading progress for a user_book.
      */
-    private boolean upsertReadingProgress(Integer userBookId, Integer editionId, int progressPages, boolean isFinished) {
+    private boolean upsertReadingProgress(String apiToken, Integer userBookId, Integer editionId, int progressPages, boolean isFinished) {
         log.info("upsertReadingProgress: userBookId={}, editionId={}, progressPages={}, isFinished={}",
                 userBookId, editionId, progressPages, isFinished);
 
         // First, try to find existing user_book_read
-        Integer existingReadId = findExistingUserBookRead(userBookId);
+        Integer existingReadId = findExistingUserBookRead(apiToken, userBookId);
 
         if (existingReadId != null) {
             // Update existing
             log.info("Updating existing user_book_read: id={}", existingReadId);
-            return updateUserBookRead(existingReadId, editionId, progressPages, isFinished);
+            return updateUserBookRead(apiToken, existingReadId, editionId, progressPages, isFinished);
         } else {
             // Create new
             log.info("Creating new user_book_read for userBookId={}", userBookId);
-            return insertUserBookRead(userBookId, editionId, progressPages, isFinished);
+            return insertUserBookRead(apiToken, userBookId, editionId, progressPages, isFinished);
         }
     }
 
-    private Integer findExistingUserBookRead(Integer userBookId) {
+    private Integer findExistingUserBookRead(String apiToken, Integer userBookId) {
         String query = """
             query FindUserBookRead($userBookId: Int!) {
               user_book_reads(where: {user_book_id: {_eq: $userBookId}}, limit: 1) {
@@ -534,7 +520,7 @@ public class HardcoverSyncService {
         request.setVariables(Map.of("userBookId", userBookId));
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             if (response == null) return null;
 
             Map<String, Object> data = (Map<String, Object>) response.get("data");
@@ -556,7 +542,7 @@ public class HardcoverSyncService {
         }
     }
 
-    private boolean insertUserBookRead(Integer userBookId, Integer editionId, int progressPages, boolean isFinished) {
+    private boolean insertUserBookRead(String apiToken, Integer userBookId, Integer editionId, int progressPages, boolean isFinished) {
         String mutation = """
             mutation InsertUserBookRead($userBookId: Int!, $object: DatesReadInput!) {
               insert_user_book_read(user_book_id: $userBookId, user_book_read: $object) {
@@ -586,7 +572,7 @@ public class HardcoverSyncService {
         ));
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             log.info("insert_user_book_read response: {}", response);
             if (response == null) return false;
 
@@ -603,7 +589,7 @@ public class HardcoverSyncService {
         }
     }
 
-    private boolean updateUserBookRead(Integer readId, Integer editionId, int progressPages, boolean isFinished) {
+    private boolean updateUserBookRead(String apiToken, Integer readId, Integer editionId, int progressPages, boolean isFinished) {
         String mutation = """
             mutation UpdateUserBookRead($id: Int!, $object: DatesReadInput!) {
               update_user_book_read(id: $id, object: $object) {
@@ -633,7 +619,7 @@ public class HardcoverSyncService {
         ));
 
         try {
-            Map<String, Object> response = executeGraphQL(request);
+            Map<String, Object> response = executeGraphQL(apiToken, request);
             log.debug("update_user_book_read response: {}", response);
             if (response == null) return false;
 
@@ -650,12 +636,12 @@ public class HardcoverSyncService {
         }
     }
 
-    private Map<String, Object> executeGraphQL(GraphQLRequest request) {
+    private Map<String, Object> executeGraphQL(String apiToken, GraphQLRequest request) {
         try {
             return restClient.post()
                     .uri("")
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + getApiToken())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiToken)
                     .body(request)
                     .retrieve()
                     .body(Map.class);

@@ -5,6 +5,9 @@ import org.booklore.model.dto.komga.KomgaSeriesMetadataDto;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
@@ -21,6 +24,7 @@ class KomgaCleanModeDemo {
 
     @BeforeEach
     void setup() {
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
         JacksonConfig config = new JacksonConfig();
         objectMapper = config.komgaCleanObjectMapper();
     }
@@ -28,6 +32,7 @@ class KomgaCleanModeDemo {
     @AfterEach
     void cleanup() {
         KomgaCleanContext.clear();
+        RequestContextHolder.resetRequestAttributes();
     }
 
     @Test

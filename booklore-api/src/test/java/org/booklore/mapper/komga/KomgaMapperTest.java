@@ -17,6 +17,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,10 +41,12 @@ class KomgaMapperTest {
     void cleanup() {
         // Always clean up the context after each test
         KomgaCleanContext.clear();
+        RequestContextHolder.resetRequestAttributes();
     }
     
     @BeforeEach
     void setUp() {
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
         // Mock app settings for all tests
         AppSettings appSettings = new AppSettings();
         appSettings.setKomgaGroupUnknown(true);

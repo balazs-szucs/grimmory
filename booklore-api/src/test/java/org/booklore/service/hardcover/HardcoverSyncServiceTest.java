@@ -462,9 +462,9 @@ class HardcoverSyncServiceTest {
 
     private Object resolveHardcoverBook(String bookId, String isbn13, String isbn10) throws Exception {
         Method method = HardcoverSyncService.class
-                .getDeclaredMethod("resolveHardcoverBook", String.class, String.class, String.class);
+                .getDeclaredMethod("resolveHardcoverBook", String.class, String.class, String.class, String.class);
         method.setAccessible(true);
-        return method.invoke(service, bookId, isbn13, isbn10);
+        return method.invoke(service, "test-api-key", bookId, isbn13, isbn10);
     }
 
     // === Helper methods to create mock responses ===
