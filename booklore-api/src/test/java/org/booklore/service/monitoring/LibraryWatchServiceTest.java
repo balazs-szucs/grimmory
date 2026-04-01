@@ -30,6 +30,7 @@ class LibraryWatchServiceTest {
     void setup() throws Exception {
         processor = mock(LibraryFileEventProcessor.class);
         service = new LibraryWatchService(processor);
+        service.start();
     }
 
     @AfterEach
