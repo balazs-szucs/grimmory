@@ -66,10 +66,24 @@ public class BookdropEventHandlerService implements SmartLifecycle {
 
     @Override
     public void stop() {
+        stop(() -> {});
+    }
+
+    @Override
+    public void stop(Runnable callback) {
+        log.info("Stopping BookdropEventHandlerService...");
         running = false;
         if (workerThread != null) {
             workerThread.interrupt();
+            try {
+                workerThread.join(5000);
+            } catch (InterruptedException e) {
+                log.warn("Interrupted while waiting for BookdropEventHandlerService workerThread to stop");
+                Thread.currentThread().interrupt();
+            }
         }
+        log.info("Stopped BookdropEventHandlerService");
+        callback.run();
     }
 
     @Override

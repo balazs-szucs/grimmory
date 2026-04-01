@@ -25,8 +25,8 @@ public class LibraryWatchService implements SmartLifecycle {
     private static final int LIFECYCLE_PHASE = 20;
 
     private final LibraryFileEventProcessor eventProcessor;
-    private final WatchService watchService;
-    private final ExecutorService registrationExecutor;
+    private WatchService watchService;
+    private ExecutorService registrationExecutor;
 
     private final ConcurrentHashMap<Path, WatchEntry> watches = new ConcurrentHashMap<>();
     private final Map<Long, Boolean> libraryWatchStatus = new ConcurrentHashMap<>();
@@ -35,17 +35,25 @@ public class LibraryWatchService implements SmartLifecycle {
 
     private record WatchEntry(WatchKey key, long libraryId) {}
 
-    public LibraryWatchService(LibraryFileEventProcessor eventProcessor) throws IOException {
+    public LibraryWatchService(LibraryFileEventProcessor eventProcessor) {
         this.eventProcessor = eventProcessor;
-        this.watchService = FileSystems.getDefault().newWatchService();
-        this.registrationExecutor = Executors.newSingleThreadExecutor(
-                Thread.ofVirtual().name("watch-registrar").factory());
     }
 
     @Override
     public void start() {
-        running = true;
-        Thread.ofVirtual().name("watch-poll").start(this::pollLoop);
+        try {
+            if (watchService == null) {
+                this.watchService = FileSystems.getDefault().newWatchService();
+            }
+            if (registrationExecutor == null || registrationExecutor.isShutdown()) {
+                this.registrationExecutor = Executors.newSingleThreadExecutor(
+                        Thread.ofVirtual().name("watch-registrar").factory());
+            }
+            running = true;
+            Thread.ofVirtual().name("watch-poll").start(this::pollLoop);
+        } catch (IOException e) {
+            log.error("Failed to start LibraryWatchService", e);
+        }
     }
 
     @Override

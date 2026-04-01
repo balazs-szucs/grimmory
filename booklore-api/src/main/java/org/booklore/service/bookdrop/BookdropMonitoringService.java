@@ -73,6 +73,7 @@ public class BookdropMonitoringService implements SmartLifecycle {
             this.watchThread.setDaemon(true);
             this.watchThread.start();
             scanExistingBookdropFiles();
+            this.disabled = false;
         } catch (IOException e) {
             log.warn("Failed to start bookdrop folder monitor. Bookdrop monitoring is disabled.", e);
             this.disabled = true;
@@ -81,9 +82,21 @@ public class BookdropMonitoringService implements SmartLifecycle {
 
     @Override
     public void stop() {
+        stop(() -> {});
+    }
+
+    @Override
+    public void stop(Runnable callback) {
+        log.info("Stopping bookdrop folder monitor...");
         running = false;
         if (watchThread != null) {
             watchThread.interrupt();
+            try {
+                watchThread.join(5000);
+            } catch (InterruptedException e) {
+                log.warn("Interrupted while waiting for watchThread to stop");
+                Thread.currentThread().interrupt();
+            }
         }
         if (watchService != null) {
             try {
@@ -93,6 +106,7 @@ public class BookdropMonitoringService implements SmartLifecycle {
             }
         }
         log.info("Stopped bookdrop folder monitor");
+        callback.run();
     }
 
     @Override

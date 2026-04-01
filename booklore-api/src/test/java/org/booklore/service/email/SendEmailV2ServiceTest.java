@@ -15,6 +15,7 @@ import org.booklore.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -60,6 +61,7 @@ class SendEmailV2ServiceTest {
 
     private BookLoreUser user;
     private BookEntity book;
+    private BookFileEntity bookFile;
     private EmailProviderV2Entity emailProvider;
     private EmailRecipientV2Entity emailRecipient;
     private UserEmailProviderPreferenceEntity preference;
@@ -75,7 +77,7 @@ class SendEmailV2ServiceTest {
         LibraryPathEntity libraryPath = new LibraryPathEntity();
         libraryPath.setPath("/library");
 
-        BookFileEntity bookFile = new BookFileEntity();
+        bookFile = new BookFileEntity();
         bookFile.setFileName("test-book.epub");
         bookFile.setFileSubPath("books");
         bookFile.setBookFormat(true);
@@ -128,7 +130,7 @@ class SendEmailV2ServiceTest {
         }).when(taskExecutor).execute(any(Runnable.class));
 
         try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
-            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book)).thenReturn(Path.of("/library/books/test-book.epub"));
+            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book, bookFile)).thenReturn(Path.of("/library/books/test-book.epub"));
 
             sendEmailV2Service.emailBookQuick(10L);
 
@@ -195,7 +197,7 @@ class SendEmailV2ServiceTest {
         }).when(taskExecutor).execute(any(Runnable.class));
 
         try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
-            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book)).thenReturn(Path.of("/library/books/test-book.epub"));
+            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book, bookFile)).thenReturn(Path.of("/library/books/test-book.epub"));
 
             sendEmailV2Service.emailBook(request);
 
@@ -225,7 +227,7 @@ class SendEmailV2ServiceTest {
         }).when(taskExecutor).execute(any(Runnable.class));
 
         try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
-            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book)).thenReturn(Path.of("/library/books/test-book.epub"));
+            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book, bookFile)).thenReturn(Path.of("/library/books/test-book.epub"));
 
             sendEmailV2Service.emailBook(request);
 
@@ -295,7 +297,7 @@ class SendEmailV2ServiceTest {
         }).when(taskExecutor).execute(any(Runnable.class));
 
         try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
-            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book))
+            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book, bookFile))
                     .thenThrow(new IllegalStateException("Book file not found"));
 
             sendEmailV2Service.emailBookQuick(10L);
@@ -321,10 +323,14 @@ class SendEmailV2ServiceTest {
         // Don't execute the runnable - just capture it
         doNothing().when(taskExecutor).execute(any(Runnable.class));
 
-        sendEmailV2Service.emailBook(request);
+        try (MockedStatic<FileUtils> fileUtilsMock = mockStatic(FileUtils.class)) {
+            fileUtilsMock.when(() -> FileUtils.getBookFullPath(book, bookFile)).thenReturn(Path.of("/library/books/test-book.epub"));
 
-        // Log notification is sent before async execution
-        verify(notificationService).sendMessage(any(), any());
-        verify(taskExecutor).execute(any(Runnable.class));
+            sendEmailV2Service.emailBook(request);
+
+            InOrder inOrder = inOrder(notificationService, taskExecutor);
+            inOrder.verify(notificationService).sendMessage(any(), any());
+            inOrder.verify(taskExecutor).execute(any(Runnable.class));
+        }
     }
 }

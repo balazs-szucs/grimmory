@@ -5,6 +5,7 @@ import org.booklore.model.dto.request.BookdropPatternExtractRequest;
 import org.booklore.model.dto.response.BookdropPatternExtractResult;
 import org.booklore.model.entity.BookdropFileEntity;
 import org.booklore.repository.BookdropFileRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +35,11 @@ class FilenamePatternExtractorTest {
 
     @InjectMocks
     private FilenamePatternExtractor extractor;
+
+    @AfterEach
+    void tearDown() {
+        regexExecutor.shutdownNow();
+    }
 
     private BookdropFileEntity createFileEntity(Long id, String fileName) {
         BookdropFileEntity entity = new BookdropFileEntity();

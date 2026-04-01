@@ -13,7 +13,7 @@ import org.booklore.repository.LibraryRepository;
 import org.booklore.service.file.FileFingerprint;
 import org.booklore.service.library.LibraryProcessingService;
 import org.booklore.util.FileUtils;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Service;
@@ -28,6 +28,7 @@ import java.util.concurrent.*;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class LibraryFileEventProcessor implements SmartLifecycle {
 
     private static final int LIFECYCLE_PHASE = 10;
@@ -46,34 +47,28 @@ public class LibraryFileEventProcessor implements SmartLifecycle {
     private final LibraryProcessingService libraryProcessingService;
     private final PendingDeletionPool pendingDeletionPool;
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private ScheduledExecutorService scheduler;
     private final ConcurrentMap<Path, ScheduledFuture<?>> pendingDeletes = new ConcurrentHashMap<>();
     private final ConcurrentMap<Path, ScheduledFuture<?>> pendingFolderCreates = new ConcurrentHashMap<>();
     private final Set<Path> filesFromPendingFolder = ConcurrentHashMap.newKeySet();
     private volatile boolean running;
     private Thread workerThread;
 
-    public LibraryFileEventProcessor(
-            LibraryRepository libraryRepository,
-            BookRepository bookRepository,
-            BookFileTransactionalHandler bookFileTransactionalHandler,
-            BookFilePersistenceService bookFilePersistenceService,
-            LibraryProcessingService libraryProcessingService,
-            PendingDeletionPool pendingDeletionPool) {
-        this.libraryRepository = libraryRepository;
-        this.bookRepository = bookRepository;
-        this.bookFileTransactionalHandler = bookFileTransactionalHandler;
-        this.bookFilePersistenceService = bookFilePersistenceService;
-        this.libraryProcessingService = libraryProcessingService;
-        this.pendingDeletionPool = pendingDeletionPool;
-    }
-
     @Override
     public void start() {
+        if (running && workerThread != null && workerThread.isAlive()) {
+            log.info("LibraryFileEventProcessor is already running.");
+            return;
+        }
+
+        if (scheduler == null || scheduler.isShutdown()) {
+            scheduler = Executors.newScheduledThreadPool(1);
+        }
+
         running = true;
         workerThread = Thread.ofVirtual().name("lib-event-processor").start(() -> {
             log.info("LibraryFileEventProcessor virtual thread started.");
-            while (!Thread.currentThread().isInterrupted()) {
+            while (running && !Thread.currentThread().isInterrupted()) {
                 try {
                     handleEvent(eventQueue.take());
                 } catch (InterruptedException e) {
@@ -90,7 +85,9 @@ public class LibraryFileEventProcessor implements SmartLifecycle {
     public void stop() {
         log.info("Shutting down LibraryFileEventProcessor...");
         running = false;
-        scheduler.shutdownNow();
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+        }
         if (workerThread != null) {
             workerThread.interrupt();
         }
