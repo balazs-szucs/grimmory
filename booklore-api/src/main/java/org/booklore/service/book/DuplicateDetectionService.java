@@ -28,6 +28,8 @@ public class DuplicateDetectionService {
             BookFileType.MOBI, BookFileType.FB2, BookFileType.CBX, BookFileType.AUDIOBOOK
     );
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
+    private static final Pattern UNDERSCORE_HYPHEN_PATTERN = Pattern.compile("[_\\-]");
+    private static final Pattern NON_ALPHANUMERIC_PATTERN = Pattern.compile("[^a-z0-9\\s]");
 
     private final BookRepository bookRepository;
     private final BookMapper bookMapper;
@@ -274,10 +276,10 @@ public class DuplicateDetectionService {
             int dotIdx = fileName.lastIndexOf('.');
             String baseName = dotIdx > 0 ? fileName.substring(0, dotIdx) : fileName;
 
-            String normalized = WHITESPACE_PATTERN.matcher(baseName.toLowerCase()
-                            .replaceAll("[_\\-]", " ")
-                            .replaceAll("[^a-z0-9\\s]", "")).replaceAll(" ")
-                    .trim();
+            String normalized = baseName.toLowerCase();
+            normalized = UNDERSCORE_HYPHEN_PATTERN.matcher(normalized).replaceAll(" ");
+            normalized = NON_ALPHANUMERIC_PATTERN.matcher(normalized).replaceAll("");
+            normalized = WHITESPACE_PATTERN.matcher(normalized).replaceAll(" ").trim();
 
             if (!normalized.isBlank()) {
                 nameGroups.computeIfAbsent(normalized, k -> new ArrayList<>()).add(book);
