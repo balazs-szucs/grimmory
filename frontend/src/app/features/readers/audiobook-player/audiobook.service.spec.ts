@@ -1,6 +1,7 @@
 import {provideHttpClient} from '@angular/common/http';
 import {HttpTestingController, provideHttpClientTesting} from '@angular/common/http/testing';
 import {TestBed} from '@angular/core/testing';
+import {QueryClient} from '@tanstack/angular-query-experimental';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {AuthService} from '../../../shared/service/auth.service';
@@ -10,20 +11,22 @@ import {AudiobookService} from './audiobook.service';
 describe('AudiobookService', () => {
   let service: AudiobookService;
   let httpTestingController: HttpTestingController;
+  let queryClient: QueryClient;
   let getInternalAccessToken: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     getInternalAccessToken = vi.fn(() => 'token 123');
+    queryClient = new QueryClient();
+    vi.spyOn(queryClient, 'setQueryData');
+    vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
 
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         AudiobookService,
-        {
-          provide: AuthService,
-          useValue: {getInternalAccessToken},
-        },
+        {provide: AuthService, useValue: {getInternalAccessToken}},
+        {provide: QueryClient, useValue: queryClient},
       ],
     });
 
@@ -33,6 +36,7 @@ describe('AudiobookService', () => {
 
   afterEach(() => {
     httpTestingController.verify();
+    queryClient.clear();
     TestBed.resetTestingModule();
     vi.restoreAllMocks();
   });
@@ -85,6 +89,7 @@ describe('AudiobookService', () => {
     request.flush(null);
 
     expect(completed).toBe(true);
+    expect(queryClient.setQueryData).toHaveBeenCalledWith(['books'], expect.any(Function));
   });
 
   it('maps audiobook progress into a file progress payload when a book file id is present', () => {
@@ -108,5 +113,7 @@ describe('AudiobookService', () => {
       },
     });
     request.flush(null);
+
+    expect(queryClient.setQueryData).toHaveBeenCalledWith(['books'], expect.any(Function));
   });
 });
