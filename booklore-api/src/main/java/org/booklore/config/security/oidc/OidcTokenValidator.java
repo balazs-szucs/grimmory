@@ -17,6 +17,7 @@ import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.exception.ApiError;
+import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -30,7 +31,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -41,7 +41,6 @@ public class OidcTokenValidator {
     private static final int MAX_IAT_AGE_SECONDS = 300;
     private static final long JWKS_CACHE_TTL_MS = 21_600_000; // 6 hours
     private static final long JWKS_REFRESH_MS = 3_600_000; // 1 hour
-    private static final Pattern TRAILING_SLASH_PATTERN = Pattern.compile("/+$");
 
     private final OidcDiscoveryService discoveryService;
 
@@ -104,8 +103,8 @@ public class OidcTokenValidator {
 
     private void validateIssuer(JWTClaimsSet claims, String expectedIssuer) {
         String issuer = claims.getIssuer();
-        String normalizedExpected = TRAILING_SLASH_PATTERN.matcher(expectedIssuer).replaceAll("");
-        String normalizedActual = issuer != null ? TRAILING_SLASH_PATTERN.matcher(issuer).replaceAll("") : "";
+        String normalizedExpected = FileUtils.trimTrailingSlashes(expectedIssuer);
+        String normalizedActual = issuer != null ? FileUtils.trimTrailingSlashes(issuer) : "";
 
         if (!normalizedExpected.equals(normalizedActual)) {
             throw ApiError.OIDC_INVALID_TOKEN.createException("ID token issuer mismatch");
