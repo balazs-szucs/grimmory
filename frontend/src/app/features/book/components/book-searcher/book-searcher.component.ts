@@ -121,6 +121,7 @@ export class BookSearcherComponent {
     this.searchQuery = '';
     this.searchTerm.set('');
     this.activeIndex = -1;
+    this.resultsPopover?.hide();
   }
 
   get isDropdownOpen(): boolean {
