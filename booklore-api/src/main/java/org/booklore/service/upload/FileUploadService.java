@@ -17,7 +17,6 @@ import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.BookAdditionalFileRepository;
 import org.booklore.repository.BookRepository;
 import org.booklore.repository.LibraryRepository;
-import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.file.FileFingerprint;
 import org.booklore.service.file.FileMovingHelper;
 import org.booklore.service.metadata.extractor.MetadataExtractorFactory;
@@ -47,12 +46,10 @@ public class FileUploadService {
     private static final String UPLOAD_TEMP_PREFIX = "upload-";
     private static final String BOOKDROP_TEMP_PREFIX = "bookdrop-";
     private static final long BYTES_TO_KB_DIVISOR = 1024L;
-    private static final long MB_TO_BYTES_MULTIPLIER = 1024L * 1024L;
 
     private final LibraryRepository libraryRepository;
     private final BookRepository bookRepository;
     private final BookAdditionalFileRepository additionalFileRepository;
-    private final AppSettingService appSettingService;
     private final AppProperties appProperties;
     private final MetadataExtractorFactory metadataExtractorFactory;
     private final AdditionalFileMapper additionalFileMapper;
@@ -359,11 +356,6 @@ public class FileUploadService {
         final String originalFilename = file.getOriginalFilename();
         if (originalFilename == null || BookFileExtension.fromFileName(originalFilename).isEmpty()) {
             throw ApiError.INVALID_FILE_FORMAT.createException("Unsupported file extension");
-        }
-
-        final int maxSizeMb = appSettingService.getAppSettings().getMaxFileUploadSizeInMb();
-        if (file.getSize() > maxSizeMb * MB_TO_BYTES_MULTIPLIER) {
-            throw ApiError.FILE_TOO_LARGE.createException(maxSizeMb);
         }
     }
 

@@ -23,22 +23,12 @@ public class AppUserController {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         BookLoreUser.UserPermissions perms = user.getPermissions();
 
-        int maxUploadSizeMb = 100; // default
-        try {
-            Integer configured = appSettingService.getAppSettings().getMaxFileUploadSizeInMb();
-            if (configured != null) {
-                maxUploadSizeMb = configured;
-            }
-        } catch (Exception ignored) {
-            // fall back to default
-        }
-
         AppUserInfo info = AppUserInfo.builder()
                 .isAdmin(perms.isAdmin())
                 .canUpload(perms.isCanUpload())
                 .canDownload(perms.isCanDownload())
                 .canAccessBookdrop(perms.isCanAccessBookdrop())
-                .maxFileUploadSizeMb(maxUploadSizeMb)
+                .maxFileUploadSizeMb(appSettingService.getMaxUploadSizeMb())
                 .build();
 
         return ResponseEntity.ok(info);

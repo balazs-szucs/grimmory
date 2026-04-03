@@ -1,5 +1,6 @@
 package org.booklore.service.appsettings;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.booklore.config.AppProperties;
 import org.booklore.config.security.service.AuthenticationService;
@@ -19,6 +20,7 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.unit.DataSize;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 
@@ -34,12 +36,23 @@ public class AppSettingService {
     private final SettingPersistenceHelper settingPersistenceHelper;
     private final AuthenticationService authenticationService;
     private final AuditService auditService;
+    private final int maxUploadSizeMb;
 
-    public AppSettingService(AppProperties appProperties, SettingPersistenceHelper settingPersistenceHelper, @Lazy AuthenticationService authenticationService, @Lazy AuditService auditService) {
+    public AppSettingService(
+            AppProperties appProperties,
+            SettingPersistenceHelper settingPersistenceHelper,
+            @Lazy AuthenticationService authenticationService,
+            @Lazy AuditService auditService,
+            @Value("${spring.servlet.multipart.max-file-size:100MB}") DataSize maxFileSize) {
         this.appProperties = appProperties;
         this.settingPersistenceHelper = settingPersistenceHelper;
         this.authenticationService = authenticationService;
         this.auditService = auditService;
+        this.maxUploadSizeMb = (int) maxFileSize.toMegabytes();
+    }
+
+    public int getMaxUploadSizeMb() {
+        return maxUploadSizeMb;
     }
 
     @Cacheable("appSettings")
@@ -167,7 +180,7 @@ public class AppSettingService {
         builder.komgaApiEnabled(Boolean.parseBoolean(settingPersistenceHelper.getOrCreateSetting(AppSettingKey.KOMGA_API_ENABLED, "false")));
         builder.komgaGroupUnknown(Boolean.parseBoolean(settingPersistenceHelper.getOrCreateSetting(AppSettingKey.KOMGA_GROUP_UNKNOWN, "true")));
         builder.pdfCacheSizeInMb(Integer.parseInt(settingPersistenceHelper.getOrCreateSetting(AppSettingKey.PDF_CACHE_SIZE_IN_MB, "5120")));
-        builder.maxFileUploadSizeInMb(Integer.parseInt(settingPersistenceHelper.getOrCreateSetting(AppSettingKey.MAX_FILE_UPLOAD_SIZE_IN_MB, "100")));
+        builder.maxFileUploadSizeInMb(maxUploadSizeMb);
         builder.metadataDownloadOnBookdrop(Boolean.parseBoolean(settingPersistenceHelper.getOrCreateSetting(AppSettingKey.METADATA_DOWNLOAD_ON_BOOKDROP, "true")));
 
         String sessionDurationStr = settingsMap.get(AppSettingKey.OIDC_SESSION_DURATION_HOURS.getDbKey());

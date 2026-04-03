@@ -6,7 +6,6 @@ import org.booklore.exception.ApiError;
 import org.booklore.mapper.AdditionalFileMapper;
 import org.booklore.model.dto.BookFile;
 import org.booklore.model.dto.BookMetadata;
-import org.booklore.model.dto.settings.AppSettings;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookFileEntity;
 import org.booklore.model.entity.LibraryEntity;
@@ -16,7 +15,6 @@ import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.BookAdditionalFileRepository;
 import org.booklore.repository.BookRepository;
 import org.booklore.repository.LibraryRepository;
-import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.file.FileFingerprint;
 import org.booklore.service.file.FileMovingHelper;
 import org.booklore.service.metadata.extractor.MetadataExtractorFactory;
@@ -62,8 +60,6 @@ class FileUploadServiceTest {
     @Mock
     BookAdditionalFileRepository bookAdditionalFileRepository;
     @Mock
-    AppSettingService appSettingService;
-    @Mock
     MetadataExtractorFactory metadataExtractorFactory;
     @Mock
     FileMovingHelper fileMovingHelper;
@@ -84,14 +80,9 @@ class FileUploadServiceTest {
         appProperties = new AppProperties();
         appProperties.setBookdropFolder(tempDir.toString());
 
-        AppSettings settings = new AppSettings();
-        settings.setMaxFileUploadSizeInMb(10);
-        settings.setUploadPattern("{currentFilename}");
-        when(appSettingService.getAppSettings()).thenReturn(settings);
-
         service = new FileUploadService(
                 libraryRepository, bookRepository, bookAdditionalFileRepository,
-                appSettingService, appProperties, metadataExtractorFactory, additionalFileMapper, fileMovingHelper, monitoringRegistrationService, auditService
+                appProperties, metadataExtractorFactory, additionalFileMapper, fileMovingHelper, monitoringRegistrationService, auditService
         );
     }
 
@@ -130,22 +121,6 @@ class FileUploadServiceTest {
                 .satisfies(ex -> {
                     assertThat(ex.getStatus()).isEqualTo(ApiError.INVALID_FILE_FORMAT.getStatus());
                     assertThat(ex.getMessage()).contains("Invalid file format");
-                });
-    }
-
-    @Test
-    void uploadFileBookDrop_throws_when_too_large() {
-        byte[] content = new byte[2 * 1024 * 1024];
-        MockMultipartFile file = new MockMultipartFile("file", "big.pdf", "application/pdf", content);
-        AppSettings small = new AppSettings();
-        small.setMaxFileUploadSizeInMb(1);
-        when(appSettingService.getAppSettings()).thenReturn(small);
-
-        assertThatExceptionOfType(APIException.class)
-                .isThrownBy(() -> service.uploadFileBookDrop(file))
-                .satisfies(ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(ApiError.FILE_TOO_LARGE.getStatus());
-                    assertThat(ex.getMessage()).contains("1");
                 });
     }
 

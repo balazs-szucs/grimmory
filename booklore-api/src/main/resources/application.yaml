@@ -44,8 +44,8 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 1024MB
-      max-request-size: 1024MB
+      max-file-size: ${MAX_UPLOAD_SIZE:100MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:100MB}
       file-size-threshold: 0
   mvc:
     async:

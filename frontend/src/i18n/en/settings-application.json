@@ -32,6 +32,7 @@
     "maxUploadPlaceholder": "Max size",
     "maxUploadDesc": "Defines the maximum allowed size (in MB) for each uploaded file. Applies to all supported file formats.",
     "restartWarning": "Changes will take effect after restarting the server",
+    "envVarNote": "This value is set by the MAX_UPLOAD_SIZE environment variable at startup. To change it, update the variable and restart the server.",
     "invalidInput": "Invalid Input",
     "invalidInputDetail": "Please enter a valid max file upload size in MB."
   },
