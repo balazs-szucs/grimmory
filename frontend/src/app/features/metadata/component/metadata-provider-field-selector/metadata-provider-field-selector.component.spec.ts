@@ -11,17 +11,19 @@ import {MetadataProviderFieldSelectorComponent} from './metadata-provider-field-
 describe('MetadataProviderFieldSelectorComponent', () => {
   const saveSettings = vi.fn(() => of(void 0));
   const translate = vi.fn((key: string) => `translated:${key}`);
+  const reRenderOnLangChange = vi.fn(() => ({subscribe: () => ({unsubscribe: () => {}})}));
   const appSettings = signal<AppSettings | null>(null);
 
   beforeEach(() => {
     saveSettings.mockClear();
     translate.mockClear();
+    reRenderOnLangChange.mockClear();
     appSettings.set(null);
 
     TestBed.configureTestingModule({
       providers: [
         {provide: AppSettingsService, useValue: {appSettings, saveSettings}},
-        {provide: TranslocoService, useValue: {translate}},
+        {provide: TranslocoService, useValue: {translate, reRenderOnLangChange}},
       ]
     });
   });
