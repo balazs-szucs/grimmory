@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Integration tests that feed a real RAR5 archive into the service layer
  */
-@EnabledIf("org.booklore.service.ArchiveService#isAvailable")
+@EnabledIf("org.grimmory.comic4j.archive.ComicArchiveReader#isAvailable")
 @ExtendWith(MockitoExtension.class)
 class Rar5IntegrationTest {
 
@@ -41,7 +41,7 @@ class Rar5IntegrationTest {
         Path cbrCopy = tempDir.resolve("test.cbr");
         Files.copy(RAR5_CBR, cbrCopy);
 
-        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService());
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor();
         BookMetadata metadata = extractor.extractMetadata(cbrCopy.toFile());
 
         assertThat(metadata.getTitle()).isEqualTo("Test RAR5 Comic");
@@ -66,7 +66,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> org.booklore.util.FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService());
+            CbxReaderService readerService = new CbxReaderService(mockRepo);
             List<Integer> pages = readerService.getAvailablePages(99L);
 
             assertThat(pages).hasSize(3);
@@ -90,7 +90,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> org.booklore.util.FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService());
+            CbxReaderService readerService = new CbxReaderService(mockRepo);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             readerService.streamPageImage(99L, 1, out);
 
@@ -114,7 +114,7 @@ class Rar5IntegrationTest {
         meta.setTitle("Test RAR5 Comic");
         book.setMetadata(meta);
 
-        CbxConversionService conversionService = new CbxConversionService(new ArchiveService());
+        CbxConversionService conversionService = new CbxConversionService();
         File epub = conversionService.convertCbxToEpub(cbrCopy.toFile(), tempDir.toFile(), book, 85);
 
         assertThat(epub).exists();
@@ -151,7 +151,7 @@ class Rar5IntegrationTest {
         appSettings.setMetadataPersistenceSettings(persistenceSettings);
         org.mockito.Mockito.when(mockSettings.getAppSettings()).thenReturn(appSettings);
 
-        CbxMetadataWriter writer = new CbxMetadataWriter(mockSettings, new ArchiveService());
+        CbxMetadataWriter writer = new CbxMetadataWriter(mockSettings);
 
         BookMetadataEntity metadata = new BookMetadataEntity();
         metadata.setTitle("Updated RAR5 Title");

@@ -6,7 +6,6 @@ import org.booklore.model.dto.settings.MetadataPersistenceSettings;
 import org.booklore.model.entity.*;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.ComicCreatorRole;
-import org.booklore.service.ArchiveService;
 import org.booklore.service.appsettings.AppSettingService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +35,7 @@ import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@EnabledIf("org.booklore.service.ArchiveService#isAvailable")
+@EnabledIf("org.grimmory.comic4j.archive.ComicArchiveReader#isAvailable")
 class CbxMetadataWriterTest {
 
     private CbxMetadataWriter writer;
@@ -56,7 +55,7 @@ class CbxMetadataWriterTest {
         settings.setMetadataPersistenceSettings(persistence);
         Mockito.when(appSettingService.getAppSettings()).thenReturn(settings);
 
-        writer = new CbxMetadataWriter(appSettingService, new ArchiveService());
+        writer = new CbxMetadataWriter(appSettingService);
         tempDir = Files.createTempDirectory("cbx_writer_test_");
     }
 

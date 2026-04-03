@@ -6,7 +6,6 @@ import freemarker.template.TemplateException;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.compress.archivers.zip.ZipFile;
-import org.booklore.service.ArchiveService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,7 +24,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("CBX Conversion Integration Test")
-@EnabledIf("org.booklore.service.ArchiveService#isAvailable")
+@EnabledIf("org.grimmory.comic4j.archive.ComicArchiveReader#isAvailable")
 class CbxConversionIntegrationTest {
 
     @TempDir
@@ -35,7 +34,7 @@ class CbxConversionIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        conversionService = new CbxConversionService(new ArchiveService());
+        conversionService = new CbxConversionService();
     }
 
     @Test

@@ -83,11 +83,11 @@ dependencies {
 
     implementation("io.documentnode:epub4j-core:4.2.3")
 
+    // --- Comic Archive Support ---
+    implementation("org.grimmory:comic4j:1.0.0")
+
     // --- Audio Metadata (Audiobook Support) ---
     implementation("com.github.RouHim:jaudiotagger:2.0.19")
-
-    // --- Archive Support ---
-    implementation("com.github.gotson.nightcompress:nightcompress:1.1.1")
 
     // --- JSON & Web Scraping ---
     implementation("org.jsoup:jsoup:1.22.1")
@@ -101,10 +101,6 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("org.tukaani:xz:1.12") // Required by commons-compress for 7z support
     implementation("org.apache.commons:commons-text:1.15.0")
-
-    // --- XML Support (JAXB) ---
-    implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
-    runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.7")
 
     // --- Template Engine ---
     implementation("org.freemarker:freemarker:2.3.34")

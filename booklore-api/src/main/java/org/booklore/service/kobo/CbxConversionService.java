@@ -4,9 +4,10 @@ import org.booklore.model.entity.AuthorEntity;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.CategoryEntity;
 import org.booklore.model.entity.TagEntity;
-import org.booklore.service.ArchiveService;
 import org.booklore.util.ArchiveUtils;
-import org.booklore.util.FileService;
+import org.grimmory.comic4j.archive.ComicArchiveReader;
+import org.grimmory.comic4j.image.ImageCodec;
+import org.grimmory.comic4j.image.ImageEntry;
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
@@ -16,17 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.springframework.stereotype.Service;
-import org.springframework.util.FileSystemUtils;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
@@ -66,14 +59,12 @@ public class CbxConversionService {
     private static final String COVER_IMAGE_PATH = "OEBPS/Images/cover.jpg";
     private static final String MIMETYPE_CONTENT = "application/epub+zip";
     private static final long MAX_IMAGE_SIZE_BYTES = 50L * 1024 * 1024;
-    private static final String EXTRACTED_IMAGES_SUBDIR = "cbx_extracted_images";
+    private static final long MAX_PIXEL_COUNT = 100_000_000L;
 
     private final Configuration freemarkerConfig;
-    private final ArchiveService archiveService;
 
-    public CbxConversionService(ArchiveService archiveService) {
+    public CbxConversionService() {
         this.freemarkerConfig = initializeFreemarkerConfiguration();
-        this.archiveService = archiveService;
     }
 
     public record EpubContentFileGroup(String contentKey, String imagePath, String htmlPath) {
@@ -121,36 +112,33 @@ public class CbxConversionService {
         Path epubFilePath = Paths.get(tempDir.getAbsolutePath(), cbxFile.getName() + ".epub");
         File epubFile = epubFilePath.toFile();
 
-        Path extractedImagesDir = Paths.get(tempDir.getAbsolutePath(), EXTRACTED_IMAGES_SUBDIR);
-        Files.createDirectories(extractedImagesDir);
-
-        List<Path> imagePaths = extractImagesFromCbx(cbxFile, extractedImagesDir);
-        if (imagePaths.isEmpty()) {
+        Path cbxPath = cbxFile.toPath();
+        List<ImageEntry> imageEntries = ComicArchiveReader.listImages(cbxPath);
+        if (imageEntries.isEmpty()) {
             throw new IllegalStateException("No valid images found in CBX file: " + cbxFile.getName());
         }
 
-        log.debug("Extracted {} images from CBX file to disk", imagePaths.size());
+        log.debug("Found {} image entries in CBX file", imageEntries.size());
+        float quality = compressionPercentage / 100f;
 
         try (ZipArchiveOutputStream zipOut = new ZipArchiveOutputStream(new FileOutputStream(epubFile))) {
             addMimetypeEntry(zipOut);
             addMetaInfContainer(zipOut);
             addStylesheet(zipOut);
 
-            List<EpubContentFileGroup> contentGroups = addImagesAndPages(zipOut, imagePaths, compressionPercentage);
+            List<EpubContentFileGroup> contentGroups = addImagesAndPages(zipOut, cbxPath, imageEntries, quality);
 
             addContentOpf(zipOut, bookEntity, contentGroups);
             addTocNcx(zipOut, bookEntity, contentGroups);
             addNavXhtml(zipOut, bookEntity, contentGroups);
         }
 
-        deleteDirectory(extractedImagesDir);
-
         return epubFile;
     }
 
     private void deleteDirectory(Path directory) {
         try {
-            FileSystemUtils.deleteRecursively(directory);
+            org.springframework.util.FileSystemUtils.deleteRecursively(directory);
         } catch (IOException e) {
             log.warn("Failed to delete directory {}: {}", directory, e.getMessage());
         }
@@ -182,79 +170,51 @@ public class CbxConversionService {
         return config;
     }
 
-    private List<Path> extractImagesFromCbx(File cbxFile, Path extractedImagesDir) throws IOException {
-        List<Path> imagePaths = new ArrayList<>();
+    private List<EpubContentFileGroup> addImagesAndPages(ZipArchiveOutputStream zipOut, Path cbxPath,
+            List<ImageEntry> imageEntries, float quality)
+            throws IOException, TemplateException {
 
-        for (ArchiveService.Entry entry : archiveService.getEntries(cbxFile.toPath())) {
-            if (!isImageFile(entry.getName())) {
-                continue;
-            }
+        List<EpubContentFileGroup> contentGroups = new ArrayList<>();
 
-            validateImageSize(entry.getName(), entry.getSize());
-
-            try {
-                Path outputPath = extractedImagesDir.resolve(extractFileName(entry.getName()));
-
-                archiveService.extractEntryToPath(cbxFile.toPath(), entry.getName(), outputPath);
-
-                imagePaths.add(outputPath);
-            } catch (Exception e) {
-                log.warn("Error extracting image {}: {}", entry.getName(), e.getMessage());
-            }
+        if (!imageEntries.isEmpty()) {
+            byte[] coverData = transcodeImage(cbxPath, imageEntries.getFirst().name(), quality);
+            addBytesToZip(zipOut, COVER_IMAGE_PATH, coverData);
         }
 
-        log.debug("Found {} image entries in CBR file", imagePaths.size());
-        imagePaths.sort(Comparator.comparing(path -> path.getFileName().toString().toLowerCase()));
-        return imagePaths;
+        for (int i = 0; i < imageEntries.size(); i++) {
+            ImageEntry entry = imageEntries.get(i);
+            String contentKey = String.format("page-%04d", i + 1);
+            String imageFileName = contentKey + ".jpg";
+            String htmlFileName = contentKey + ".xhtml";
+
+            String imagePath = IMAGE_ROOT_PATH + imageFileName;
+            String htmlPath = HTML_ROOT_PATH + htmlFileName;
+
+            byte[] jpegData = transcodeImage(cbxPath, entry.name(), quality);
+            addBytesToZip(zipOut, imagePath, jpegData);
+
+            String htmlContent = generatePageHtml(imageFileName, i + 1);
+            ZipArchiveEntry htmlEntry = new ZipArchiveEntry(htmlPath);
+            zipOut.putArchiveEntry(htmlEntry);
+            zipOut.write(htmlContent.getBytes(StandardCharsets.UTF_8));
+            zipOut.closeArchiveEntry();
+
+            contentGroups.add(new EpubContentFileGroup(contentKey, imagePath, htmlPath));
+        }
+
+        return contentGroups;
     }
 
-    private String extractFileName(String entryPath) {
-        return Path.of(entryPath).getFileName().toString();
+    private byte[] transcodeImage(Path cbxPath, String entryName, float quality) {
+        byte[] raw = ComicArchiveReader.extractImage(cbxPath, entryName);
+        return ImageCodec.transcodeToJpeg(raw, quality, MAX_PIXEL_COUNT);
     }
 
-    private void validateImageSize(String imageName, long size) throws IOException {
-        if (size > MAX_IMAGE_SIZE_BYTES) {
-            throw new IOException(String.format("Image '%s' exceeds maximum size limit: %d bytes (max: %d bytes)",
-                    imageName, size, MAX_IMAGE_SIZE_BYTES));
-        }
-    }
-
-    private boolean isImageFile(String fileName) {
-        if (shouldIgnoreEntry(fileName)) {
-            return false;
-        }
-
-        String lowerName = fileName.toLowerCase();
-
-        return lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") ||
-                lowerName.endsWith(".png") || lowerName.endsWith(".webp") ||
-                lowerName.endsWith(".gif") || lowerName.endsWith(".bmp") ||
-                lowerName.endsWith(".avif") || lowerName.endsWith(".heic");
-    }
-
-    private boolean shouldIgnoreEntry(String entryName) {
-        if (entryName.contains("__MACOSX")) {
-            return true;
-        }
-
-        String fileName = entryName;
-        int lastSlash = entryName.lastIndexOf('/');
-        if (lastSlash >= 0) {
-            fileName = entryName.substring(lastSlash + 1);
-        }
-
-        return fileName.startsWith("._");
-    }
-
-    private boolean isJpegFile(Path path) {
-        Set<String> jpegExtensions = Set.of(".jpg", ".jpeg");
-        String fileName = path.getFileName().toString().toLowerCase();
-        int lastDot = fileName.lastIndexOf('.');
-        if (lastDot > 0) {
-            String extension = fileName.substring(lastDot);
-            return jpegExtensions.contains(extension);
-        }
-        return false;
+    private void addBytesToZip(ZipArchiveOutputStream zipOut, String path, byte[] data) throws IOException {
+        ZipArchiveEntry entry = new ZipArchiveEntry(path);
+        zipOut.putArchiveEntry(entry);
+        zipOut.write(data);
+        zipOut.closeArchiveEntry();
     }
 
     private void addMimetypeEntry(ZipArchiveOutputStream zipOut) throws IOException {
@@ -288,106 +248,6 @@ public class CbxConversionService {
         zipOut.putArchiveEntry(stylesheetEntry);
         zipOut.write(stylesheetContent.getBytes(StandardCharsets.UTF_8));
         zipOut.closeArchiveEntry();
-    }
-
-    private List<EpubContentFileGroup> addImagesAndPages(ZipArchiveOutputStream zipOut, List<Path> imagePaths,
-            int compressionPercentage)
-            throws IOException, TemplateException {
-
-        List<EpubContentFileGroup> contentGroups = new ArrayList<>();
-
-        if (!imagePaths.isEmpty()) {
-            addImageToZipFromPath(zipOut, COVER_IMAGE_PATH, imagePaths.getFirst(), compressionPercentage);
-        }
-
-        for (int i = 0; i < imagePaths.size(); i++) {
-            Path imageSourcePath = imagePaths.get(i);
-            String contentKey = String.format("page-%04d", i + 1);
-            String imageFileName = contentKey + ".jpg";
-            String htmlFileName = contentKey + ".xhtml";
-
-            String imagePath = IMAGE_ROOT_PATH + imageFileName;
-            String htmlPath = HTML_ROOT_PATH + htmlFileName;
-
-            addImageToZipFromPath(zipOut, imagePath, imageSourcePath, compressionPercentage);
-
-            String htmlContent = generatePageHtml(imageFileName, i + 1);
-            ZipArchiveEntry htmlEntry = new ZipArchiveEntry(htmlPath);
-            zipOut.putArchiveEntry(htmlEntry);
-            zipOut.write(htmlContent.getBytes(StandardCharsets.UTF_8));
-            zipOut.closeArchiveEntry();
-
-            contentGroups.add(new EpubContentFileGroup(contentKey, imagePath, htmlPath));
-        }
-
-        return contentGroups;
-    }
-
-    private void addImageToZipFromPath(ZipArchiveOutputStream zipOut, String epubImagePath, Path sourceImagePath,
-            int compressionPercentage)
-            throws IOException {
-        ZipArchiveEntry imageEntry = new ZipArchiveEntry(epubImagePath);
-        zipOut.putArchiveEntry(imageEntry);
-
-        if (isJpegFile(sourceImagePath)) {
-            try (InputStream fis = Files.newInputStream(sourceImagePath)) {
-                fis.transferTo(zipOut);
-            }
-        } else {
-            try (InputStream fis = Files.newInputStream(sourceImagePath)) {
-                BufferedImage image = null;
-                try {
-                    image = FileService.readImage(fis);
-                } catch (Exception e) {
-                    log.debug("Failed to decode image {} with FileService: {}", sourceImagePath, e.getMessage());
-                }
-
-                if (image != null) {
-                    writeJpegImage(image, zipOut, compressionPercentage / 100f);
-                } else {
-                    log.warn("Could not decode image {}, copying raw bytes", sourceImagePath.getFileName());
-                    try (InputStream rawStream = Files.newInputStream(sourceImagePath)) {
-                        rawStream.transferTo(zipOut);
-                    }
-                }
-            }
-        }
-
-        zipOut.closeArchiveEntry();
-    }
-
-    private void writeJpegImage(BufferedImage image, ZipArchiveOutputStream zipOut, float quality)
-            throws IOException {
-        BufferedImage rgbImage = image;
-        if (image.getType() != BufferedImage.TYPE_INT_RGB) {
-            rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
-            rgbImage.getGraphics().drawImage(image, 0, 0, null);
-            rgbImage.getGraphics().dispose();
-        }
-
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-
-        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
-        if (!writers.hasNext()) {
-            throw new IOException("No JPEG image writer available");
-        }
-        ImageWriter writer = writers.next();
-
-        ImageWriteParam param = writer.getDefaultWriteParam();
-
-        if (param.canWriteCompressed()) {
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(quality);
-        }
-
-        try (ImageOutputStream ios = ImageIO.createImageOutputStream(baos)) {
-            writer.setOutput(ios);
-            writer.write(null, new IIOImage(rgbImage, null, null), param);
-        } finally {
-            writer.dispose();
-        }
-
-        zipOut.write(baos.toByteArray());
     }
 
     private String generatePageHtml(String imageFileName, int pageNumber) throws IOException, TemplateException {

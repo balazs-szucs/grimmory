@@ -11,7 +11,6 @@ import org.booklore.model.entity.ComicMetadataEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.BookAdditionalFileRepository;
 import org.booklore.repository.BookRepository;
-import org.booklore.service.ArchiveService;
 import org.booklore.service.book.BookCreatorService;
 import org.booklore.service.metadata.MetadataMatchService;
 import org.booklore.service.metadata.extractor.CbxMetadataExtractor;
@@ -20,12 +19,12 @@ import org.booklore.util.ArchiveUtils;
 import org.booklore.util.BookCoverUtils;
 import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
+import org.grimmory.comic4j.archive.ComicArchiveReader;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.*;
@@ -40,9 +39,7 @@ import static org.booklore.util.FileService.truncate;
 public class CbxProcessor extends AbstractFileProcessor implements BookFileProcessor {
 
     private static final Pattern UNDERSCORE_HYPHEN_PATTERN = Pattern.compile("[_\\-]");
-    private static final Pattern IMAGE_EXTENSION_PATTERN = Pattern.compile(".*\\.(jpg|jpeg|png|webp)");
     private final CbxMetadataExtractor cbxMetadataExtractor;
-    private final ArchiveService archiveService;
 
     public CbxProcessor(BookRepository bookRepository,
                         BookAdditionalFileRepository bookAdditionalFileRepository,
@@ -51,11 +48,9 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
                         FileService fileService,
                         MetadataMatchService metadataMatchService,
                         SidecarMetadataWriter sidecarMetadataWriter,
-                        CbxMetadataExtractor cbxMetadataExtractor,
-                        ArchiveService archiveService) {
+                        CbxMetadataExtractor cbxMetadataExtractor) {
         super(bookRepository, bookAdditionalFileRepository, bookCreatorService, bookMapper, fileService, metadataMatchService, sidecarMetadataWriter);
         this.cbxMetadataExtractor = cbxMetadataExtractor;
-        this.archiveService = archiveService;
     }
 
     @Override
@@ -115,30 +110,16 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
     }
 
     private Optional<BufferedImage> extractImagesFromArchive(Path path) {
-        List<String> archiveEntries;
-
         try {
-            archiveEntries = archiveService.streamEntryNames(path)
-                    .filter(name -> IMAGE_EXTENSION_PATTERN.matcher(name.toLowerCase()).matches())
-                    .sorted()
-                    .toList();
+            byte[] coverBytes = ComicArchiveReader.extractCover(path);
+            if (coverBytes == null || coverBytes.length == 0) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(FileService.readImage(new ByteArrayInputStream(coverBytes)));
         } catch (Exception e) {
             log.warn("Error reading archive {}: {}", path.getFileName(), e.getMessage());
             return Optional.empty();
         }
-
-        for (String entryName : archiveEntries) {
-            try (
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            ) {
-                archiveService.transferEntryTo(path, entryName, outputStream);
-                return Optional.ofNullable(FileService.readImage(new ByteArrayInputStream(outputStream.toByteArray())));
-            } catch (Exception e) {
-                log.warn("Error reading archive {} entry {}: {}", path.getFileName(), entryName, e.getMessage());
-            }
-        }
-
-        return Optional.empty();
     }
 
     private void extractAndSetMetadata(BookEntity bookEntity) {
