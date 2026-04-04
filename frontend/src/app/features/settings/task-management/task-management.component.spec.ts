@@ -3,7 +3,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Observable, Subject, of, throwError} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
-import {TranslocoService} from '@jsverse/transloco';
+import {TranslocoService, TranslateParams} from '@jsverse/transloco';
 import {MessageService} from 'primeng/api';
 
 import {getTranslocoModule} from '../../../core/testing/transloco-testing';
@@ -33,7 +33,7 @@ describe('TaskManagementComponent', () => {
   let messageService: {
     add: ReturnType<typeof vi.fn>;
   };
-  let translate: ReturnType<typeof vi.fn>;
+  let translate: ReturnType<typeof vi.fn<(key: TranslateParams, params?: Record<string, unknown>, lang?: string) => unknown>>;
 
   const clearPdfTask: TaskInfo = {
     taskType: TaskType.CLEAR_PDF_CACHE,
@@ -86,7 +86,10 @@ describe('TaskManagementComponent', () => {
     vi.setSystemTime(new Date('2026-03-27T03:06:00Z'));
 
     taskProgressSubject = new Subject<TaskProgressPayload | null>();
-    translate = vi.fn((key: string, params?: Record<string, unknown>) => (params ? `${key}:${JSON.stringify(params)}` : key));
+    translate = vi.fn<(key: TranslateParams, params?: Record<string, unknown>, lang?: string) => unknown>((key: TranslateParams, params?: Record<string, unknown>) => {
+      const keyStr = typeof key === 'string' ? key : key.join(',');
+      return params ? `${keyStr}:${JSON.stringify(params)}` : keyStr;
+    });
     messageService = {
       add: vi.fn(),
     };
