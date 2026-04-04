@@ -12,19 +12,30 @@
       [placeholder]="t('placeholder')"
       class="search-input"
     />
-    @if (searchQuery) {
+    <div class="search-actions">
+      @if (searchQuery) {
+        <p-button
+          icon="pi pi-times"
+          (click)="clearSearch()"
+          [text]="true"
+          [rounded]="true"
+          class="clear-search-btn"
+          [attr.aria-label]="t('clearSearch')">
+        </p-button>
+      }
       <p-button
-        icon="pi pi-times"
-        (click)="clearSearch()"
+        icon="pi pi-arrow-right"
+        (click)="triggerSearch()"
+        [disabled]="isSearchDisabled"
+        [loading]="isLoading"
         [text]="true"
         [rounded]="true"
-        class="clear-search-btn"
-        [attr.aria-label]="t('clearSearch')">
+        class="search-trigger-btn">
       </p-button>
-    }
+    </div>
   </p-iconfield>
 
-  <p-popover #resultsPopover [appendTo]="'body'" [styleClass]="'search-results-popover'">
+  <p-popover #resultsPopover [appendTo]="'body'" [styleClass]="'search-results-popover'" (onShow)="isPopoverVisible = true" (onHide)="isPopoverVisible = false">
     <div
       class="search-dropdown layout-menu show"
     >

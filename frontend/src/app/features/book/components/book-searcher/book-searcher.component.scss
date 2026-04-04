@@ -35,7 +35,7 @@
 
 .search-input {
   width: 100%;
-  padding-right: 2.5rem;
+  padding-right: 4.5rem;
   height: 2.5rem;
   line-height: 2.5rem;
   font-size: 1rem;
@@ -49,15 +49,29 @@
   }
 }
 
-.clear-search-btn {
+.search-actions {
   position: absolute;
-  right: 0.5rem;
+  right: 0.25rem;
   top: 50%;
   transform: translateY(-50%);
-  display: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 
-  @media (width >= 640px) {
-    display: inline-flex;
+  @media (width < 640px) {
+    .clear-search-btn {
+      display: none;
+    }
+  }
+
+  ::ng-deep .p-button {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+
+    .p-button-icon {
+      font-size: 1rem;
+    }
   }
 }
 

@@ -39,6 +39,7 @@ export class BookSearcherComponent {
   searchQuery = '';
   activeIndex = -1;
   isSearchFocused = false;
+  isPopoverVisible = false;
 
   private readonly searchTerm = signal('');
   private readonly debouncedSearchTerm = toSignal(
@@ -92,19 +93,40 @@ export class BookSearcherComponent {
     return seriesName;
   }
 
+  get isSearchDisabled(): boolean {
+    return this.searchQuery.trim().length < 2;
+  }
+
   onSearchInputChange(): void {
-    this.searchTerm.set(this.searchQuery.trim());
     this.activeIndex = -1;
 
-    if (this.isDropdownOpen) {
-      setTimeout(() => this.showPopover());
-    } else {
+    const trimmedQuery = this.searchQuery.trim();
+
+    if (!trimmedQuery || trimmedQuery.length < 2) {
       this.resultsPopover?.hide();
+      return;
+    }
+
+    // If popover is already visible, provide live updates
+    if (this.isPopoverVisible) {
+      this.searchTerm.set(trimmedQuery);
+    }
+  }
+
+  triggerSearch(): void {
+    const trimmedQuery = this.searchQuery.trim();
+    if (trimmedQuery.length >= 2) {
+      this.searchTerm.set(trimmedQuery);
+      this.activeIndex = -1;
+      
+      if (!this.isPopoverVisible) {
+        setTimeout(() => this.showPopover());
+      }
     }
   }
 
   private showPopover(): void {
-    if (this.resultsPopover) {
+    if (this.resultsPopover && !this.isPopoverVisible) {
       const inputElement = this.elRef.nativeElement.querySelector('.search-input');
       this.resultsPopover.show(null, inputElement);
     }
@@ -151,6 +173,8 @@ export class BookSearcherComponent {
       case 'Enter':
         if (this.activeIndex >= 0 && this.activeIndex < this.books.length) {
           this.onBookClick(this.books[this.activeIndex]);
+        } else {
+          this.triggerSearch();
         }
         break;
       case 'Escape':
