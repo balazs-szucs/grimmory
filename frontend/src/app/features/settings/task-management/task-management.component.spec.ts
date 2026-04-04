@@ -1,10 +1,12 @@
 import {NO_ERRORS_SCHEMA} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Observable, Subject, of, throwError} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {TranslocoService} from '@jsverse/transloco';
 import {MessageService} from 'primeng/api';
+
+import {getTranslocoModule} from '../../../core/testing/transloco-testing';
 import {
   MetadataReplaceMode,
   TaskHistory,
@@ -17,6 +19,7 @@ import {
 import {TaskManagementComponent} from './task-management.component';
 
 describe('TaskManagementComponent', () => {
+  let fixture: ComponentFixture<TaskManagementComponent>;
   let component: TaskManagementComponent;
   let taskService: {
     getAvailableTasks: ReturnType<typeof vi.fn>;
@@ -114,16 +117,18 @@ describe('TaskManagementComponent', () => {
     };
 
     TestBed.configureTestingModule({
-      imports: [TaskManagementComponent],
+      imports: [TaskManagementComponent, getTranslocoModule()],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         {provide: TaskService, useValue: taskService},
         {provide: MessageService, useValue: messageService},
-        {provide: TranslocoService, useValue: {translate}},
       ],
     });
 
-    component = TestBed.createComponent(TaskManagementComponent).componentInstance;
+    const translocoService = TestBed.inject(TranslocoService);
+    vi.spyOn(translocoService, 'translate').mockImplementation(translate);
+    fixture = TestBed.createComponent(TaskManagementComponent);
+    component = fixture.componentInstance;
   });
 
   afterEach(() => {
@@ -162,7 +167,7 @@ describe('TaskManagementComponent', () => {
   it('tracks task progress updates and reloads after a completed task', () => {
     const loadTasksSpy = vi.spyOn(component, 'loadTasks');
 
-    component.ngOnInit();
+    fixture.detectChanges();
     expect(loadTasksSpy).toHaveBeenCalledTimes(1);
 
     taskProgressSubject.next({

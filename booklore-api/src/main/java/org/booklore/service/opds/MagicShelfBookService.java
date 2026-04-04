@@ -67,6 +67,18 @@ public class MagicShelfBookService {
         }
     }
 
+    public Specification<BookEntity> toSpecification(Long userId, Long magicShelfId) {
+        MagicShelfEntity shelf = validateMagicShelfAccess(userId, magicShelfId);
+        try {
+            GroupRule groupRule = objectMapper.readValue(shelf.getFilterJson(), GroupRule.class);
+            Specification<BookEntity> specification = ruleEvaluatorService.toSpecification(groupRule, userId);
+            return specification.and(createLibraryFilterSpecification(userId));
+        } catch (Exception e) {
+            log.error("Failed to parse magic shelf rules", e);
+            throw new RuntimeException("Failed to parse magic shelf rules: " + e.getMessage(), e);
+        }
+    }
+
     public List<Long> getBookIdsByMagicShelfId(Long userId, Long magicShelfId) {
         return getBookIdsByMagicShelfId(userId, magicShelfId, Integer.MAX_VALUE);
     }

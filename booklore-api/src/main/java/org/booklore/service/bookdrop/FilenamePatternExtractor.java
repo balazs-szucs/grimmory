@@ -31,11 +31,7 @@ public class FilenamePatternExtractor {
     private static final Pattern PATTERN = Pattern.compile("[,;&]");
     private final BookdropFileRepository bookdropFileRepository;
     private final BookdropMetadataHelper metadataHelper;
-    private final ExecutorService regexExecutor = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable);
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ExecutorService regexExecutor = Executors.newVirtualThreadPerTaskExecutor();
     
     private static final int PREVIEW_FILE_LIMIT = 5;
     private static final long REGEX_TIMEOUT_SECONDS = 5;

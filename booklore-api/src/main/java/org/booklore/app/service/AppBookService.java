@@ -1,12 +1,15 @@
 package org.booklore.app.service;
 
-import lombok.AllArgsConstructor;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.ApiError;
 import org.booklore.app.dto.AppBookDetail;
 import org.booklore.app.dto.AppBookSummary;
 import org.booklore.app.dto.AppFilterOptions;
 import org.booklore.app.dto.AppPageResponse;
+import org.booklore.app.dto.BookListRequest;
 import org.booklore.app.mapper.AppBookMapper;
 import org.booklore.app.specification.AppBookSpecification;
 import org.booklore.model.dto.Book;
@@ -36,8 +39,10 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 @Service
-@AllArgsConstructor
 @Transactional(readOnly = true)
 public class AppBookService {
 
@@ -53,34 +58,60 @@ public class AppBookService {
     private final MagicShelfBookService magicShelfBookService;
     private final EntityManager entityManager;
 
-    public AppPageResponse<AppBookSummary> getBooks(
-            Integer page,
-            Integer size,
-            String sortBy,
-            String sortDir,
-            Long libraryId,
-            Long shelfId,
-            ReadStatus status,
-            String search,
-            BookFileType fileType,
-            Integer minRating,
-            Integer maxRating,
-            String authors,
-            String language) {
+    private final Cache<String, AppFilterOptions> filterOptionsCache = Caffeine.newBuilder()
+            .expireAfterWrite(java.time.Duration.ofSeconds(30))
+            .maximumSize(50)
+            .build();
+
+    public AppBookService(BookRepository bookRepository,
+                          UserBookProgressRepository userBookProgressRepository,
+                          UserBookFileProgressRepository userBookFileProgressRepository,
+                          ShelfRepository shelfRepository,
+                          AuthenticationService authenticationService,
+                          AppBookMapper mobileBookMapper,
+                          MagicShelfBookService magicShelfBookService,
+                          EntityManager entityManager) {
+        this.bookRepository = bookRepository;
+        this.userBookProgressRepository = userBookProgressRepository;
+        this.userBookFileProgressRepository = userBookFileProgressRepository;
+        this.shelfRepository = shelfRepository;
+        this.authenticationService = authenticationService;
+        this.mobileBookMapper = mobileBookMapper;
+        this.magicShelfBookService = magicShelfBookService;
+        this.entityManager = entityManager;
+    }
+
+    public AppPageResponse<AppBookSummary> getBooks(BookListRequest req) {
 
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
-        int pageNum = page != null && page >= 0 ? page : 0;
-        int pageSize = size != null && size > 0 ? Math.min(size, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+        int pageNum = req.page() != null && req.page() >= 0 ? req.page() : 0;
+        int pageSize = req.size() != null && req.size() > 0 ? Math.min(req.size(), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
 
-        Sort sort = buildSort(sortBy, sortDir);
+        // Handle magic shelf: compose the DB-side specification directly (no IN-list)
+        if (req.magicShelfId() != null) {
+            Sort sort = buildSort(req.sort(), req.dir());
+            Pageable pageable = PageRequest.of(pageNum, pageSize, sort);
+
+            Specification<BookEntity> spec = buildSpecification(
+                    accessibleLibraryIds, userId, req);
+            spec = spec.and(magicShelfBookService.toSpecification(userId, req.magicShelfId()));
+
+            Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
+            return buildPageResponse(bookPage, userId, pageNum, pageSize);
+        }
+
+        Sort sort = buildSort(req.sort(), req.dir());
         Pageable pageable = PageRequest.of(pageNum, pageSize, sort);
 
         Specification<BookEntity> spec = buildSpecification(
-                accessibleLibraryIds, libraryId, shelfId, status, search, userId,
-                fileType, minRating, maxRating, authors, language);
+                accessibleLibraryIds, userId, req);
+
+        if (Boolean.TRUE.equals(req.unshelved())) {
+            spec = spec.and(AppBookSpecification.unshelved());
+        }
 
         Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
         return buildPageResponse(bookPage, userId, pageNum, pageSize);
@@ -295,7 +326,6 @@ public class AppBookService {
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
-        // Resolve magic shelf to a set of book IDs if requested
         Set<Long> magicBookIds = null;
         if (magicShelfId != null) {
             magicBookIds = resolveMagicShelfBookIds(magicShelfId, userId);
@@ -323,6 +353,13 @@ public class AppBookService {
             }
         }
 
+        // Cache lookup avoid re-running 9 aggregate queries within the TTL window
+        String cacheKey = userId + ":" + libraryId + ":" + shelfId + ":" + magicShelfId;
+        AppFilterOptions cached = filterOptionsCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         // Build scoping clauses
         String libraryClause = "";
         String shelfClause = "";
@@ -343,44 +380,20 @@ public class AppBookService {
         // Build the optional WHERE suffix once — each clause already starts with "AND"
         String scopeClause = buildScopeClause(libraryClause, shelfClause, magicBookClause);
 
-        // Authors with book count (top 200 by count)
-        String authorQuery = "SELECT a.name, COUNT(DISTINCT b.id) FROM BookEntity b"
-                + " JOIN b.metadata m JOIN m.authors a"
-                + " WHERE (b.deleted IS NULL OR b.deleted = false)"
-                + " AND b.bookFiles IS NOT EMPTY"
-                + scopeClause
-                + " GROUP BY a.name ORDER BY COUNT(DISTINCT b.id) DESC";
-        var authorQ = entityManager.createQuery(authorQuery, Tuple.class);
-        setFilterQueryParams(authorQ, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
-        authorQ.setMaxResults(200);
+        List<AppFilterOptions.CountedOption> authors = queryCountedOptions(
+                "a.name", "JOIN b.metadata m JOIN m.authors a", "",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
 
-        List<AppFilterOptions.AuthorOption> authors = authorQ.getResultList().stream()
-                .map(t -> AppFilterOptions.AuthorOption.builder()
-                        .name(t.get(0, String.class))
-                        .count(t.get(1, Long.class))
-                        .build())
+        List<AppFilterOptions.LanguageOption> languages = queryCountedOptions(
+                "m.language", "JOIN b.metadata m",
+                "AND m.language IS NOT NULL AND m.language <> ''",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds).stream()
+                .map(c -> new AppFilterOptions.LanguageOption(
+                        c.name(),
+                        Locale.forLanguageTag(c.name()).getDisplayLanguage(Locale.ENGLISH),
+                        c.count()))
                 .toList();
 
-        // Languages with book count
-        String langQuery = "SELECT m.language, COUNT(DISTINCT b.id) FROM BookEntity b"
-                + " JOIN b.metadata m"
-                + " WHERE (b.deleted IS NULL OR b.deleted = false)"
-                + " AND b.bookFiles IS NOT EMPTY"
-                + " AND m.language IS NOT NULL AND m.language <> ''"
-                + scopeClause
-                + " GROUP BY m.language ORDER BY COUNT(DISTINCT b.id) DESC";
-        var langQ = entityManager.createQuery(langQuery, Tuple.class);
-        setFilterQueryParams(langQ, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
-
-        List<AppFilterOptions.LanguageOption> languages = langQ.getResultList().stream()
-                .map(t -> AppFilterOptions.LanguageOption.builder()
-                        .code(t.get(0, String.class))
-                        .label(Locale.forLanguageTag(t.get(0, String.class)).getDisplayLanguage(Locale.ENGLISH))
-                        .count(t.get(1, Long.class))
-                        .build())
-                .toList();
-
-        // Distinct file types present in scoped books
         String fileTypeQuery = "SELECT DISTINCT bf.bookType FROM BookEntity b"
                 + " JOIN b.bookFiles bf"
                 + " WHERE (b.deleted IS NULL OR b.deleted = false)"
@@ -389,21 +402,68 @@ public class AppBookService {
                 + scopeClause;
         var ftQ = entityManager.createQuery(fileTypeQuery, BookFileType.class);
         setFilterQueryParams(ftQ, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+        List<String> fileTypes = ftQ.getResultList().stream().map(Enum::name).sorted().toList();
 
-        List<String> fileTypes = ftQ.getResultList().stream()
-                .map(Enum::name)
-                .sorted()
-                .toList();
+        List<AppFilterOptions.CountedOption> categories = queryCountedOptions(
+                "c.name", "JOIN b.metadata m JOIN m.categories c", "",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
 
-        // Read statuses — return all meaningful values
-        List<String> readStatuses = getReadStatusOptions();
+        List<AppFilterOptions.CountedOption> publishers = queryCountedOptions(
+                "m.publisher", "JOIN b.metadata m",
+                "AND m.publisher IS NOT NULL AND m.publisher <> ''",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
 
-        return AppFilterOptions.builder()
+        List<AppFilterOptions.CountedOption> seriesOptions = queryCountedOptions(
+                "m.seriesName", "JOIN b.metadata m",
+                "AND m.seriesName IS NOT NULL AND m.seriesName <> ''",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+
+        List<AppFilterOptions.CountedOption> tags = queryCountedOptions(
+                "t.name", "JOIN b.metadata m JOIN m.tags t", "",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+
+        List<AppFilterOptions.CountedOption> moods = queryCountedOptions(
+                "mo.name", "JOIN b.metadata m JOIN m.moods mo", "",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+
+        List<AppFilterOptions.CountedOption> narrators = queryCountedOptions(
+                "m.narrator", "JOIN b.metadata m",
+                "AND m.narrator IS NOT NULL AND m.narrator <> ''",
+                scopeClause, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+
+        AppFilterOptions result = AppFilterOptions.builder()
                 .authors(authors)
                 .languages(languages)
                 .fileTypes(fileTypes)
-                .readStatuses(readStatuses)
+                .readStatuses(getReadStatusOptions())
+                .categories(categories)
+                .publishers(publishers)
+                .series(seriesOptions)
+                .tags(tags)
+                .moods(moods)
+                .narrators(narrators)
                 .build();
+        filterOptionsCache.put(cacheKey, result);
+        return result;
+    }
+
+    private List<AppFilterOptions.CountedOption> queryCountedOptions(
+            String selectExpr, String joins, String extraWhere,
+            String scopeClause, Set<Long> accessibleLibraryIds,
+            Long libraryId, Long shelfId, Set<Long> magicBookIds) {
+        String jpql = "SELECT " + selectExpr + ", COUNT(DISTINCT b.id) FROM BookEntity b"
+                + " " + joins
+                + " WHERE (b.deleted IS NULL OR b.deleted = false)"
+                + " AND b.bookFiles IS NOT EMPTY"
+                + (extraWhere.isEmpty() ? "" : " " + extraWhere)
+                + scopeClause
+                + " GROUP BY " + selectExpr + " ORDER BY COUNT(DISTINCT b.id) DESC";
+        var q = entityManager.createQuery(jpql, Tuple.class);
+        setFilterQueryParams(q, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+        q.setMaxResults(200);
+        return q.getResultList().stream()
+                .map(t -> new AppFilterOptions.CountedOption(t.get(0, String.class), t.get(1, Long.class)))
+                .toList();
     }
 
     private String buildScopeClause(String libraryClause, String shelfClause, String magicBookClause) {
@@ -428,13 +488,18 @@ public class AppBookService {
         }
     }
 
+    private static final int MAX_MAGIC_SHELF_IDS = 10_000;
+
     private Set<Long> resolveMagicShelfBookIds(Long magicShelfId, Long userId) {
-        // Reuse MagicShelfBookService which already handles access validation,
-        // rule evaluation, and library filtering.
-        var booksPage = magicShelfBookService.getBooksByMagicShelfId(userId, magicShelfId, 0, 10000);
-        return booksPage.getContent().stream()
-                .map(Book::getId)
-                .collect(Collectors.toSet());
+        Specification<BookEntity> spec = magicShelfBookService.toSpecification(userId, magicShelfId);
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Long> cq = cb.createQuery(Long.class);
+        Root<BookEntity> root = cq.from(BookEntity.class);
+        cq.select(root.get("id"));
+        cq.where(spec.toPredicate(root, cq, cb));
+        return new HashSet<>(entityManager.createQuery(cq)
+                .setMaxResults(MAX_MAGIC_SHELF_IDS)
+                .getResultList());
     }
 
     private List<String> getReadStatusOptions() {
@@ -519,68 +584,84 @@ public class AppBookService {
 
     private Specification<BookEntity> buildSpecification(
             Set<Long> accessibleLibraryIds,
-            Long libraryId,
-            Long shelfId,
-            ReadStatus status,
-            String search,
             Long userId,
-            BookFileType fileType,
-            Integer minRating,
-            Integer maxRating,
-            String authors,
-            String language) {
+            BookListRequest req) {
 
         List<Specification<BookEntity>> specs = new ArrayList<>();
         specs.add(AppBookSpecification.notDeleted());
         specs.add(AppBookSpecification.hasDigitalFile());
 
         if (accessibleLibraryIds != null) {
-            if (libraryId != null && accessibleLibraryIds.contains(libraryId)) {
-                specs.add(AppBookSpecification.inLibrary(libraryId));
-            } else if (libraryId != null) {
-                throw ApiError.FORBIDDEN.createException("Access denied to library " + libraryId);
+            if (req.libraryId() != null && accessibleLibraryIds.contains(req.libraryId())) {
+                specs.add(AppBookSpecification.inLibrary(req.libraryId()));
+            } else if (req.libraryId() != null) {
+                throw ApiError.FORBIDDEN.createException("Access denied to library " + req.libraryId());
             } else {
                 specs.add(AppBookSpecification.inLibraries(accessibleLibraryIds));
             }
-        } else if (libraryId != null) {
-            specs.add(AppBookSpecification.inLibrary(libraryId));
+        } else if (req.libraryId() != null) {
+            specs.add(AppBookSpecification.inLibrary(req.libraryId()));
         }
 
-        if (shelfId != null) {
-            ShelfEntity shelf = shelfRepository.findById(shelfId)
-                    .orElseThrow(() -> ApiError.SHELF_NOT_FOUND.createException(shelfId));
+        if (req.shelfId() != null) {
+            ShelfEntity shelf = shelfRepository.findById(req.shelfId())
+                    .orElseThrow(() -> ApiError.SHELF_NOT_FOUND.createException(req.shelfId()));
             if (!shelf.isPublic() && !shelf.getUser().getId().equals(userId)) {
-                throw ApiError.FORBIDDEN.createException("Access denied to shelf " + shelfId);
+                throw ApiError.FORBIDDEN.createException("Access denied to shelf " + req.shelfId());
             }
-            specs.add(AppBookSpecification.inShelf(shelfId));
+            specs.add(AppBookSpecification.inShelf(req.shelfId()));
         }
 
-        if (status != null) {
-            specs.add(AppBookSpecification.withReadStatus(status, userId));
+        if (req.status() != null) {
+            specs.add(AppBookSpecification.withReadStatus(req.status(), userId));
         }
 
-        if (search != null && !search.trim().isEmpty()) {
-            specs.add(AppBookSpecification.searchText(search));
+        if (req.search() != null && !req.search().trim().isEmpty()) {
+            specs.add(AppBookSpecification.searchText(req.search()));
         }
 
-        if (fileType != null) {
-            specs.add(AppBookSpecification.withFileType(fileType));
+        if (req.fileType() != null) {
+            specs.add(AppBookSpecification.withFileType(req.fileType()));
         }
 
-        if (minRating != null) {
-            specs.add(AppBookSpecification.withMinRating(minRating, userId));
+        if (req.minRating() != null) {
+            specs.add(AppBookSpecification.withMinRating(req.minRating(), userId));
         }
 
-        if (maxRating != null) {
-            specs.add(AppBookSpecification.withMaxRating(maxRating, userId));
+        if (req.maxRating() != null) {
+            specs.add(AppBookSpecification.withMaxRating(req.maxRating(), userId));
         }
 
-        if (authors != null && !authors.trim().isEmpty()) {
-            specs.add(AppBookSpecification.withAuthor(authors.trim()));
+        if (req.authors() != null && !req.authors().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withAuthor(req.authors().trim()));
         }
 
-        if (language != null && !language.trim().isEmpty()) {
-            specs.add(AppBookSpecification.withLanguage(language.trim()));
+        if (req.language() != null && !req.language().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withLanguage(req.language().trim()));
+        }
+
+        if (req.series() != null && !req.series().trim().isEmpty()) {
+            specs.add(AppBookSpecification.inSeries(req.series().trim()));
+        }
+
+        if (req.category() != null && !req.category().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withCategory(req.category().trim()));
+        }
+
+        if (req.publisher() != null && !req.publisher().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withPublisher(req.publisher().trim()));
+        }
+
+        if (req.tag() != null && !req.tag().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withTag(req.tag().trim()));
+        }
+
+        if (req.mood() != null && !req.mood().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withMood(req.mood().trim()));
+        }
+
+        if (req.narrator() != null && !req.narrator().trim().isEmpty()) {
+            specs.add(AppBookSpecification.withNarrator(req.narrator().trim()));
         }
 
         return AppBookSpecification.combine(specs.toArray(new Specification[0]));
@@ -591,10 +672,17 @@ public class AppBookService {
                 ? Sort.Direction.ASC
                 : Sort.Direction.DESC;
 
+        // "author" needs a join to the authors collection, which can't be expressed
+        // as a simple property path, fall through to the default (addedOn) for now.
         String field = switch (sortBy != null ? sortBy.toLowerCase() : "") {
             case "title" -> "metadata.title";
             case "seriesname", "series" -> "metadata.seriesName";
-            case "lastreadtime" -> "addedOn";
+            case "seriesnumber" -> "metadata.seriesNumber";
+            case "publisher" -> "metadata.publisher";
+            case "language" -> "metadata.language";
+            case "publisheddate" -> "metadata.publishedDate";
+            case "lastreadtime" -> "lastReadTime";
+            case "pagecount" -> "metadata.pageCount";
             default -> "addedOn";
         };
 
