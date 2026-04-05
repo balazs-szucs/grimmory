@@ -920,8 +920,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     if (this.viewerMode !== 'book') return;
 
     // Ignore touches on interactive elements
-    const target = e.target as HTMLElement;
-    if (target.closest('.pdf-header-toolbar, .pdf-footer, .pdf-sidebar, .search-bar, .toolbar-overflow-menu, button, input, a')) return;
+    const target = e.target instanceof Element ? e.target : (e.target as Node)?.parentElement;
+    if (target instanceof Element && target.closest('.pdf-header-toolbar, .pdf-footer, .pdf-sidebar, .search-bar, .toolbar-overflow-menu, button, input, a')) return;
 
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;

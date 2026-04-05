@@ -93,7 +93,7 @@ export class EmbedPdfBookService {
         defaultZoomLevel: 'fit-page' as ZoomMode,
       },
       render: {
-        defaultImageQuality: 1,
+        defaultImageQuality: 2,
       },
       tiling: {
         tileSize: 1024,
@@ -106,7 +106,10 @@ export class EmbedPdfBookService {
       throw new Error('EmbedPDF.init() returned undefined');
     }
 
-    this.zone.runOutsideAngular(() => this.injectBookModeStyles(target));
+    this.zone.runOutsideAngular(() => {
+      this.injectBookModeStyles(target);
+      this.setupResizeObserver(target);
+    });
 
     this.registry = await this.container.registry;
 
@@ -567,5 +570,23 @@ export class EmbedPdfBookService {
       shadow.appendChild(style);
     };
     waitForShadow();
+  }
+
+  private setupResizeObserver(target: HTMLElement): void {
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      // When the target container resizes (e.g. mobile chrome change), 
+      // some engines might need a nudge to recalculate "fit-page" zoom correctly.
+      if (this.zoom && this.getSpreadMode() === 'none') {
+        const state = this.zoom.getState();
+        if (state.zoomLevel === 'fit-page') {
+          // Re-request same zoom mode to trigger recalculation
+          this.zoom.requestZoom('fit-page' as ZoomMode);
+        }
+      }
+    });
+    observer.observe(target);
+    this.layoutReady$.subscribe(() => observer.disconnect()); // Cleanup when document closes/unloads or use this.destroy()
   }
 }
