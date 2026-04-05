@@ -1,6 +1,6 @@
 @use 'sass:color';
 
-/* stylelint-disable selector-id-pattern, selector-class-pattern -- targets ngx-extended-pdf-viewer / pdf.js internals */
+/* stylelint-disable selector-id-pattern, selector-class-pattern -- reader chrome + optional EmbedPDF shadow hooks */
 
 // Design tokens matching CBX/E-Book readers
 $header-height: 38px;
@@ -63,9 +63,47 @@ $transition-fast: 150ms ease;
 }
 
 // --- Header ---
-// Child element styles for .pdf-header-toolbar (positioning is in ::ng-deep #toolbarViewer)
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 .pdf-header-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: $header-height;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1002;
+  background: $gradient-bg;
+  border-bottom: 1px solid $border-color;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+  color: #fff;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+
+  &.chrome-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+  }
+
   .header-left,
   .header-right {
     display: flex;
@@ -76,36 +114,32 @@ $transition-fast: 150ms ease;
   }
 
   .header-right {
-    // Style zoom toolbar within header
-    ::ng-deep {
-      pdf-zoom-toolbar {
-        display: flex;
-        align-items: center;
-      }
+    .zoom-select,
+    .spread-select {
+      background: rgb(255 255 255 / 8%);
+      color: #fff;
+      border: 1px solid rgb(255 255 255 / 15%);
+      border-radius: 4px;
+      padding: 2px 4px;
+      font-size: 12px;
+      cursor: pointer;
+      height: 26px;
+      appearance: none;
+      max-width: 112px;
+    }
 
-      .zoom {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-      }
+    .zoom-select {
+      max-width: 118px;
+    }
 
-      #scaleSelect {
-        background: rgb(255 255 255 / 8%) !important;
-        color: #fff !important;
-        border: 1px solid rgb(255 255 255 / 15%) !important;
-        border-radius: 4px !important;
-        padding: 2px 4px !important;
-        font-size: 12px !important;
-        cursor: pointer;
-        height: 26px !important;
-        max-width: 85px;
-        appearance: none;
+    .spread-select {
+      max-width: 104px;
+    }
 
-        option {
-          background: #2d2d2d;
-          color: #fff;
-        }
-      }
+    .zoom-select option,
+    .spread-select option {
+      background: #2d2d2d;
+      color: #fff;
     }
   }
 
@@ -155,47 +189,6 @@ $transition-fast: 150ms ease;
   &.close-btn:hover {
     background: rgb(239 68 68 / 20%);
     color: #ef4444;
-  }
-}
-
-// --- Override pdf.js component button styles ---
-
-::ng-deep .pdf-btn-wrap {
-  button {
-    background: none !important;
-    border: none !important;
-    color: #fff !important;
-    cursor: pointer;
-    width: 30px !important;
-    height: 30px !important;
-    padding: 0 !important;
-    border-radius: 6px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    transition: background $transition-fast !important;
-    margin: 0 !important;
-    box-shadow: none !important;
-    opacity: 1 !important;
-
-    &:hover {
-      background: $hover-bg !important;
-    }
-
-    &.toggled,
-    &[aria-pressed="true"] {
-      color: $active-color !important;
-      background: rgb(74 144 226 / 15%) !important;
-    }
-
-    span {
-      display: none !important;
-    }
-
-    &::before {
-      color: inherit !important;
-      opacity: 1 !important;
-    }
   }
 }
 
@@ -456,14 +449,40 @@ $transition-fast: 150ms ease;
 }
 
 #embedpdf-viewer {
-  width: 100%;
-  height: 100%;
-  flex: 1;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
   display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+
+  &.book-mode {
+    top: $header-height;
+  }
+
+  &.document-mode {
+    top: 0;
+  }
+
+  .pdf-fetch-progress-track {
+    flex: 0 0 3px;
+    width: 100%;
+    background: rgb(0 0 0 / 35%);
+    z-index: 2;
+  }
+
+  .pdf-fetch-progress-fill {
+    height: 100%;
+    background: $active-color;
+    transition: width 120ms ease-out;
+  }
 
   iframe {
+    flex: 1;
     width: 100%;
-    height: 100%;
+    min-height: 0;
     border: none;
   }
 }
@@ -521,328 +540,6 @@ $transition-fast: 150ms ease;
   }
 }
 
-// --- Override pdf.js viewer inner styles ---
-
-::ng-deep {
-  // Make pdf viewer fill container
-  ngx-extended-pdf-viewer {
-    flex: 1;
-    display: block;
-    overflow: hidden;
-
-    #mainContainer {
-      background: #1a1a1a !important;
-    }
-
-    // Override pdf.js defaults on #toolbarViewer - our custom fixed header
-    #toolbarViewer {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      height: $header-height !important;
-      min-height: 0 !important;
-      box-sizing: border-box !important;
-      padding: 0 16px !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      z-index: 1002 !important;
-      background: $gradient-bg !important;
-      border-bottom: 1px solid $border-color !important;
-      box-shadow: 0 2px 8px rgb(0 0 0 / 30%) !important;
-      color: #fff !important;
-      opacity: 1 !important;
-      pointer-events: auto !important;
-      transform: translateY(0) !important;
-      transition: opacity 0.25s ease-out, transform 0.25s ease-out !important;
-
-      &.chrome-hidden {
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transform: translateY(-100%) !important;
-      }
-    }
-
-    // Style the annotation editor params toolbars (color picker, thickness, etc.)
-    .editorParamsToolbar {
-      position: fixed !important;
-      top: $header-height !important;
-      right: 8px !important;
-      left: auto !important;
-      z-index: 1003 !important;
-      background: #2d2d2d !important;
-      border: 1px solid $border-color !important;
-      border-radius: 0 0 8px 8px !important;
-      box-shadow: 0 4px 12px rgb(0 0 0 / 40%) !important;
-      padding: 8px 12px !important;
-      color: #fff !important;
-      min-width: 180px !important;
-
-      .editorParamsToolbarContainer {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .editorParamsLabel {
-        color: $text-secondary !important;
-        font-size: 12px !important;
-      }
-
-      .editorParamsSetter {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .editorParamsSlider {
-        flex: 1;
-        accent-color: $active-color;
-      }
-
-      .editorParamsColor {
-        border: 1px solid #555 !important;
-        border-radius: 4px !important;
-        cursor: pointer !important;
-      }
-
-      // Highlight color picker dots
-      .colorPicker {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex-wrap: wrap;
-
-        button {
-          width: 24px !important;
-          height: 24px !important;
-          min-width: 24px !important;
-          border-radius: 50% !important;
-          border: 2px solid transparent !important;
-          padding: 0 !important;
-          cursor: pointer !important;
-
-          &[aria-selected="true"],
-          &.selected {
-            border-color: #fff !important;
-            box-shadow: 0 0 4px rgb(255 255 255 / 40%) !important;
-          }
-        }
-      }
-
-      // Toggle button for "show all highlights"
-      .toggle-button {
-        background: #555 !important;
-        border: none !important;
-        border-radius: 12px !important;
-        width: 36px !important;
-        height: 20px !important;
-        cursor: pointer !important;
-        position: relative !important;
-
-        &[aria-pressed="true"] {
-          background: $active-color !important;
-        }
-      }
-
-      .thicknessPicker {
-        flex: 1;
-      }
-
-      .toggler {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-
-      .divider {
-        height: 1px;
-        background: $border-color;
-        margin: 4px 0;
-      }
-
-      // Generic button styling inside params toolbars
-      button.secondaryToolbarButton,
-      button.toolbarButton {
-        background: none !important;
-        color: #fff !important;
-        border: none !important;
-        border-radius: 6px !important;
-        padding: 6px 10px !important;
-        cursor: pointer !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
-        width: 100% !important;
-
-        &:hover {
-          background: $hover-bg !important;
-        }
-
-        span {
-          display: inline !important;
-          color: inherit !important;
-        }
-      }
-
-      // Injected close button wrapper
-      .custom-close-btn-wrapper {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        width: 100%;
-        margin-bottom: 6px;
-        border-bottom: 1px solid rgb(255 255 255 / 10%);
-        padding-bottom: 6px;
-      }
-
-      // Injected close button
-      .custom-close-btn {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 34px !important;
-        height: 34px !important;
-        padding: 0 !important;
-        background: transparent !important;
-        border: none !important;
-        border-radius: 4px !important;
-
-        svg {
-          display: block;
-        }
-
-        &:hover {
-          background: rgb(239 68 68 / 20%) !important;
-          color: #ef4444 !important;
-        }
-      }
-    }
-
-    // Style the secondary toolbar dropdown
-    #secondaryToolbar {
-      top: $header-height !important;
-      background: #2d2d2d !important;
-      border: 1px solid $border-color !important;
-      border-radius: 0 0 8px 8px !important;
-      box-shadow: 0 4px 16px rgb(0 0 0 / 40%) !important;
-      padding: 4px !important;
-
-      button {
-        background: none !important;
-        border: none !important;
-        color: #fff !important;
-        border-radius: 6px !important;
-        padding: 8px 12px !important;
-        font-size: 13px !important;
-        width: 100% !important;
-        text-align: left !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 8px !important;
-
-        &:hover {
-          background: $hover-bg !important;
-        }
-
-        &[aria-pressed="true"],
-        &.toggled {
-          color: $active-color !important;
-          background: rgb(74 144 226 / 15%) !important;
-        }
-
-        span {
-          display: inline !important;
-          color: inherit !important;
-        }
-      }
-    }
-
-    // Style the find bar
-    #findbar {
-      background: #2d2d2d !important;
-      border: 1px solid $border-color !important;
-      border-radius: 0 0 8px 8px !important;
-      box-shadow: 0 4px 12px rgb(0 0 0 / 30%) !important;
-      padding: 8px !important;
-      top: 0 !important;
-
-      input {
-        background: #404040 !important;
-        color: #fff !important;
-        border: 1px solid #555 !important;
-        border-radius: 4px !important;
-        padding: 4px 8px !important;
-      }
-
-      button {
-        background: none !important;
-        color: #fff !important;
-        border: none !important;
-        border-radius: 4px !important;
-
-        &:hover {
-          background: $hover-bg !important;
-        }
-      }
-
-      label {
-        color: $text-secondary !important;
-      }
-    }
-
-    // Style the sidebar
-    #sidebarContainer {
-      background: #1f1f1f !important;
-      border-right: 1px solid $border-color !important;
-
-      #toolbarSidebar {
-        background: #2d2d2d !important;
-        border-bottom: 1px solid $border-color !important;
-
-        button {
-          color: #fff !important;
-
-          &.toggled {
-            color: $active-color !important;
-          }
-        }
-      }
-
-      #sidebarContent {
-        background: #1f1f1f !important;
-      }
-
-      .treeItem {
-        color: #fff !important;
-
-        >a {
-          color: #fff !important;
-
-          &:hover {
-            background: $hover-bg !important;
-          }
-        }
-      }
-    }
-
-    // Hide the default toolbar container chrome completely - our custom toolbar is positioned fixed
-    #toolbarContainer {
-      position: absolute !important;
-      height: 0 !important;
-      min-height: 0 !important;
-      max-height: 0 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      border: none !important;
-      background: transparent !important;
-      overflow: visible !important;
-    }
-  }
-}
-
 // --- Responsive ---
 
 @media (width <= 768px) {
@@ -867,8 +564,9 @@ $transition-fast: 150ms ease;
   }
 
   .header-right {
-    ::ng-deep pdf-zoom-toolbar {
-      display: none !important;
+    .zoom-select,
+    .spread-select {
+      display: none;
     }
   }
 

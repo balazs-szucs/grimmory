@@ -35,7 +35,18 @@ export type ReaderIconName =
   | 'long-strip'
   | 'direction-ltr'
   | 'direction-rtl'
-  | 'magnifier';
+  | 'magnifier'
+  | 'pdf-sidebar'
+  | 'pdf-outline'
+  | 'pdf-hand'
+  | 'pdf-rotate'
+  | 'pdf-print'
+  | 'sun'
+  | 'moon'
+  | 'annotate-highlight'
+  | 'annotate-pen'
+  | 'annotate-text'
+  | 'annotate-select';
 
 interface IconPath {
   d: string;
@@ -199,6 +210,64 @@ const ICONS: Record<ReaderIconName, IconPath[]> = {
     {d: 'M21 21l-5-5'},
     {d: 'M7,10 L13,10', type: 'line'},
     {d: 'M10,7 L10,13', type: 'line'}
+  ],
+  'pdf-sidebar': [
+    {d: 'M3 5h18v14H3V5z M9 5v14'}
+  ],
+  'pdf-outline': [
+    {d: 'M8 6h13'},
+    {d: 'M8 12h13'},
+    {d: 'M8 18h13'},
+    {d: 'M3 6h.01'},
+    {d: 'M3 12h.01'},
+    {d: 'M3 18h.01'}
+  ],
+  'pdf-hand': [
+    {d: 'M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2'},
+    {d: 'M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2'},
+    {d: 'M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8'},
+    {d: 'M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.66a1 1 0 0 1 0-1.4l3.6-3.66a1 1 0 0 1 1.42 0L9 16'}
+  ],
+  'pdf-rotate': [
+    {d: 'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8'},
+    {d: 'M21 3v5h-5'}
+  ],
+  'pdf-print': [
+    {d: 'M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'},
+    {d: 'M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6'},
+    {d: 'M6 14h12v8H6v-8z'}
+  ],
+  'sun': [
+    {d: 'M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0', type: 'path'},
+    {d: 'M12 2v2', type: 'line'},
+    {d: 'M12 20v2', type: 'line'},
+    {d: 'm4.93 4.93 1.41 1.41'},
+    {d: 'm17.66 17.66 1.41 1.41'},
+    {d: 'M2 12h2', type: 'line'},
+    {d: 'M20 12h2', type: 'line'},
+    {d: 'm6.34 17.66-1.41 1.41'},
+    {d: 'm19.07 4.93-1.41 1.41'}
+  ],
+  'moon': [
+    {d: 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'}
+  ],
+  'annotate-highlight': [
+    {d: 'M9 11H5a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h4'},
+    {d: 'M9 11V9a2 2 0 0 1 2-2h2l7 7v4a2 2 0 0 1-2 2h-2'},
+    {d: 'M18 12h-3a1 1 0 0 1-1-1v-3'}
+  ],
+  'annotate-pen': [
+    {d: 'M12 19l7-7 3 3-7 7-3-3z'},
+    {d: 'M18 13l-1.5-7.5L9 5l-2.9 2.9'},
+    {d: 'M2 22l4-1 9-9'}
+  ],
+  'annotate-text': [
+    {d: 'M4 6h16v12H4z'},
+    {d: '8,10 16,10', type: 'line'},
+    {d: '8,14 13,14', type: 'line'}
+  ],
+  'annotate-select': [
+    {d: 'M4 4l8 16 2-6 3 1 1-12-14 1z'}
   ]
 };
 

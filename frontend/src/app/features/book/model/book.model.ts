@@ -1,7 +1,9 @@
 import {Shelf} from './shelf.model';
 import {CbxBackgroundColor, CbxFitMode, CbxPageSpread, CbxPageSplitOption, CbxPageViewMode, CbxScrollMode, NewPdfReaderSetting} from '../../settings/user-management/user.service';
 import {BookReview} from '../components/book-reviews/book-review-service';
-import {ZoomType} from 'ngx-extended-pdf-viewer';
+
+/** Stored PDF zoom preference (percent string, named preset, or numeric scale). */
+export type PdfZoomPreference = string | number | undefined;
 
 export type BookType = "PDF" | "EPUB" | "CBX" | "FB2" | "MOBI" | "AZW3" | "AUDIOBOOK";
 
@@ -303,7 +305,7 @@ export interface MetadataUpdateWrapper {
 }
 
 export interface PdfViewerSetting {
-  zoom: ZoomType;
+  zoom: PdfZoomPreference;
   spread: 'off' | 'even' | 'odd';
   isDarkTheme?: boolean;
 }

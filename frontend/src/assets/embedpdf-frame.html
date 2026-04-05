@@ -18,7 +18,81 @@
   let viewer = null;
   let objectUrl = null;
   let registry = null;
+  let pageUnsubscribe = null;
+  let annotationUnsub = null;
+  let annotationExportTimer = null;
+  let annotationHydrating = false;
+  let annotationHydrateTimer = null;
+  let viewerBookMode = false;
+  let grimmoryStyleObserver = null;
+  let zoomUnsub = null;
+  let pendingAnnotationJson = null;
+  let userActivityWired = false;
+  let touchSwipeWired = false;
   const myOrigin = location.origin;
+
+  function jsonReviver(_k, v) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && '__epArrayBuffer' in v && 'b64' in v) {
+      const bin = atob(String(v.b64));
+      const buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      return buf.buffer;
+    }
+    if (v && typeof v === 'object' && !Array.isArray(v) && '__epDate' in v && 'iso' in v) {
+      return new Date(String(v.iso));
+    }
+    return v;
+  }
+
+  function scheduleAnnotationExport(docId) {
+    if (!viewerBookMode || annotationHydrating || !docId) return;
+    clearTimeout(annotationExportTimer);
+    annotationExportTimer = setTimeout(() => {
+      annotationExportTimer = null;
+      void flushAnnotationExport(docId);
+    }, 1400);
+  }
+
+  async function flushAnnotationExport(docId) {
+    if (!viewerBookMode || !docId || !registry) return;
+    try {
+      const scope = registry.getPlugin('annotation')?.provides()?.forDocument(docId);
+      if (!scope) {
+        parent.postMessage({ type: 'annotationFlushAck' }, myOrigin);
+        return;
+      }
+      await new Promise((resolve, reject) => {
+        scope.exportAnnotations().wait(resolve, reject);
+      }).then((items) => {
+        const json = JSON.stringify(items, (k, v) => {
+          if (v instanceof ArrayBuffer) {
+            const u8 = new Uint8Array(v);
+            let binary = '';
+            for (let j = 0; j < u8.length; j++) binary += String.fromCharCode(u8[j]);
+            return { __epArrayBuffer: true, b64: btoa(binary) };
+          }
+          if (v instanceof Date) return { __epDate: true, iso: v.toISOString() };
+          return v;
+        });
+        parent.postMessage({ type: 'annotationsExported', json }, myOrigin);
+      });
+    } catch (err) {
+      log('flushAnnotationExport', err);
+      parent.postMessage({ type: 'annotationFlushAck' }, myOrigin);
+    }
+  }
+
+  function wireAnnotationPersistence(docId) {
+    annotationUnsub?.();
+    annotationUnsub = null;
+    if (!viewerBookMode || !docId || !registry) return;
+    const scope = registry.getPlugin('annotation')?.provides()?.forDocument(docId);
+    if (!scope) return;
+    annotationUnsub = scope.onAnnotationEvent((ev) => {
+      if (ev.type === 'loaded') return;
+      scheduleAnnotationExport(docId);
+    });
+  }
 
   function log(...args) {
     console.log('[EmbedPDF-frame]', ...args);
@@ -28,19 +102,56 @@
     }, myOrigin);
   }
 
-  function injectGrimmoryStyles(targetEl, attempt) {
-    if (attempt === undefined) attempt = 0;
-    const container = targetEl.querySelector('embedpdf-container');
-    const shadow = container?.shadowRoot;
-    if (!shadow) {
-      if (attempt < 25) setTimeout(() => injectGrimmoryStyles(targetEl, attempt + 1), 200);
-      return;
+  function mapSpread(s) {
+    if (s === 'even') return 'even';
+    if (s === 'odd') return 'odd';
+    return 'none';
+  }
+
+  function mapZoomLevel(z) {
+    if (z === 'page-fit') return 'fit-page';
+    if (z === 'auto') return 'automatic';
+    if (z === 'page-width') return 'fit-width';
+    if (z === 'page-actual') return 1;
+    if (typeof z === 'number' && !Number.isNaN(z)) return z;
+    if (typeof z === 'string' && z.endsWith('%')) {
+      const n = parseFloat(z) / 100;
+      return Number.isNaN(n) ? 'fit-page' : n;
     }
-    if (shadow.querySelector('style[data-grimmory]')) return;
+    const asNum = parseFloat(String(z));
+    if (!Number.isNaN(asNum)) return asNum;
+    return 'fit-page';
+  }
+
+  function mapRotationToEnum(deg) {
+    switch (deg) {
+      case 90: return 1;
+      case 180: return 2;
+      case 270: return 3;
+      default: return 0;
+    }
+  }
+
+  function getDocId() {
+    if (!registry) return null;
+    const state = registry.getStore().getState();
+    const ids = Object.keys(state.core.documents || {});
+    return ids[0] || null;
+  }
+
+  function injectGrimmoryStyles(targetEl, hideMainToolbar) {
+    const tryInject = () => {
+      const container = targetEl.querySelector('embedpdf-container');
+      const shadow = container?.shadowRoot;
+      if (!shadow) return false;
+      if (shadow.querySelector('style[data-grimmory]')) {
+        targetEl.style.visibility = '';
+        return true;
+      }
 
     const style = document.createElement('style');
     style.setAttribute('data-grimmory', '');
-    style.textContent = `
+    let css = `
       /* ── Grimmory theme overrides ── */
 
       :host {
@@ -169,8 +280,137 @@
         border: 1px solid #d0d0d0 !important;
       }
     `;
+    if (hideMainToolbar) {
+      css += `
+      [class*="border-b"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"] {
+        display: none !important;
+      }
+      `;
+    }
+    style.textContent = css;
     shadow.appendChild(style);
     targetEl.style.visibility = '';
+    return true;
+    };
+
+    if (tryInject()) return;
+
+    grimmoryStyleObserver?.disconnect();
+    grimmoryStyleObserver = new MutationObserver(() => {
+      if (tryInject()) {
+        grimmoryStyleObserver?.disconnect();
+        grimmoryStyleObserver = null;
+      }
+    });
+    grimmoryStyleObserver.observe(targetEl, { childList: true, subtree: true });
+  }
+
+  function wireUserActivityToParent() {
+    if (userActivityWired) return;
+    userActivityWired = true;
+    let lastPost = 0;
+    const post = () => parent.postMessage({ type: 'userActivity' }, myOrigin);
+    window.addEventListener('pointerdown', () => { lastPost = Date.now(); post(); }, true);
+    window.addEventListener('pointermove', () => {
+      const n = Date.now();
+      if (n - lastPost > 280) {
+        lastPost = n;
+        post();
+      }
+    }, true);
+  }
+
+  function wireTouchPageSwipe() {
+    if (touchSwipeWired) return;
+    touchSwipeWired = true;
+    let touchStartX = null;
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) touchStartX = e.touches[0].screenX;
+    }, { passive: true });
+    window.addEventListener('touchend', (e) => {
+      if (touchStartX == null || !registry) return;
+      const x = e.changedTouches[0]?.screenX;
+      const docId = getDocId();
+      const scroll = registry.getPlugin('scroll')?.provides();
+      if (docId && scroll && x != null) {
+        const dx = x - touchStartX;
+        if (dx < -50) scroll.forDocument(docId).scrollToNextPage('smooth');
+        else if (dx > 50) scroll.forDocument(docId).scrollToPreviousPage('smooth');
+      }
+      touchStartX = null;
+    }, { passive: true });
+  }
+
+  function wireZoomFeedback(docId) {
+    zoomUnsub?.();
+    zoomUnsub = null;
+    if (!registry || !docId) return;
+    const z = registry.getPlugin('zoom')?.provides()?.forDocument(docId);
+    if (!z) return;
+    zoomUnsub = z.onZoomChange((ev) => {
+      parent.postMessage({
+        type: 'zoomChanged',
+        level: ev.level,
+        scale: ev.newZoom,
+      }, myOrigin);
+    });
+  }
+
+  function applyAnnotationImport(docId, jsonStr) {
+    if (!registry || !docId || typeof jsonStr !== 'string') return;
+    try {
+      const items = JSON.parse(jsonStr, jsonReviver);
+      if (!Array.isArray(items)) {
+        log('importAnnotations: expected array');
+        return;
+      }
+      annotationHydrating = true;
+      clearTimeout(annotationHydrateTimer);
+      registry.getPlugin('annotation')?.provides()?.forDocument(docId)?.importAnnotations(items);
+      annotationHydrateTimer = setTimeout(() => {
+        annotationHydrating = false;
+      }, 1200);
+      parent.postMessage({ type: 'annotationsImported', count: items.length }, myOrigin);
+    } catch (err) {
+      log('importAnnotations error:', err);
+    }
+  }
+
+  function wirePageTracking() {
+    pageUnsubscribe?.();
+    pageUnsubscribe = null;
+    const docId = getDocId();
+    if (!docId || !registry) return;
+    const scroll = registry.getPlugin('scroll')?.provides();
+    if (!scroll) return;
+    const scope = scroll.forDocument(docId);
+    pageUnsubscribe = scope.onPageChange((e) => {
+      parent.postMessage({
+        type: 'pageChanged',
+        page: e.pageNumber,
+        totalPages: e.totalPages
+      }, myOrigin);
+    });
+  }
+
+  function applyViewportPreferences(msg, docId) {
+    if (!registry || !docId) return;
+    try {
+      const z = registry.getPlugin('zoom')?.provides()?.forDocument(docId);
+      z?.requestZoom(mapZoomLevel(msg.zoom));
+
+      const sp = registry.getPlugin('spread')?.provides()?.forDocument(docId);
+      sp?.setSpreadMode(mapSpread(msg.spread));
+
+      const rot = registry.getPlugin('rotate')?.provides()?.forDocument(docId);
+      rot?.setRotation(mapRotationToEnum(msg.rotation ?? 0));
+
+      const sc = registry.getPlugin('scroll')?.provides()?.forDocument(docId);
+      const p = Math.max(1, parseInt(String(msg.initialPage ?? 1), 10) || 1);
+      sc?.scrollToPage({ pageNumber: p, behavior: 'instant' });
+    } catch (err) {
+      log('applyViewportPreferences error:', err);
+    }
   }
 
   window.addEventListener('message', async (e) => {
@@ -178,7 +418,26 @@
     const msg = e.data;
 
     if (msg.type === 'init') {
-      log('Init, buffer:', msg.buffer?.byteLength, 'bytes');
+      log('Init, buffer:', msg.buffer?.byteLength, 'bytes, mode:', msg.mode);
+
+      pageUnsubscribe?.();
+      pageUnsubscribe = null;
+      annotationUnsub?.();
+      annotationUnsub = null;
+      zoomUnsub?.();
+      zoomUnsub = null;
+      grimmoryStyleObserver?.disconnect();
+      grimmoryStyleObserver = null;
+      pendingAnnotationJson = null;
+      clearTimeout(annotationExportTimer);
+      clearTimeout(annotationHydrateTimer);
+      annotationExportTimer = null;
+      annotationHydrating = false;
+
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
 
       const blob = new Blob([msg.buffer], { type: 'application/pdf' });
       objectUrl = URL.createObjectURL(blob);
@@ -186,13 +445,26 @@
       const target = document.getElementById('viewer');
       target.style.visibility = 'hidden';
 
+      const bookMode = msg.mode === 'book';
+      viewerBookMode = bookMode;
+      const permissions = msg.allowPrint === false ? { overrides: { print: false } } : undefined;
+
       viewer = EmbedPDF.init({
         type: 'container',
         target,
         src: objectUrl,
         wasmUrl: msg.wasmUrl || '/assets/pdfium/pdfium.wasm',
+        /* worker: PDFium + snippet are exercised in direct mode in this iframe; enable after benchmarking */
         worker: false,
-        theme: { preference: msg.theme || 'dark' }
+        theme: { preference: msg.theme || 'dark' },
+        permissions,
+        disabledCategories: bookMode ? ['redaction'] : undefined,
+        annotations: {
+          autoCommit: !bookMode,
+        },
+        zoom: { defaultZoomLevel: mapZoomLevel(msg.zoom) },
+        spread: { defaultSpreadMode: mapSpread(msg.spread) },
+        rotation: { defaultRotation: mapRotationToEnum(msg.rotation ?? 0) },
       });
 
       try {
@@ -201,6 +473,18 @@
         if (dm) {
           dm.onDocumentOpened?.((ev) => {
             log('Document opened, pages:', ev?.pageCount);
+            const docId = getDocId();
+            wirePageTracking();
+            applyViewportPreferences(msg, docId);
+            wireAnnotationPersistence(docId);
+            wireZoomFeedback(docId);
+            wireUserActivityToParent();
+            wireTouchPageSwipe();
+            if (pendingAnnotationJson && docId) {
+              const j = pendingAnnotationJson;
+              pendingAnnotationJson = null;
+              applyAnnotationImport(docId, j);
+            }
             parent.postMessage({ type: 'documentOpened', pageCount: ev?.pageCount }, myOrigin);
           });
           dm.onDocumentError?.((ev) => {
@@ -217,7 +501,57 @@
         parent.postMessage({ type: 'documentError', error: String(err) }, myOrigin);
       }
 
-      injectGrimmoryStyles(target);
+      /* Book mode: hide EmbedPDF chrome; parent toolbar drives navigation + annotation tools via postMessage. */
+      injectGrimmoryStyles(target, bookMode);
+    }
+
+    if (msg.type === 'control' && registry) {
+      const docId = getDocId();
+      if (!docId) return;
+      const scroll = registry.getPlugin('scroll')?.provides();
+      const cmds = registry.getPlugin('commands')?.provides();
+      try {
+        switch (msg.action) {
+          case 'goToPage': {
+            const p = Math.max(1, parseInt(String(msg.page), 10) || 1);
+            scroll?.forDocument(docId).scrollToPage({ pageNumber: p, behavior: msg.smooth ? 'smooth' : 'instant' });
+            break;
+          }
+          case 'setZoom':
+            registry.getPlugin('zoom')?.provides()?.forDocument(docId).requestZoom(mapZoomLevel(msg.zoom));
+            break;
+          case 'setSpread':
+            registry.getPlugin('spread')?.provides()?.forDocument(docId).setSpreadMode(mapSpread(msg.spread));
+            break;
+          case 'rotateForward':
+            registry.getPlugin('rotate')?.provides()?.forDocument(docId).rotateForward();
+            break;
+          case 'zoomIn':
+            registry.getPlugin('zoom')?.provides()?.forDocument(docId).zoomIn();
+            break;
+          case 'zoomOut':
+            registry.getPlugin('zoom')?.provides()?.forDocument(docId).zoomOut();
+            break;
+          case 'togglePan':
+            registry.getPlugin('pan')?.provides()?.forDocument(docId).togglePan();
+            break;
+          case 'runCommand':
+            if (msg.commandId) cmds?.execute(msg.commandId, docId, 'api');
+            break;
+          case 'setAnnotationTool': {
+            const ann = registry.getPlugin('annotation')?.provides()?.forDocument(docId);
+            const id = msg.toolId;
+            if (ann) {
+              ann.setActiveTool(typeof id === 'string' ? id : null);
+            }
+            break;
+          }
+          default:
+            break;
+        }
+      } catch (err) {
+        log('control error:', err);
+      }
     }
 
     if (msg.type === 'save') {
@@ -226,15 +560,15 @@
           parent.postMessage({ type: 'saved', buffer: null }, myOrigin);
           return;
         }
-        const exportPlugin = registry.plugins.get('export')?.provides();
-        const state = registry.store.getState();
+        const exportCap = registry.getPlugin('export')?.provides();
+        const state = registry.getStore().getState();
         const docId = Object.keys(state.core.documents)[0];
-        if (!docId || !exportPlugin) {
+        if (!docId || !exportCap) {
           parent.postMessage({ type: 'saved', buffer: null }, myOrigin);
           return;
         }
         const buffer = await new Promise((resolve, reject) => {
-          exportPlugin.saveAsCopy(docId).wait(resolve, reject);
+          exportCap.forDocument(docId).saveAsCopy().wait(resolve, reject);
         });
         log('Exported', (buffer.byteLength / 1048576).toFixed(1), 'MB');
         parent.postMessage({ type: 'saved', buffer }, myOrigin, [buffer]);
@@ -246,6 +580,31 @@
 
     if (msg.type === 'setTheme') {
       viewer?.setTheme?.(msg.theme);
+    }
+
+    if (msg.type === 'importAnnotations' && registry) {
+      if (typeof msg.json !== 'string') return;
+      const docId = getDocId();
+      if (docId) {
+        applyAnnotationImport(docId, msg.json);
+      } else {
+        pendingAnnotationJson = msg.json;
+      }
+    }
+
+    if (msg.type === 'flushAnnotations') {
+      if (!viewerBookMode || !registry) {
+        parent.postMessage({ type: 'annotationFlushAck' }, myOrigin);
+      } else {
+        const docId = getDocId();
+        if (!docId) {
+          parent.postMessage({ type: 'annotationFlushAck' }, myOrigin);
+        } else {
+          clearTimeout(annotationExportTimer);
+          annotationExportTimer = null;
+          await flushAnnotationExport(docId);
+        }
+      }
     }
   });
 

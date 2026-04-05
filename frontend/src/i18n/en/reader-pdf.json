@@ -5,7 +5,32 @@
     "closePdfReader": "Close PDF Reader",
     "rotatePage": "Rotate Page",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "toggleSidebar": "Sidebar",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "handPan": "Hand (pan)",
+    "outline": "Outline / bookmarks",
+    "search": "Find in document",
+    "print": "Print",
+    "moreTools": "More tools",
+    "annotHighlight": "Highlight",
+    "annotDraw": "Draw",
+    "annotText": "Text box",
+    "annotSelect": "Select / exit tool"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "auto": "Auto",
+    "pageFit": "Page fit",
+    "pageWidth": "Page width",
+    "actualSize": "Actual size"
+  },
+  "spread": {
+    "label": "Spread",
+    "none": "Single page",
+    "odd": "Odd spreads",
+    "even": "Even spreads"
   },
   "footer": {
     "firstPage": "First Page",
@@ -19,5 +44,6 @@
   },
   "toast": {
     "failedToLoadBook": "Failed to load the book"
-  }
+  },
+  "fetchProgress": "Downloading PDF, {{percent}} percent"
 }
