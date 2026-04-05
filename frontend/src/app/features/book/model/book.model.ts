@@ -303,7 +303,7 @@ export interface MetadataUpdateWrapper {
 
 export interface PdfViewerSetting {
   zoom: string;
-  spread: 'off' | 'even' | 'odd';
+  spread: 'none' | 'even' | 'odd';
   isDarkTheme?: boolean;
 }
 

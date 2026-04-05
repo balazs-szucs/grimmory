@@ -42,25 +42,24 @@ export function parseStoredAnnotations(jsonString: string | null | undefined): A
  * Handles ArrayBuffer fields (e.g. stamp ctx.data) by encoding to base64.
  */
 export function serializeAnnotations(items: AnnotationTransferItem[]): string {
-  const serializable = items.map(item => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const entry = item as any;
-    if (entry.ctx?.data instanceof ArrayBuffer) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serializable = items.map((item: any) => {
+    if (item.ctx?.data instanceof ArrayBuffer) {
       return {
-        ...entry,
+        ...item,
         ctx: {
-          ...entry.ctx,
-          data: arrayBufferToBase64(entry.ctx.data),
+          ...item.ctx,
+          data: arrayBufferToBase64(item.ctx.data),
           _dataEncoding: 'base64',
         },
       };
     }
     return item;
   });
-  const wrapped: StoredAnnotations = {
-    format: 'embedpdf',
-    version: 1,
-    annotations: serializable,
+  const wrapped = {
+    format: 'embedpdf' as const,
+    version: 1 as const,
+    annotations: serializable as AnnotationTransferItem[],
   };
   return JSON.stringify(wrapped);
 }
@@ -95,9 +94,9 @@ function convertSingleAnnotation(legacy: Record<string, unknown>): AnnotationTra
   const annotationType = legacy['annotationType'] as number | undefined;
 
   // pdf.js annotation editor types:
-  // 3 = freetext, 9 = stamp, 15 = ink, 16 = highlight
+  // 3 = freetext, 9 = highlight, 15 = ink
   switch (annotationType) {
-    case 16: // highlight
+    case 9: // highlight
       return convertHighlight(legacy);
     case 15: // ink
       return convertInk(legacy);
@@ -205,8 +204,8 @@ function rgbArrayToHex(rgb: number[]): string {
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
   return btoa(binary);
 }
@@ -223,7 +222,8 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function restoreArrayBuffers(item: any): AnnotationTransferItem {
   if (item.ctx?._dataEncoding === 'base64' && typeof item.ctx.data === 'string') {
-    const {_dataEncoding, ...rest} = item.ctx;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const {_dataEncoding: _, ...rest} = item.ctx;
     return {
       ...item,
       ctx: {

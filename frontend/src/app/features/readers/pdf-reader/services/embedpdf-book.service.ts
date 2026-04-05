@@ -40,6 +40,7 @@ export class EmbedPdfBookService {
   private pageChangeUnsub?: () => void;
   private annotationEventUnsub?: () => void;
   private layoutReadyUnsub?: () => void;
+  private documentOpenedUnsub?: () => void;
 
   readonly pageChange$ = new Subject<PageChangeEvent>();
   readonly annotationEvent$ = new Subject<AnnotationEvent>();
@@ -56,6 +57,7 @@ export class EmbedPdfBookService {
 
   async init(target: HTMLElement, pdfUrl: string, theme: 'dark' | 'light'): Promise<void> {
     this.applyWorkerShims();
+    this.ensureHighDpiRendering();
 
     const EmbedPDF = (await import('@embedpdf/snippet')).default;
 
@@ -84,6 +86,14 @@ export class EmbedPdfBookService {
       },
       zoom: {
         defaultZoomLevel: 'fit-page' as ZoomMode,
+      },
+      render: {
+        defaultImageQuality: 1,
+      },
+      tiling: {
+        tileSize: 1024,
+        overlapPx: 2,
+        extraRings: 1,
       },
     }) ?? null;
 
@@ -136,7 +146,7 @@ export class EmbedPdfBookService {
     const dm = dmPlugin?.provides?.() as Record<string, unknown> | null;
     if (dm && typeof dm['onDocumentOpened'] === 'function') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (dm['onDocumentOpened'] as (cb: (ev: any) => void) => void)((ev: {pageCount?: number}) => {
+      this.documentOpenedUnsub = (dm['onDocumentOpened'] as (cb: (ev: any) => void) => () => void)((ev: {pageCount?: number}) => {
         this.zone.run(() => {
           this.documentOpened$.next({pageCount: ev?.pageCount ?? this.scroll?.getTotalPages() ?? 0});
         });
@@ -271,6 +281,12 @@ export class EmbedPdfBookService {
     this.pageChangeUnsub?.();
     this.annotationEventUnsub?.();
     this.layoutReadyUnsub?.();
+    this.documentOpenedUnsub?.();
+
+    this.pageChange$.complete();
+    this.annotationEvent$.complete();
+    this.documentOpened$.complete();
+    this.layoutReady$.complete();
 
     if (this.container) {
       this.container.remove();
@@ -285,6 +301,8 @@ export class EmbedPdfBookService {
     this.search = null;
     this.spread = null;
     this.rotate = null;
+
+    this.restoreWorkerShims();
   }
 
   private convertBookmarks(items: unknown[]): PdfOutlineItem[] {
@@ -297,6 +315,23 @@ export class EmbedPdfBookService {
         children: this.convertBookmarks(entry['children'] as unknown[] || []),
       };
     });
+  }
+
+  /**
+   * Ensure devicePixelRatio reports at least 2 so that the EmbedPDF tiling
+   * and render layers always produce high-resolution bitmaps.
+   * The library reads window.devicePixelRatio at tile-render time; if the
+   * browser reports 1 (e.g. some WebViews or forced-desktop viewports),
+   * PDF pages appear noticeably pixelated.
+   */
+  private ensureHighDpiRendering(): void {
+    const MIN_DPR = 2;
+    if (window.devicePixelRatio < MIN_DPR) {
+      Object.defineProperty(window, 'devicePixelRatio', {
+        get: () => MIN_DPR,
+        configurable: true,
+      });
+    }
   }
 
   /**
@@ -316,6 +351,7 @@ export class EmbedPdfBookService {
 
     // --- Blob shim ---
     const OrigBlob = window.Blob;
+    w.__grimmoryOrigBlob = OrigBlob;
     w.Blob = function PatchedBlob(parts: BlobPart[], opts?: BlobPropertyBag) {
       if (parts?.length >= 1 && typeof parts[0] === 'string') {
         const src = parts[0] as string;
@@ -342,13 +378,15 @@ export class EmbedPdfBookService {
 
     // --- Worker shim ---
     const OrigWorker = window.Worker;
+    w.__grimmoryOrigWorker = OrigWorker;
     w.Worker = function PatchedWorker(url: string | URL, opts?: WorkerOptions) {
       const worker = new OrigWorker(url, opts);
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.startsWith('blob:') && opts?.type === 'module') {
         let readySent = false;
+        let wasmError = false;
         setTimeout(() => {
-          if (!readySent) {
+          if (!readySent && !wasmError) {
             readySent = true;
             worker.dispatchEvent(new MessageEvent('message', {
               data: {type: 'ready'}
@@ -357,12 +395,28 @@ export class EmbedPdfBookService {
         }, 5000);
         worker.addEventListener('message', (evt: MessageEvent) => {
           if (evt.data?.type === 'ready') readySent = true;
+          if (evt.data?.type === 'wasmError') wasmError = true;
         });
       }
       return worker;
     };
     w.Worker.prototype = OrigWorker.prototype;
     Object.setPrototypeOf(w.Worker, OrigWorker);
+  }
+
+  private restoreWorkerShims(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (!w.__grimmoryShimsApplied) return;
+    if (w.__grimmoryOrigBlob) {
+      window.Blob = w.__grimmoryOrigBlob;
+      delete w.__grimmoryOrigBlob;
+    }
+    if (w.__grimmoryOrigWorker) {
+      window.Worker = w.__grimmoryOrigWorker;
+      delete w.__grimmoryOrigWorker;
+    }
+    delete w.__grimmoryShimsApplied;
   }
 
   private injectBookModeStyles(target: HTMLElement): void {
@@ -379,6 +433,12 @@ export class EmbedPdfBookService {
       style.setAttribute('data-grimmory-book', '');
       style.textContent = `
         /* ── Grimmory book-mode overrides ── */
+
+        /* Force high-quality image rendering for PDF tiles */
+        img {
+          image-rendering: high-quality;
+          -webkit-font-smoothing: antialiased;
+        }
 
         :host {
           --ep-background-app: #1a1a1a;

@@ -4,7 +4,7 @@
     <aside class="sidebar" role="button" tabindex="0" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" [class.closing]="closing()">
 
       <!-- Close button -->
-      <button class="sidebar-close-btn" (click)="closed.emit()" [attr.aria-label]="t('title')">
+      <button class="sidebar-close-btn" (click)="closed.emit()" [attr.aria-label]="t('close')">
         <app-reader-icon name="close" [size]="18"></app-reader-icon>
       </button>
 
@@ -51,7 +51,7 @@
               </ul>
 
               <ng-template #outlineItem let-item let-depth="depth">
-                <li role="treeitem">
+                <li role="treeitem" [attr.aria-selected]="false">
                   <button
                     class="chapter-row"
                     [style.--depth]="depth"

@@ -241,6 +241,12 @@
         color: rgba(0,0,0,0.87) !important;
         border: 1px solid #d0d0d0 !important;
       }
+
+      /* Force high-quality image rendering for PDF tiles */
+      img {
+        image-rendering: high-quality;
+        -webkit-font-smoothing: antialiased;
+      }
     `;
     shadow.appendChild(style);
     targetEl.style.visibility = '';
@@ -259,6 +265,14 @@
       const target = document.getElementById('viewer');
       target.style.visibility = 'hidden';
 
+      /* Ensure DPR is at least 2 so tiles render at high resolution */
+      if (window.devicePixelRatio < 2) {
+        Object.defineProperty(window, 'devicePixelRatio', {
+          get: () => 2,
+          configurable: true,
+        });
+      }
+
       viewer = EmbedPDF.init({
         type: 'container',
         target,
@@ -266,7 +280,19 @@
         wasmUrl: new URL(msg.wasmUrl || '/assets/pdfium/pdfium.wasm', location.origin).href,
         worker: true,
         log: true,
-        theme: { preference: msg.theme || 'dark' }
+        theme: { preference: msg.theme || 'dark' },
+        disabledCategories: [
+          'redaction',
+          'form',
+          'stamp',
+          'document-print',
+          'document-export',
+          'document-open',
+          'document-close',
+          'link',
+        ],
+        render: { defaultImageQuality: 1 },
+        tiling: { tileSize: 1024, overlapPx: 2, extraRings: 1 },
       });
 
       injectGrimmoryStyles(target);

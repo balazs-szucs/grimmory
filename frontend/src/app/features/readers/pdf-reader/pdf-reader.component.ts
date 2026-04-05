@@ -51,7 +51,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   authorization = '';
 
   page!: number;
-  spread!: 'off' | 'even' | 'odd';
+  spread!: 'none' | 'even' | 'odd';
   zoom!: string;
 
   bookData!: string;
@@ -81,7 +81,19 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   private mouseMoveCleanup?: () => void;
   private documentClickCleanup?: () => void;
   private keydownCleanup?: () => void;
+  private touchCleanup?: () => void;
   private lastMouseMoveTime = 0;
+
+  // Mobile touch navigation
+  isMobile = false;
+  isToolbarOverflowOpen = false;
+  private touchStartX = 0;
+  private touchStartY = 0;
+  private touchStartTime = 0;
+  private touchMoveCount = 0;
+  private readonly SWIPE_THRESHOLD = 50;
+  private readonly TAP_ZONE_RATIO = 0.25; // left/right 25% of screen width
+  private readonly TAP_MAX_DURATION = 300; // ms
 
   // Sidebar
   sidebarOpen = false;
@@ -159,6 +171,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const dismissed = localStorage.getItem(this.DOC_VIEWER_DISMISSED_KEY);
     this.isDocViewerInfoVisible = dismissed !== 'true';
+    this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
     setTimeout(() => this.wakeLockService.enable(), 1000);
     this.startChromeAutoHide();
@@ -170,8 +183,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         const now = Date.now();
         if (now - this.lastMouseMoveTime < 200) return;
         this.lastMouseMoveTime = now;
-        this.showChrome();
-        this.startChromeAutoHide();
+        this.ngZone.run(() => {
+          this.showChrome();
+          this.startChromeAutoHide();
+        });
       };
       document.addEventListener('mousemove', mouseMoveHandler);
       this.mouseMoveCleanup = () => document.removeEventListener('mousemove', mouseMoveHandler);
@@ -180,7 +195,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         if (!this.isZoomMenuOpen) return;
         const wrapper = document.querySelector('.zoom-menu-wrapper');
         if (wrapper && !wrapper.contains(e.target as Node)) {
-          this.isZoomMenuOpen = false;
+          this.ngZone.run(() => {
+            this.isZoomMenuOpen = false;
+          });
         }
       };
       document.addEventListener('click', clickHandler, true);
@@ -199,6 +216,26 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       };
       document.addEventListener('keydown', keydownHandler, true);
       this.keydownCleanup = () => document.removeEventListener('keydown', keydownHandler, true);
+
+      // Touch gestures for mobile navigation
+      const touchStartHandler = (e: TouchEvent) => {
+        this.touchStartX = e.changedTouches[0].clientX;
+        this.touchStartY = e.changedTouches[0].clientY;
+        this.touchStartTime = Date.now();
+        this.touchMoveCount = 0;
+      };
+      const touchMoveHandler = () => { this.touchMoveCount++; };
+      const touchEndHandler = (e: TouchEvent) => {
+        this.handleTouchEnd(e);
+      };
+      document.addEventListener('touchstart', touchStartHandler, { passive: true });
+      document.addEventListener('touchmove', touchMoveHandler, { passive: true });
+      document.addEventListener('touchend', touchEndHandler, { passive: true });
+      this.touchCleanup = () => {
+        document.removeEventListener('touchstart', touchStartHandler);
+        document.removeEventListener('touchmove', touchMoveHandler);
+        document.removeEventListener('touchend', touchEndHandler);
+      };
     });
 
     this.annotationSaveSubscription = this.annotationSaveSubject
@@ -249,12 +286,14 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         const globalOrIndividual = myself.userSettings.perBookSetting.pdf;
         if (globalOrIndividual === 'Global') {
           this.zoom = myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
-          this.spread = myself.userSettings.pdfReaderSetting.pageSpread || 'off';
+          this.spread = (myself.userSettings.pdfReaderSetting.pageSpread || 'none') === 'off' ? 'none' : (myself.userSettings.pdfReaderSetting.pageSpread as 'none' | 'even' | 'odd') || 'none';
         } else {
           this.zoom = pdfPrefs.pdfSettings?.zoom || myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
-          this.spread = pdfPrefs.pdfSettings?.spread || myself.userSettings.pdfReaderSetting.pageSpread || 'off';
+          const rawSpread = pdfPrefs.pdfSettings?.spread || myself.userSettings.pdfReaderSetting.pageSpread || 'none';
+          this.spread = rawSpread === 'off' ? 'none' : rawSpread as 'none' | 'even' | 'odd';
           this.isDarkTheme = pdfPrefs.pdfSettings?.isDarkTheme ?? true;
         }
+        this.spreadMode = this.spread;
         this.canPrint = myself.permissions.canDownload || myself.permissions.admin;
         this.page = pdfMeta.pdfProgress?.page || 1;
         this.zoom = this.normalizeZoom(this.zoom);
@@ -325,6 +364,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
             this.annotationsDirty = true;
             this.annotationSaveSubject.next();
             this.annotationCacheSubject.next();
+            this.refreshAnnotationList();
           }
         });
       });
@@ -341,6 +381,12 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         // Apply saved zoom level
         if (this.zoom && this.zoom !== 'fit-page') {
           this.embedPdfBook.setZoomLevel(this.zoom);
+        }
+
+        // Apply saved spread mode
+        if (this.spread && this.spread !== 'none') {
+          this.embedPdfBook.setSpreadMode(this.spread);
+          this.spreadMode = this.spread;
         }
 
         // Load outline, bookmarks, and annotations
@@ -520,7 +566,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     const modes: ('none' | 'odd' | 'even')[] = ['none', 'odd', 'even'];
     const idx = modes.indexOf(this.spreadMode);
     this.spreadMode = modes[(idx + 1) % modes.length];
+    this.spread = this.spreadMode;
     this.embedPdfBook.setSpreadMode(this.spreadMode);
+    this.updateViewerSetting();
   }
 
   // --- Rotate ---
@@ -572,7 +620,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   onSidebarNavigateToPage(pageNumber: number): void {
     this.sidebarOpen = false;
-    this.page = pageNumber;
     if (this.viewerMode === 'book') {
       this.embedPdfBook.scrollToPage(pageNumber);
     }
@@ -816,6 +863,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     this.mouseMoveCleanup?.();
     this.documentClickCleanup?.();
     this.keydownCleanup?.();
+    this.touchCleanup?.();
 
     if (this.pdfBlobUrl) {
       URL.revokeObjectURL(this.pdfBlobUrl);
@@ -854,6 +902,68 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     this.startChromeAutoHide();
   }
 
+  // --- Touch navigation ---
+
+  private handleTouchEnd(e: TouchEvent): void {
+    if (this.viewerMode !== 'book') return;
+
+    // Ignore touches on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('.pdf-header-toolbar, .pdf-footer, .pdf-sidebar, .search-bar, .toolbar-overflow-menu, button, input, a')) return;
+
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const deltaX = endX - this.touchStartX;
+    const deltaY = endY - this.touchStartY;
+    const elapsed = Date.now() - this.touchStartTime;
+
+    // Swipe detection: enough horizontal movement, more horizontal than vertical
+    if (this.touchMoveCount >= 3 && Math.abs(deltaX) > this.SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      this.ngZone.run(() => {
+        if (deltaX < 0) {
+          this.goToNextPage();
+        } else {
+          this.goToPreviousPage();
+        }
+      });
+      return;
+    }
+
+    // Tap detection: short duration, minimal movement
+    if (elapsed < this.TAP_MAX_DURATION && this.touchMoveCount < 3) {
+      const screenWidth = window.innerWidth;
+      const tapX = this.touchStartX;
+
+      this.ngZone.run(() => {
+        if (tapX < screenWidth * this.TAP_ZONE_RATIO) {
+          // Left zone: previous page
+          this.goToPreviousPage();
+        } else if (tapX > screenWidth * (1 - this.TAP_ZONE_RATIO)) {
+          // Right zone: next page
+          this.goToNextPage();
+        } else {
+          // Center zone: toggle chrome
+          if (this.headerVisible || this.footerVisible) {
+            this.hideChrome();
+          } else {
+            this.showChrome();
+            this.startChromeAutoHide();
+          }
+        }
+      });
+    }
+  }
+
+  // --- Toolbar overflow menu ---
+
+  toggleToolbarOverflow(): void {
+    this.isToolbarOverflowOpen = !this.isToolbarOverflowOpen;
+  }
+
+  closeToolbarOverflow(): void {
+    this.isToolbarOverflowOpen = false;
+  }
+
   // --- Fullscreen ---
 
   toggleFullscreen(): void {
@@ -871,7 +981,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   // --- Footer page navigation ---
 
   goToFirstPage(): void {
-    this.page = 1;
     if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(1);
     this.onPageChange(1);
   }
@@ -879,7 +988,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   goToPreviousPage(): void {
     if (this.page > 1) {
       const p = this.page - 1;
-      this.page = p;
       if (this.viewerMode === 'book') this.embedPdfBook.scrollToPreviousPage();
       this.onPageChange(p);
     }
@@ -888,28 +996,24 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   goToNextPage(): void {
     if (this.page < this.totalPages) {
       const p = this.page + 1;
-      this.page = p;
       if (this.viewerMode === 'book') this.embedPdfBook.scrollToNextPage();
       this.onPageChange(p);
     }
   }
 
   goToLastPage(): void {
-    this.page = this.totalPages;
     if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(this.totalPages);
     this.onPageChange(this.totalPages);
   }
 
   onSliderChange(event: Event): void {
     const value = +(event.target as HTMLInputElement).value;
-    this.page = value;
     if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(value, 'instant');
     this.onPageChange(value);
   }
 
   onGoToPage(): void {
     if (this.goToPageInput && this.goToPageInput >= 1 && this.goToPageInput <= this.totalPages) {
-      this.page = this.goToPageInput;
       if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(this.goToPageInput);
       this.onPageChange(this.goToPageInput);
       this.goToPageInput = null;
@@ -980,13 +1084,13 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       credentials: 'include',
       body: JSON.stringify({ data: this.lastAnnotationData }),
       keepalive: true,
-    }).catch(() => {});
+    }).catch(() => { /* fire-and-forget */ });
   }
 
   private cacheAnnotationData(): void {
     this.embedPdfBook.exportAnnotations().then(items => {
       this.lastAnnotationData = serializeAnnotations(items);
-    }).catch(() => {});
+    }).catch(() => { /* fire-and-forget */ });
   }
 
   private saveProgressSync(): void {
@@ -1014,7 +1118,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       credentials: 'include',
       body: JSON.stringify(body),
       keepalive: true,
-    }).catch(() => {});
+    }).catch(() => { /* fire-and-forget */ });
   }
 
   private normalizeZoom(zoom: string): string {

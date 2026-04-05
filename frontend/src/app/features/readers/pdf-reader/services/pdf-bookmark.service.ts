@@ -29,7 +29,11 @@ export class PdfBookmarkService {
           }
         }
       }),
-      map(bookmarks => bookmarks.filter(bm => bm.pageNumber != null))
+      map(bookmarks => bookmarks.filter(bm => bm.pageNumber != null)),
+      catchError(() => {
+        this.bookmarks.clear();
+        return of([]);
+      })
     );
   }
 

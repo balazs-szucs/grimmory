@@ -86,6 +86,11 @@ public class BookMarkService {
             validateNoDuplicateBookmark(request.getCfi(), bookmark.getBookId(), bookmark.getUserId(), bookmarkId);
         }
 
+        // Validate page-number uniqueness if page number is being updated
+        if (request.getPageNumber() != null) {
+            validateNoDuplicatePdfBookmark(request.getPageNumber(), bookmark.getBookId(), bookmark.getUserId(), bookmarkId);
+        }
+
         applyUpdates(bookmark, request);
 
         log.info("Updating bookmark {}", bookmarkId);
@@ -151,7 +156,14 @@ public class BookMarkService {
      * Validate no duplicate PDF bookmark exists for the exact page number.
      */
     private void validateNoDuplicatePdfBookmark(Integer pageNumber, Long bookId, Long userId) {
-        boolean exists = bookMarkRepository.existsByPageNumberAndBookIdAndUserId(pageNumber, bookId, userId);
+        validateNoDuplicatePdfBookmark(pageNumber, bookId, userId, null);
+    }
+
+    private void validateNoDuplicatePdfBookmark(Integer pageNumber, Long bookId, Long userId, Long excludeBookmarkId) {
+        boolean exists = (excludeBookmarkId == null)
+                ? bookMarkRepository.existsByPageNumberAndBookIdAndUserId(pageNumber, bookId, userId)
+                : bookMarkRepository.existsByPageNumberAndBookIdAndUserIdExcludeId(pageNumber, bookId, userId, excludeBookmarkId);
+
         if (exists) {
             throw new APIException("A bookmark already exists on this page", HttpStatus.CONFLICT);
         }

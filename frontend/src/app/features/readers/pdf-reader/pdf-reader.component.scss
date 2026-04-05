@@ -532,10 +532,14 @@ $transition-fast: 150ms ease;
 .embed-close-btn {
   position: fixed;
   top: 4px;
-  right: 12px;
-  z-index: 1010;
+  right: 4px;
+  z-index: 11000;
   color: $text-primary;
   padding: 7px;
+  background: rgb(30 30 30 / 85%);
+  border-radius: 50%;
+  backdrop-filter: blur(4px);
+  border: 1px solid $border-color;
 }
 
 .doc-viewer-info {
@@ -555,7 +559,7 @@ $transition-fast: 150ms ease;
   border: 1px solid $border-color;
   box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
   backdrop-filter: blur(4px);
-  animation: docViewerInfoFadeIn 0.3s ease-out;
+  animation: doc-viewer-info-fade-in 0.3s ease-out;
 
   .dismiss-btn {
     background: none;
@@ -575,7 +579,7 @@ $transition-fast: 150ms ease;
   }
 }
 
-@keyframes docViewerInfoFadeIn {
+@keyframes doc-viewer-info-fade-in {
   from {
     opacity: 0;
     transform: translateY(-10px);
@@ -653,9 +657,105 @@ $transition-fast: 150ms ease;
   }
 }
 
+// --- Mobile actions (hidden on desktop) ---
+
+.mobile-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+// --- Desktop actions ---
+
+.desktop-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+// --- Toolbar overflow menu (mobile) ---
+
+.toolbar-overflow-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1009;
+  background: rgb(0 0 0 / 40%);
+}
+
+.toolbar-overflow-menu {
+  position: fixed;
+  top: $header-height;
+  right: 8px;
+  z-index: 1010;
+  background: #2d2d2d;
+  border: 1px solid $border-color;
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 200px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+
+  .overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    background: none;
+    color: $text-primary;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background $transition-fast;
+
+    &:hover {
+      background: $hover-bg;
+    }
+
+    svg,
+    app-reader-icon {
+      flex-shrink: 0;
+    }
+  }
+
+  .overflow-divider {
+    height: 1px;
+    background: $border-color;
+    margin: 4px 0;
+  }
+}
+
 // --- Responsive ---
 
+// Tablet (portrait)
+@media (width <= 1024px) {
+  .pdf-footer {
+    gap: 8px;
+  }
+
+  .goto-page {
+    display: none;
+  }
+
+  .viewer-mode-toggle .toggle-btn span {
+    display: none;
+  }
+}
+
+// Mobile
 @media (width <= 768px) {
+  .pdf-header-toolbar {
+    height: $header-height + 4px;
+    padding: 0 8px;
+  }
+
+  .desktop-actions {
+    display: none;
+  }
+
+  .mobile-actions {
+    display: flex;
+  }
+
   .pdf-footer {
     height: auto;
     padding: 8px 12px;
@@ -672,14 +772,25 @@ $transition-fast: 150ms ease;
     display: none;
   }
 
-  .annotation-tool-btn,
-  .separator {
-    display: none !important;
+  .footer-spacer {
+    display: none;
   }
 
-  .zoom-menu-wrapper,
+  .page-nav-left {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .viewer-mode-toggle {
+    .toggle-btn span {
+      display: none;
+    }
+  }
+
   .search-bar {
-    display: none !important;
+    .search-input-wrapper {
+      max-width: none;
+    }
   }
 
   .doc-viewer-info {
@@ -691,5 +802,67 @@ $transition-fast: 150ms ease;
 
   .book-title {
     display: none;
+  }
+
+  // Larger touch targets for trigger zones
+  .header-trigger-zone {
+    height: 40px;
+  }
+
+  .footer-trigger-zone {
+    height: 50px;
+  }
+}
+
+// Small phones
+@media (width <= 480px) {
+  .pdf-header-toolbar {
+    padding: 0 6px;
+  }
+
+  .pdf-footer {
+    padding: 6px 8px;
+  }
+
+  .page-nav-left {
+    gap: 4px;
+  }
+
+  .nav-btn {
+    padding: 8px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .page-info {
+    min-width: 70px;
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .slider-wrapper {
+    .page-slider {
+      &::-webkit-slider-thumb {
+        width: 22px;
+        height: 22px;
+        margin-top: calc((6px - 22px) / 2);
+      }
+
+      &::-moz-range-thumb {
+        width: 22px;
+        height: 22px;
+      }
+    }
+  }
+
+  .viewer-mode-toggle .toggle-btn {
+    padding: 0 8px;
+    height: 34px;
+  }
+
+  .icon-btn {
+    padding: 8px;
+    min-width: 36px;
+    min-height: 36px;
   }
 }

@@ -199,6 +199,14 @@ $transition-normal: 200ms ease;
       opacity: 1;
     }
   }
+
+  &:focus-within {
+    background: $hover-bg;
+
+    .delete-btn {
+      opacity: 1;
+    }
+  }
 }
 
 .highlight-item {
@@ -257,6 +265,10 @@ $transition-normal: 200ms ease;
   opacity: 0;
   transition: all $transition-fast;
   flex-shrink: 0;
+
+  &:focus-visible {
+    opacity: 1;
+  }
 
   &:hover {
     color: #ef4444;

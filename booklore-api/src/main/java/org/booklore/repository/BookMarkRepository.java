@@ -30,6 +30,9 @@ public interface BookMarkRepository extends JpaRepository<BookMarkEntity, Long> 
     // PDF bookmark duplicate check (exact page match)
     boolean existsByPageNumberAndBookIdAndUserId(Integer pageNumber, Long bookId, Long userId);
 
+    @Query("SELECT COUNT(b) > 0 FROM BookMarkEntity b WHERE b.pageNumber = :pageNumber AND b.bookId = :bookId AND b.userId = :userId AND b.id != :excludeId")
+    boolean existsByPageNumberAndBookIdAndUserIdExcludeId(@Param("pageNumber") Integer pageNumber, @Param("bookId") Long bookId, @Param("userId") Long userId, @Param("excludeId") Long excludeId);
+
     // New: count bookmarks per book
     long countByBookIdAndUserId(Long bookId, Long userId);
 
