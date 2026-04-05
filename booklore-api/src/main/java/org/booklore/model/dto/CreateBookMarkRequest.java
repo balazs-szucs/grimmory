@@ -21,6 +21,9 @@ public class CreateBookMarkRequest {
     private Long positionMs;
     private Integer trackIndex;
 
+    // For PDF bookmarks
+    private Integer pageNumber;
+
     private String title;
 
     /**
@@ -28,5 +31,12 @@ public class CreateBookMarkRequest {
      */
     public boolean isAudiobookBookmark() {
         return positionMs != null;
+    }
+
+    /**
+     * Check if this is a PDF bookmark (has pageNumber, no cfi or positionMs)
+     */
+    public boolean isPdfBookmark() {
+        return pageNumber != null && cfi == null && positionMs == null;
     }
 }

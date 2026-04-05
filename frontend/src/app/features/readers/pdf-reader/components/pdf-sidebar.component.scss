@@ -1,0 +1,325 @@
+$sidebar-width: 300px;
+$sidebar-bg: #1a1a1a;
+$text-primary: rgb(255 255 255 / 95%);
+$text-secondary: rgb(255 255 255 / 60%);
+$text-muted: rgb(255 255 255 / 40%);
+$border-color: rgb(255 255 255 / 8%);
+$hover-bg: rgb(255 255 255 / 6%);
+$active-bg: rgb(74 144 226 / 15%);
+$active-color: #4a90e2;
+$transition-fast: 150ms ease;
+$transition-normal: 200ms ease;
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+  backdrop-filter: blur(2px);
+  z-index: 12000;
+  animation: fade-in $transition-normal;
+
+  &.closing {
+    animation: fade-out $transition-normal forwards;
+  }
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: $sidebar-width;
+  background: $sidebar-bg;
+  color: $text-primary;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 24px rgb(0 0 0 / 50%);
+  animation: slide-in $transition-normal ease-out;
+  overflow: hidden;
+
+  .sidebar-close-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    background: none;
+    border: none;
+    color: $text-secondary;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all $transition-fast;
+
+    &:hover {
+      color: $text-primary;
+      background: $hover-bg;
+    }
+  }
+
+  &.closing {
+    animation: slide-out $transition-normal ease-in forwards;
+  }
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid $border-color;
+  flex-shrink: 0;
+  padding: 4px 28px 0 4px;
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: $text-secondary;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all $transition-fast;
+  white-space: nowrap;
+
+  &:hover {
+    color: $text-primary;
+    background: $hover-bg;
+  }
+
+  &.active {
+    color: $active-color;
+    border-bottom-color: $active-color;
+  }
+
+  .tab-icon {
+    font-size: 14px;
+  }
+}
+
+.badge {
+  background: $active-bg;
+  color: $active-color;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  overscroll-behavior: contain;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 12%);
+    border-radius: 2px;
+  }
+}
+
+// --- Outline / Chapter list ---
+
+.chapter-list,
+.subchapter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chapter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 16px 8px calc(16px + var(--depth, 0) * 16px);
+  background: none;
+  border: none;
+  color: $text-primary;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background $transition-fast;
+  text-align: left;
+
+  &:hover {
+    background: $hover-bg;
+  }
+
+  .chapter-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chapter-page {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: $text-muted;
+    margin-left: 8px;
+  }
+}
+
+// --- Item lists (bookmarks, annotations) ---
+
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background $transition-fast;
+
+  &:hover {
+    background: $hover-bg;
+
+    .delete-btn {
+      opacity: 1;
+    }
+  }
+}
+
+.highlight-item {
+  position: relative;
+}
+
+.highlight-bar {
+  width: 4px;
+  border-radius: 2px;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-title {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-meta {
+  font-size: 11px;
+  color: $text-muted;
+}
+
+.highlight-text {
+  font-size: 12px;
+  color: $text-secondary;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-chapter {
+  font-size: 11px;
+  color: $text-muted;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: $text-muted;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all $transition-fast;
+  flex-shrink: 0;
+
+  &:hover {
+    color: #ef4444;
+    background: rgb(239 68 68 / 15%);
+  }
+}
+
+// --- Empty state ---
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+
+  .empty-icon {
+    color: $text-muted;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  p {
+    font-size: 14px;
+    font-weight: 500;
+    color: $text-secondary;
+    margin: 0 0 6px;
+  }
+
+  .empty-hint {
+    font-size: 12px;
+    color: $text-muted;
+  }
+}
+
+// --- Animations ---
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-out {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+// --- Responsive ---
+
+@media (width <= 768px) {
+  .sidebar {
+    width: 85vw;
+    max-width: $sidebar-width;
+  }
+}

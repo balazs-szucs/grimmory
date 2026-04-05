@@ -27,6 +27,9 @@ public interface BookMarkRepository extends JpaRepository<BookMarkEntity, Long> 
            "AND ((:trackIndex IS NULL AND b.trackIndex IS NULL) OR b.trackIndex = :trackIndex)")
     boolean existsByPositionMsNearAndBookIdAndUserId(@Param("positionMs") Long positionMs, @Param("trackIndex") Integer trackIndex, @Param("bookId") Long bookId, @Param("userId") Long userId);
 
+    // PDF bookmark duplicate check (exact page match)
+    boolean existsByPageNumberAndBookIdAndUserId(Integer pageNumber, Long bookId, Long userId);
+
     // New: count bookmarks per book
     long countByBookIdAndUserId(Long bookId, Long userId);
 

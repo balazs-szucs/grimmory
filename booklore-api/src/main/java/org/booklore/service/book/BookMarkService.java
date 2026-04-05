@@ -56,6 +56,8 @@ public class BookMarkService {
         // Validate no duplicate based on bookmark type
         if (request.isAudiobookBookmark()) {
             validateNoDuplicateAudiobookBookmark(request.getPositionMs(), request.getTrackIndex(), request.getBookId(), userId);
+        } else if (request.isPdfBookmark()) {
+            validateNoDuplicatePdfBookmark(request.getPageNumber(), request.getBookId(), userId);
         } else if (request.getCfi() != null) {
             validateNoDuplicateBookmark(request.getCfi(), request.getBookId(), userId);
         }
@@ -64,6 +66,7 @@ public class BookMarkService {
                 .cfi(request.getCfi())
                 .positionMs(request.getPositionMs())
                 .trackIndex(request.getTrackIndex())
+                .pageNumber(request.getPageNumber())
                 .title(request.getTitle())
                 .book(findBook(request.getBookId()))
                 .user(findUser(userId))
@@ -144,11 +147,22 @@ public class BookMarkService {
         }
     }
 
+    /**
+     * Validate no duplicate PDF bookmark exists for the exact page number.
+     */
+    private void validateNoDuplicatePdfBookmark(Integer pageNumber, Long bookId, Long userId) {
+        boolean exists = bookMarkRepository.existsByPageNumberAndBookIdAndUserId(pageNumber, bookId, userId);
+        if (exists) {
+            throw new APIException("A bookmark already exists on this page", HttpStatus.CONFLICT);
+        }
+    }
+
     private void applyUpdates(BookMarkEntity bookmark, UpdateBookMarkRequest request) {
         Optional.ofNullable(request.getTitle()).ifPresent(bookmark::setTitle);
         Optional.ofNullable(request.getCfi()).ifPresent(bookmark::setCfi);
         Optional.ofNullable(request.getColor()).ifPresent(bookmark::setColor);
         Optional.ofNullable(request.getNotes()).ifPresent(bookmark::setNotes);
         Optional.ofNullable(request.getPriority()).ifPresent(bookmark::setPriority);
+        Optional.ofNullable(request.getPageNumber()).ifPresent(bookmark::setPageNumber);
     }
 }
