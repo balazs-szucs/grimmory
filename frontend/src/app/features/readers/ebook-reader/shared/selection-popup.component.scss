@@ -107,8 +107,6 @@
 
 .annotation-options {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   padding: 8px;
   background: linear-gradient(180deg, #2d3139 0%, #252830 100%);
   border: 1px solid rgb(255 255 255 / 8%);
@@ -118,6 +116,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 140px;
 
   &.above {
     bottom: calc(100% + 8px);
@@ -133,24 +132,24 @@
 @keyframes slide-up {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(6px);
+    transform: translateY(6px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 
 @keyframes slide-down {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-6px);
+    transform: translateY(-6px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 

@@ -464,17 +464,33 @@ export class ReaderEventService {
           selectionBottom = iframeRect.top + rangeRect.bottom;
         }
 
-        const minSpaceAbove = 120;
-        const showBelow = selectionTop < minSpaceAbove;
+        // Responsive dimensions the popup shrinks on small screens
+        const vw = window.innerWidth;
+        const {width: popupWidth, height: popupHeight, margin: baseMargin} = this.getPopupDimensions(vw);
+        const gap = 10;
+
+        // Dynamic edge detection: check actual available space
+        const marginWithSafeArea = baseMargin + this.getSafeAreaInsetLeft();
+        const hasEnoughSpaceAbove = selectionTop >= popupHeight + gap + marginWithSafeArea;
+        const showBelow = !hasEnoughSpaceAbove;
 
         let popupY: number;
         if (showBelow) {
-          popupY = selectionBottom + 10;
+          popupY = selectionBottom + gap;
         } else {
-          popupY = selectionTop - 50;
+          popupY = selectionTop - gap - popupHeight;
         }
 
-        popupX = Math.max(100, Math.min(popupX, window.innerWidth - 150));
+        // Emergency clamp: prevent fully off-screen without overriding above/below decision
+        const safeTop = marginWithSafeArea;
+        const safeBottom = window.innerHeight - baseMargin - this.getSafeAreaInsetBottom();
+        popupY = Math.max(safeTop, Math.min(popupY, safeBottom));
+
+        // Clamp X to stay within viewport, accounting for translateX(-50%)
+        const halfPopupWidth = popupWidth / 2;
+        const safeLeft = halfPopupWidth + marginWithSafeArea;
+        const safeRight = window.innerWidth - halfPopupWidth - baseMargin - this.getSafeAreaInsetRight();
+        popupX = Math.max(safeLeft, Math.min(popupX, safeRight));
 
         this.eventSubject.next({
           type: 'text-selected',
@@ -554,5 +570,38 @@ export class ReaderEventService {
     } else {
       this.eventSubject.next({type: 'middle-single-tap'});
     }
+  }
+
+  private getPopupDimensions(viewportWidth: number): {width: number; height: number; margin: number} {
+    if (viewportWidth < 375) {
+      return {width: 130, height: 44, margin: 16};
+    }
+    if (viewportWidth < 768) {
+      return {width: 150, height: 44, margin: 12};
+    }
+    return {width: 170, height: 44, margin: 8};
+  }
+
+  private getSafeAreaInset(name: 'top' | 'right' | 'bottom' | 'left'): number {
+    const cssName = name === 'top' ? '--sat' : name === 'right' ? '--sar' : name === 'bottom' ? '--sab' : '--sal';
+    const val = getComputedStyle(document.documentElement).getPropertyValue(cssName).trim();
+    if (val.endsWith('px')) return parseFloat(val) || 0;
+    return 0;
+  }
+
+  private getSafeAreaInsetTop(): number {
+    return this.getSafeAreaInset('top');
+  }
+
+  private getSafeAreaInsetBottom(): number {
+    return this.getSafeAreaInset('bottom');
+  }
+
+  private getSafeAreaInsetLeft(): number {
+    return this.getSafeAreaInset('left');
+  }
+
+  private getSafeAreaInsetRight(): number {
+    return this.getSafeAreaInset('right');
   }
 }

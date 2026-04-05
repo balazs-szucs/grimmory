@@ -25,7 +25,7 @@
       </button>
 
       @if (showAnnotationOptions) {
-        <div class="annotation-options" [class.above]="!showBelow" [class.below]="showBelow">
+        <div class="annotation-options" #annotationOptionsEl [class.above]="!showBelow" [class.below]="showBelow" [style.left.%]="annotationOptionsLeft">
           <div class="style-buttons">
             @for (style of styles; track style.value) {
               <button

@@ -361,7 +361,7 @@ describe('ReaderEventService', () => {
         index: 3,
       },
       popupPosition: {
-        showBelow: true,
+        showBelow: false,
       },
     });
   });
