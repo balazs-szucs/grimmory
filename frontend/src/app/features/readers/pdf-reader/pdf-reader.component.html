@@ -242,8 +242,8 @@
 
   <!-- Mobile overflow menu -->
   @if (isToolbarOverflowOpen) {
-  <div class="toolbar-overflow-backdrop" role="presentation" (click)="closeToolbarOverflow()" (keydown.escape)="closeToolbarOverflow()"></div>
-  <div class="toolbar-overflow-menu">
+  <div class="toolbar-overflow-backdrop" role="presentation" (click)="closeToolbarOverflow()"></div>
+  <div class="toolbar-overflow-menu" tabindex="-1" (keydown.escape)="closeToolbarOverflow()" #overflowMenu>
     <button class="overflow-item" (click)="toggleSearch(); closeToolbarOverflow()">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -46,6 +46,7 @@ export class EmbedPdfBookService {
   private annotationEventUnsub?: () => void;
   private layoutReadyUnsub?: () => void;
   private documentOpenedUnsub?: () => void;
+  private resizeObserver?: ResizeObserver;
 
   pageChange$ = new Subject<PageChangeEvent>();
   annotationEvent$ = new Subject<AnnotationEvent>();
@@ -347,6 +348,8 @@ export class EmbedPdfBookService {
     this.annotationEventUnsub?.();
     this.layoutReadyUnsub?.();
     this.documentOpenedUnsub?.();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
 
     this.pageChange$.complete();
     this.annotationEvent$.complete();
@@ -654,8 +657,8 @@ export class EmbedPdfBookService {
   private setupResizeObserver(target: HTMLElement): void {
     if (typeof ResizeObserver === 'undefined') return;
 
-    const observer = new ResizeObserver(() => {
-      // When the target container resizes (e.g. mobile chrome change), 
+    this.resizeObserver = new ResizeObserver(() => {
+      // When the target container resizes (e.g. mobile chrome change),
       // some engines might need a nudge to recalculate "fit-page" zoom correctly.
       if (this.zoom && this.getSpreadMode() === 'none') {
         const state = this.zoom.getState();
@@ -665,7 +668,7 @@ export class EmbedPdfBookService {
         }
       }
     });
-    observer.observe(target);
-    this.layoutReady$.subscribe(() => observer.disconnect()); // Cleanup when document closes/unloads or use this.destroy()
+    this.resizeObserver.observe(target);
+    this.layoutReady$.subscribe(() => this.resizeObserver?.disconnect());
   }
 }

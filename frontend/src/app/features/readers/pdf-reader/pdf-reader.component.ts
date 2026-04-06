@@ -1,4 +1,4 @@
-import { Component, inject, NgZone, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, inject, NgZone, OnDestroy, OnInit, ViewChild, afterNextRender } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PageTitleService } from "../../../shared/service/page-title.service";
 import { BookService } from '../../book/service/book.service';
@@ -92,6 +92,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   // Mobile touch navigation
   isMobile = false;
   isToolbarOverflowOpen = false;
+  @ViewChild('overflowMenu') overflowMenuRef?: ElementRef<HTMLDivElement>;
   private touchStartX = 0;
   private touchStartY = 0;
   private touchStartTime = 0;
@@ -1103,6 +1104,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   toggleToolbarOverflow(): void {
     this.isToolbarOverflowOpen = !this.isToolbarOverflowOpen;
+    if (this.isToolbarOverflowOpen) {
+      afterNextRender(() => this.overflowMenuRef?.nativeElement.focus());
+    }
   }
 
   closeToolbarOverflow(): void {
