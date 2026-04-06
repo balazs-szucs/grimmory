@@ -464,14 +464,15 @@ export class ReaderEventService {
           selectionBottom = iframeRect.top + rangeRect.bottom;
         }
 
-        // Responsive dimensions the popup shrinks on small screens
+        // Responsive dimensions: the popup shrinks on small screens
         const vw = window.innerWidth;
         const {width: popupWidth, height: popupHeight, margin: baseMargin} = this.getPopupDimensions(vw);
         const gap = 10;
 
         // Dynamic edge detection: check actual available space
-        const marginWithSafeArea = baseMargin + this.getSafeAreaInsetLeft();
-        const hasEnoughSpaceAbove = selectionTop >= popupHeight + gap + marginWithSafeArea;
+        const safeTopMargin = baseMargin + this.getSafeAreaInsetTop();
+        const safeLeftMargin = baseMargin + this.getSafeAreaInsetLeft();
+        const hasEnoughSpaceAbove = selectionTop >= popupHeight + gap + safeTopMargin;
         const showBelow = !hasEnoughSpaceAbove;
 
         let popupY: number;
@@ -482,13 +483,13 @@ export class ReaderEventService {
         }
 
         // Emergency clamp: prevent fully off-screen without overriding above/below decision
-        const safeTop = marginWithSafeArea;
-        const safeBottom = window.innerHeight - baseMargin - this.getSafeAreaInsetBottom();
+        const safeTop = safeTopMargin;
+        const safeBottom = window.innerHeight - popupHeight - baseMargin - this.getSafeAreaInsetBottom();
         popupY = Math.max(safeTop, Math.min(popupY, safeBottom));
 
         // Clamp X to stay within viewport, accounting for translateX(-50%)
         const halfPopupWidth = popupWidth / 2;
-        const safeLeft = halfPopupWidth + marginWithSafeArea;
+        const safeLeft = halfPopupWidth + safeLeftMargin;
         const safeRight = window.innerWidth - halfPopupWidth - baseMargin - this.getSafeAreaInsetRight();
         popupX = Math.max(safeLeft, Math.min(popupX, safeRight));
 
@@ -574,12 +575,12 @@ export class ReaderEventService {
 
   private getPopupDimensions(viewportWidth: number): {width: number; height: number; margin: number} {
     if (viewportWidth < 375) {
-      return {width: 130, height: 44, margin: 16};
+      return {width: 156, height: 44, margin: 16};
     }
     if (viewportWidth < 768) {
-      return {width: 150, height: 44, margin: 12};
+      return {width: 180, height: 44, margin: 12};
     }
-    return {width: 170, height: 44, margin: 8};
+    return {width: 220, height: 44, margin: 8};
   }
 
   private getSafeAreaInset(name: 'top' | 'right' | 'bottom' | 'left'): number {

@@ -121,6 +121,10 @@
   &.above {
     bottom: calc(100% + 8px);
     animation: slide-up 0.15s ease-out;
+
+    &[style*="top"] {
+      bottom: auto;
+    }
   }
 
   &.below {

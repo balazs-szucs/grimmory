@@ -18,12 +18,12 @@ function getPopupDimensions(viewportWidth: number): {width: number; height: numb
   // On very small screens the popup naturally shrinks due to fewer visible buttons;
   // these estimates are conservative so the clamping logic errs on the side of safety.
   if (viewportWidth < 375) {
-    return {width: 130, height: 44, margin: 16};
+    return {width: 156, height: 44, margin: 16};
   }
   if (viewportWidth < 768) {
-    return {width: 150, height: 44, margin: 12};
+    return {width: 180, height: 44, margin: 12};
   }
-  return {width: 170, height: 44, margin: 8};
+  return {width: 220, height: 44, margin: 8};
 }
 
 /** Read CSS safe-area insets (env() values) with pixel fallbacks */
@@ -77,6 +77,7 @@ export class TextSelectionPopupComponent implements OnDestroy {
   selectedStyle: AnnotationStyle = 'highlight';
   private hasPreview = false;
   annotationOptionsLeft = 50;
+  annotationOptionsTop: number | null = null;
 
   highlightColors = [
     {value: '#FACC15', label: 'Yellow'},
@@ -124,6 +125,7 @@ export class TextSelectionPopupComponent implements OnDestroy {
     } else {
       this.cancelPendingAnimationFrame();
       this.annotationOptionsLeft = 50;
+      this.annotationOptionsTop = null;
     }
   }
 
@@ -152,28 +154,47 @@ export class TextSelectionPopupComponent implements OnDestroy {
 
     const rect = el.getBoundingClientRect();
     const popupWidth = rect.width;
-    if (!popupWidth) return;
+    const popupHeight = rect.height;
+    if (!popupWidth || !popupHeight) return;
 
     const parentRect = el.parentElement?.getBoundingClientRect();
     if (!parentRect) return;
 
     const dims = getPopupDimensions(window.innerWidth);
     const safeArea = getSafeAreaInsets();
-    const margin = dims.margin + safeArea.left;
+    const margin = dims.margin;
 
-    // Ideal centered position
+    // --- Horizontal Clamping ---
+    const safeLeftMargin = margin + safeArea.left;
     const idealCenterX = parentRect.left + parentRect.width / 2;
     const idealLeft = idealCenterX - popupWidth / 2;
 
-    // Clamp to viewport edges accounting for safe areas
     const clampedLeft = Math.max(
-      margin,
+      safeLeftMargin,
       Math.min(idealLeft, window.innerWidth - popupWidth - margin - safeArea.right)
     );
 
-    // Convert to percentage relative to parent
-    const leftPercent = ((clampedLeft - parentRect.left) / parentRect.width) * 100;
-    this.annotationOptionsLeft = leftPercent;
+    this.annotationOptionsLeft = ((clampedLeft - parentRect.left) / parentRect.width) * 100;
+
+    // --- Vertical Clamping ---
+    const gap = 8;
+    const safeTopMargin = margin + safeArea.top;
+    const safeBottomMargin = margin + safeArea.bottom;
+
+    // Ideal vertical position based on above/below decision
+    let idealTop: number;
+    if (this.showBelow) {
+      idealTop = parentRect.bottom + gap;
+    } else {
+      idealTop = parentRect.top - popupHeight - gap;
+    }
+
+    const clampedTop = Math.max(
+      safeTopMargin,
+      Math.min(idealTop, window.innerHeight - popupHeight - safeBottomMargin)
+    );
+
+    this.annotationOptionsTop = ((clampedTop - parentRect.top) / parentRect.height) * 100;
   }
 
   selectColor(color: string): void {

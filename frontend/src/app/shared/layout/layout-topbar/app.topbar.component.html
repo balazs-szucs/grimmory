@@ -181,7 +181,7 @@
       >
         <i class="pi pi-ellipsis-v" aria-hidden="true"></i>
       </button>
-      <p-popover #mobileMenu>
+      <p-popover #mobileMenu appendTo="body">
         <ul class="mobile-menu-list">
           @if (user(); as currentUser) {
             @if (currentUser.permissions.canAccessBookdrop || currentUser.permissions.admin) {
@@ -279,7 +279,7 @@
               <i class="pi pi-language topbar-icon"></i>
               {{ t('language') }}
             </button>
-            <p-menu #langMenuMobile [model]="langMenuItems" [popup]="true"/>
+            <p-menu #langMenuMobile [model]="langMenuItems" [popup]="true" appendTo="body"/>
           </li>
 
           @if (user(); as currentUser) {

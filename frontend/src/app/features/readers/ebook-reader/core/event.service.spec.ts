@@ -366,6 +366,46 @@ describe('ReaderEventService', () => {
     });
   });
 
+  it('accounts for safe-area insets when calculating popup positioning', () => {
+    // Mock safe-area top inset
+    document.documentElement.style.setProperty('--sat', '40px');
+
+    const topRange: RangeLike = {
+      toString: () => 'Top text',
+      getBoundingClientRect: () => new DOMRect(10, 5, 60, 25), // Very close to top
+    };
+    installSelection(doc, {
+      isCollapsed: false,
+      rangeCount: 1,
+      getRangeAt: () => topRange,
+    });
+    getContents.mockReturnValue([{index: 1, doc}]);
+    getCFI.mockReturnValue('epubcfi(/6/2!/4/2:0)');
+
+    // Iframe at (120, 80)
+    // selectionTop = 80 + 5 = 85
+    // popupHeight = 44 (from getPopupDimensions)
+    // gap = 10
+    // baseMargin = 8 (default vw > 768)
+    // safeTop = 40 (mocked)
+    // Total space needed above = 44 + 10 + 8 + 40 = 102
+    // selectionTop (85) < 102 -> should show below
+
+    privateService.handleSelectionEnd(doc);
+    vi.advanceTimersByTime(10);
+
+    expect(emittedEvents.at(-1)).toMatchObject({
+      type: 'text-selected',
+      popupPosition: {
+        showBelow: true,
+        y: 80 + 5 + 25 + 10, // selectionBottom + gap = 120
+      }
+    });
+
+    // Cleanup
+    document.documentElement.style.removeProperty('--sat');
+  });
+
   it('styles draw-annotation events when a stored annotation style exists', () => {
     const draw = vi.fn();
     const overlayer = vi.fn(() => document.createElementNS('http://www.w3.org/2000/svg', 'rect'));
