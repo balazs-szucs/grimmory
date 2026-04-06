@@ -12,6 +12,7 @@ import { PdfAnnotationService } from '../../../shared/service/pdf-annotation.ser
 import { ReaderIconComponent } from '../../readers/ebook-reader/shared/icon.component';
 import { BookMark } from '../../../shared/service/book-mark.service';
 import { EmbedPdfBookService, PdfOutlineItem } from './services/embedpdf-book.service';
+import type { AnnotationTransferItem } from '@embedpdf/snippet';
 import { PdfBookmarkService } from './services/pdf-bookmark.service';
 import { PdfSidebarComponent, PdfAnnotationListItem } from './components/pdf-sidebar.component';
 import { parseStoredAnnotations, serializeAnnotations } from './utils/annotation-converter';
@@ -112,8 +113,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   // Search
   isSearchOpen = false;
+  isPanActive = false;
   searchQuery = '';
   private readonly searchQuery$ = new Subject<string>();
+  private dbAnnotationIds = new Set<string>();
 
 
   // Zoom presets
@@ -393,9 +396,26 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       // Subscribe to annotation events for debounced save
       this.embedPdfBook.annotationEvent$.pipe(
         takeUntil(this.destroy$)
-      ).subscribe(() => {
+      ).subscribe((ev) => {
         this.ngZone.run(() => {
           if (this.annotationsLoaded && !this.isImportingAnnotations) {
+            // Update the set of tracked IDs for synchronization
+            if (ev.type === 'create' || ev.type === 'update') {
+              const id = ev.annotation?.id;
+              // Only track specifically allowed user annotation types (exclude links, etc.)
+              const type = ev.annotation?.type as number;
+              const isAllowed = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15].includes(type);
+
+              if (id && isAllowed) {
+                this.dbAnnotationIds.add(id);
+              }
+            } else if (ev.type === 'delete') {
+              const id = ev.annotation?.id;
+              if (id) {
+                this.dbAnnotationIds.delete(id);
+              }
+            }
+
             this.annotationsDirty = true;
             this.annotationSaveSubject.next();
             this.annotationCacheSubject.next();
@@ -487,22 +507,46 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   private loadAnnotations(): void {
     this.pdfAnnotationService.getAnnotations(this.bookId).subscribe({
-      next: (response) => {
+      next: async (response) => {
         console.info('[PDF Annotations] GET response:', response);
         if (response?.data) {
-          const items = parseStoredAnnotations(response.data);
-          console.info('[PDF Annotations] Parsed', items.length, 'items from stored data');
+          const allItems = parseStoredAnnotations(response.data);
+          this.dbAnnotationIds = new Set(allItems.map(i => i.annotation.id));
+          
+          // Deduplicate items based on animation ID to heal previous corruption
+          const seenIds = new Set<string>();
+          const items = allItems.filter(item => {
+            if (seenIds.has(item.annotation.id)) return false;
+            seenIds.add(item.annotation.id);
+            return true;
+          });
+
+          if (allItems.length !== items.length) {
+            console.warn('[PDF Annotations] Deduplicated from', allItems.length, 'to', items.length);
+          }
+
           if (items.length > 0) {
             this.isImportingAnnotations = true;
-            this.embedPdfBook.importAnnotations(items);
-            // importAnnotations is fire-and-forget internally;
-            // wait for the import queue to settle before enabling event handling
-            setTimeout(() => {
+            try {
+              // Chunk the import to prevent script timeout and keep UI responsive
+              const CHUNK_SIZE = 500;
+              for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+                const chunk = items.slice(i, i + CHUNK_SIZE);
+                await this.embedPdfBook.importAnnotations(chunk);
+                // Breathe to prevent long-task timeouts
+                if (items.length > CHUNK_SIZE) {
+                  await new Promise(r => setTimeout(r, 0));
+                }
+              }
+              console.info('[PDF Annotations] Import complete');
+            } catch (err) {
+              console.error('[PDF Annotations] Import failed:', err);
+            } finally {
               this.isImportingAnnotations = false;
               this.annotationsLoaded = true;
               this.cacheAnnotationData();
               this.refreshAnnotationList();
-            }, 1000);
+            }
             return;
           }
         }
@@ -518,8 +562,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   }
 
   private async refreshAnnotationList(): Promise<void> {
+    if (!this.annotationsLoaded || this.viewerMode === 'document') return;
     try {
-      const items = await this.embedPdfBook.exportAnnotations();
+      const allItems = await this.embedPdfBook.exportAnnotations();
+      const items = this.filterAndDeduplicateAnnotations(allItems);
       this.annotationListItems = items.map(item => {
         const ann = item.annotation as unknown as Record<string, unknown>;
         return {
@@ -546,14 +592,24 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   // --- Annotation tools ---
 
-  toggleAnnotationTool(toolId: string): void {
+  toggleAnnotationTool(toolId: string | null): void {
     if (this.activeAnnotationTool === toolId) {
       this.activeAnnotationTool = null;
-      this.embedPdfBook.setActiveTool(null);
     } else {
+      this.isPanActive = false;
+      this.embedPdfBook.setPanMode(false);
       this.activeAnnotationTool = toolId;
-      this.embedPdfBook.setActiveTool(toolId);
     }
+    this.embedPdfBook.setActiveTool(this.activeAnnotationTool);
+  }
+
+  togglePanMode(): void {
+    this.isPanActive = !this.isPanActive;
+    if (this.isPanActive) {
+      this.activeAnnotationTool = null;
+      this.embedPdfBook.setActiveTool(null);
+    }
+    this.embedPdfBook.setPanMode(this.isPanActive);
   }
 
   setAnnotationColor(color: string): void {
@@ -1112,7 +1168,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   private async persistAnnotations(): Promise<void> {
     if (!this.annotationsLoaded || !this.bookId || this.viewerMode === 'document') return;
     try {
-      const items = await this.embedPdfBook.exportAnnotations();
+      const allItems = await this.embedPdfBook.exportAnnotations();
+      const items = this.filterAndDeduplicateAnnotations(allItems);
       const data = serializeAnnotations(items);
       this.lastAnnotationData = data;
       this.annotationsDirty = false;
@@ -1140,7 +1197,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   }
 
   private cacheAnnotationData(): void {
-    this.embedPdfBook.exportAnnotations().then(items => {
+    this.embedPdfBook.exportAnnotations().then(allItems => {
+      const items = this.filterAndDeduplicateAnnotations(allItems);
       this.lastAnnotationData = serializeAnnotations(items);
     }).catch(() => { /* fire-and-forget */ });
   }
@@ -1171,6 +1229,27 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       body: JSON.stringify(body),
       keepalive: true,
     }).catch(() => { /* fire-and-forget */ });
+  }
+
+  private filterAndDeduplicateAnnotations(allItems: AnnotationTransferItem[]): AnnotationTransferItem[] {
+    const seenIds = new Set<string>();
+    const allowedSubtypes = new Set([1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]);
+
+    return allItems.filter(item => {
+      const ann = item.annotation;
+      const id = ann?.id;
+      if (!id || seenIds.has(id)) return false;
+      
+      // Strict whitelist check
+      const type = ann?.type as number;
+      if (!allowedSubtypes.has(type)) return false;
+
+      // Only allow if it's in our DB-tracked set (for sync)
+      if (!this.dbAnnotationIds.has(id)) return false;
+
+      seenIds.add(id);
+      return true;
+    });
   }
 
   private normalizeZoom(zoom: string): string {

@@ -15,6 +15,7 @@ import type {
   SpreadCapability,
   SpreadMode,
   RotateCapability,
+  PanCapability,
 } from '@embedpdf/snippet';
 
 export interface PdfOutlineItem {
@@ -36,6 +37,7 @@ export class EmbedPdfBookService {
   private search: SearchCapability | null = null;
   private spread: SpreadCapability | null = null;
   private rotate: RotateCapability | null = null;
+  private pan: PanCapability | null = null;
 
   private currentDocumentId: string | null = null;
 
@@ -132,6 +134,9 @@ export class EmbedPdfBookService {
 
     const rotatePlugin = this.registry.getPlugin('rotate');
     this.rotate = rotatePlugin?.provides?.() as RotateCapability ?? null;
+
+    const panPlugin = this.registry.getPlugin('pan');
+    this.pan = panPlugin?.provides?.() as PanCapability ?? null;
 
     // wire events
     if (this.scroll) {
@@ -274,6 +279,20 @@ export class EmbedPdfBookService {
     this.rotate?.rotateBackward?.();
   }
 
+  // --- Pan ---
+
+  isPanMode(): boolean {
+    return this.pan?.isPanMode() ?? false;
+  }
+
+  setPanMode(enabled: boolean): void {
+    if (enabled) {
+      this.pan?.enablePan();
+    } else {
+      this.pan?.disablePan();
+    }
+  }
+
   setActiveTool(toolId: string | null): void {
     this.annotation?.setActiveTool(toolId);
   }
@@ -284,7 +303,18 @@ export class EmbedPdfBookService {
   }
 
   async importAnnotations(items: AnnotationTransferItem[]): Promise<void> {
-    this.annotation?.importAnnotations(items);
+    if (!this.annotation || items.length === 0) return;
+    const result = this.annotation.importAnnotations(items) as unknown;
+    interface EpdfTask { wait: (res: (v?: unknown) => void, rej: (e?: unknown) => void) => void; }
+    
+    if (result && typeof result === 'object' && 'wait' in result) {
+      const task = result as EpdfTask;
+      if (typeof task.wait === 'function') {
+        return new Promise<void>((resolve, reject) => {
+          task.wait(() => resolve(), (err) => reject(err));
+        });
+      }
+    }
   }
 
   deleteAnnotation(pageIndex: number, annotationId: string): void {
@@ -332,6 +362,7 @@ export class EmbedPdfBookService {
     this.search = null;
     this.spread = null;
     this.rotate = null;
+    this.pan = null;
     this.currentDocumentId = null;
 
     this.restoreWorkerShims();
@@ -340,12 +371,38 @@ export class EmbedPdfBookService {
 
   private convertBookmarks(items: unknown[]): PdfOutlineItem[] {
     if (!Array.isArray(items)) return [];
+
+    interface EpdfBookmark {
+      title?: string;
+      target?: {
+        type?: 'destination' | 'action' | string;
+        destination?: {pageIndex?: number};
+        action?: {
+          type?: number;
+          destination?: {pageIndex?: number};
+        };
+      };
+      children?: unknown[];
+    }
+
     return items.map((item: unknown) => {
-      const entry = item as Record<string, unknown>;
+      const entry = item as EpdfBookmark;
+      let pageIndex = 0;
+
+      const target = entry.target;
+      if (target) {
+        if (target.type === 'destination') {
+          pageIndex = target.destination?.pageIndex ?? 0;
+        } else if (target.type === 'action' && target.action?.type === 1) {
+          // Type 1 is PdfActionType.Goto (internal to PDF viewer)
+          pageIndex = target.action.destination?.pageIndex ?? 0;
+        }
+      }
+
       return {
-        title: String(entry['title'] || ''),
-        pageIndex: typeof entry['pageIndex'] === 'number' ? entry['pageIndex'] : 0,
-        children: this.convertBookmarks(entry['children'] as unknown[] || []),
+        title: String(entry.title || ''),
+        pageIndex: pageIndex,
+        children: this.convertBookmarks(entry.children || []),
       };
     });
   }

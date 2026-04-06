@@ -3,10 +3,13 @@
   <div class="sidebar-overlay" role="button" tabindex="0" (click)="onOverlayClick()" (keydown.enter)="onOverlayClick()" [class.closing]="closing()">
     <aside class="sidebar" role="button" tabindex="0" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" [class.closing]="closing()">
 
-      <!-- Close button -->
-      <button class="sidebar-close-btn" (click)="closed.emit()" [attr.aria-label]="t('close')">
-        <app-reader-icon name="close" [size]="18"></app-reader-icon>
-      </button>
+      <!-- Sidebar Header -->
+      <header class="sidebar-header">
+        <h2 class="sidebar-title">{{ t('title') }}</h2>
+        <button class="sidebar-close-btn" (click)="closed.emit()" [attr.aria-label]="t('close')">
+          <app-reader-icon name="close" [size]="18"></app-reader-icon>
+        </button>
+      </header>
 
       <!-- Tab navigation -->
       <nav class="tabs">
@@ -109,13 +112,15 @@
                       <div class="highlight-bar" [style.background-color]="annotation.color"></div>
                     }
                     <div class="item-content">
+                      <div class="item-header">
+                        <span class="item-meta">{{ t('page') }} {{ annotation.pageIndex + 1 }} · {{ annotation.type }}</span>
+                      </div>
                       @if (annotation.text) {
-                        <span class="highlight-text">"{{ annotation.text }}"</span>
+                        <p class="highlight-text">"{{ annotation.text }}"</p>
                       }
-                      <span class="item-meta">{{ t('page') }} {{ annotation.pageIndex + 1 }} · {{ annotation.type }}</span>
                     </div>
                     <button class="delete-btn" (click)="onDeleteAnnotation($event, annotation.id)" [attr.aria-label]="t('deleteAnnotation')">
-                      <app-reader-icon name="trash" [size]="16"></app-reader-icon>
+                      <app-reader-icon name="trash" [size]="14"></app-reader-icon>
                     </button>
                   </li>
                 }

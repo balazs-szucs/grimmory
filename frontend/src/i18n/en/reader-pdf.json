@@ -24,7 +24,8 @@
     "ink": "Free Draw",
     "draw": "Free Draw",
     "annotationColor": "Annotation Color",
-    "deselectTool": "Deselect Tool"
+    "deselectTool": "Deselect Tool",
+    "pan": "Pan Mode"
   },
   "footer": {
     "firstPage": "First Page",

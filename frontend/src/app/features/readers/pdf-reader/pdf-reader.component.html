@@ -88,6 +88,15 @@
             <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
           </svg>
         </button>
+        <button class="icon-btn annotation-tool-btn" [class.active]="isPanActive"
+          [title]="'readerPdf.toolbar.pan' | transloco" (click)="togglePanMode()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" /><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v10" />
+            <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" />
+            <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.8-6.6-3.3l-4.7-5.3a2 2 0 0 1 0-2.8l.3-.3a2 2 0 0 1 2.8 0L8 14" />
+          </svg>
+        </button>
 
         <div class="separator"></div>
 
@@ -254,6 +263,15 @@
         <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
       </svg>
       <span>{{ 'readerPdf.toolbar.draw' | transloco }}</span>
+    </button>
+    <button class="overflow-item" [class.active]="isPanActive" (click)="togglePanMode(); closeToolbarOverflow()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" /><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v10" />
+        <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" />
+        <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.8-6.6-3.3l-4.7-5.3a2 2 0 0 1 0-2.8l.3-.3a2 2 0 0 1 2.8 0L8 14" />
+      </svg>
+      <span>{{ 'readerPdf.toolbar.pan' | transloco }}</span>
     </button>
     <div class="overflow-divider"></div>
     <button class="overflow-item" (click)="toggleDarkTheme(); closeToolbarOverflow()">
