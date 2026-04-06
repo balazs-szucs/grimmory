@@ -365,7 +365,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       }
 
       // Check if we were aborted or navigated away during the fetch
-      if (this.pdfFetchAbortController.signal.aborted || currentBookId !== this.bookId) {
+      if (this.pdfFetchAbortController.signal.aborted || currentBookId !== this.bookId || this.viewerMode !== 'book') {
         return;
       }
 
@@ -679,6 +679,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     this.docViewerReady = false;
     if (mode === 'document') {
       // Save annotations before switching
+      if (this.initTimeout) clearTimeout(this.initTimeout);
       await this.persistAnnotations();
       this.destroyBookViewer();
       this.viewerMode = mode;
@@ -709,6 +710,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
       const response = await fetch(this.bookData, { headers, credentials: 'include' });
       if (!response.ok) throw new Error(`PDF fetch failed: ${response.status}`);
+
+      if (this.viewerMode !== 'document') return;
 
       const pdfBuffer = await response.arrayBuffer();
       const targetEl = document.getElementById('embedpdf-viewer');

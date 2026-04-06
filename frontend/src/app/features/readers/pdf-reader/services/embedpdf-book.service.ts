@@ -77,7 +77,6 @@ export class EmbedPdfBookService {
       theme: {preference: theme},
       disabledCategories: [
         'redaction',
-        'form',
         'stamp',
         'document-print',
         'document-export',
