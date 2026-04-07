@@ -42,7 +42,6 @@ import reactor.core.scheduler.Schedulers;
 import org.booklore.model.dto.request.IsbnLookupRequest;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -165,13 +164,7 @@ public class BookMetadataService {
         for (BookMetadataEntity metadataEntity : metadataEntities) {
             fieldActions.forEach((field, action) -> {
                 String entityField = fieldMapping.getOrDefault(field, field);
-                try {
-                    String setterName = "set" + Character.toUpperCase(entityField.charAt(0)) + entityField.substring(1);
-                    Method setter = BookMetadataEntity.class.getMethod(setterName, Boolean.class);
-                    setter.invoke(metadataEntity, "LOCK".equalsIgnoreCase(action));
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to invoke setter for field: " + entityField + " on bookId: " + metadataEntity.getBookId(), e);
-                }
+                metadataEntity.setFieldLocked(entityField, "LOCK".equalsIgnoreCase(action));
             });
         }
 

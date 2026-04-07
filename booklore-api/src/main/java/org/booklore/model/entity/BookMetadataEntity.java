@@ -416,6 +416,54 @@ public class BookMetadataEntity {
     @Builder.Default
     private Set<BookReviewEntity> reviews = new HashSet<>();
 
+    public void setFieldLocked(String field, Boolean locked) {
+        switch (field) {
+            case "titleLocked" -> this.titleLocked = locked;
+            case "subtitleLocked" -> this.subtitleLocked = locked;
+            case "publisherLocked" -> this.publisherLocked = locked;
+            case "publishedDateLocked" -> this.publishedDateLocked = locked;
+            case "descriptionLocked" -> this.descriptionLocked = locked;
+            case "isbn13Locked" -> this.isbn13Locked = locked;
+            case "isbn10Locked" -> this.isbn10Locked = locked;
+            case "asinLocked" -> this.asinLocked = locked;
+            case "pageCountLocked" -> this.pageCountLocked = locked;
+            case "languageLocked" -> this.languageLocked = locked;
+            case "amazonRatingLocked" -> this.amazonRatingLocked = locked;
+            case "amazonReviewCountLocked" -> this.amazonReviewCountLocked = locked;
+            case "goodreadsRatingLocked" -> this.goodreadsRatingLocked = locked;
+            case "goodreadsReviewCountLocked" -> this.goodreadsReviewCountLocked = locked;
+            case "hardcoverRatingLocked" -> this.hardcoverRatingLocked = locked;
+            case "hardcoverReviewCountLocked" -> this.hardcoverReviewCountLocked = locked;
+            case "coverLocked" -> this.coverLocked = locked;
+            case "audiobookCoverLocked" -> this.audiobookCoverLocked = locked;
+            case "seriesNameLocked" -> this.seriesNameLocked = locked;
+            case "seriesNumberLocked" -> this.seriesNumberLocked = locked;
+            case "seriesTotalLocked" -> this.seriesTotalLocked = locked;
+            case "authorsLocked" -> this.authorsLocked = locked;
+            case "categoriesLocked" -> this.categoriesLocked = locked;
+            case "moodsLocked" -> this.moodsLocked = locked;
+            case "tagsLocked" -> this.tagsLocked = locked;
+            case "goodreadsIdLocked" -> this.goodreadsIdLocked = locked;
+            case "hardcoverIdLocked" -> this.hardcoverIdLocked = locked;
+            case "hardcoverBookIdLocked" -> this.hardcoverBookIdLocked = locked;
+            case "googleIdLocked" -> this.googleIdLocked = locked;
+            case "comicvineIdLocked" -> this.comicvineIdLocked = locked;
+            case "lubimyczytacIdLocked" -> this.lubimyczytacIdLocked = locked;
+            case "lubimyczytacRatingLocked" -> this.lubimyczytacRatingLocked = locked;
+            case "ranobedbIdLocked" -> this.ranobedbIdLocked = locked;
+            case "ranobedbRatingLocked" -> this.ranobedbRatingLocked = locked;
+            case "audibleIdLocked" -> this.audibleIdLocked = locked;
+            case "audibleRatingLocked" -> this.audibleRatingLocked = locked;
+            case "audibleReviewCountLocked" -> this.audibleReviewCountLocked = locked;
+            case "reviewsLocked" -> this.reviewsLocked = locked;
+            case "narratorLocked" -> this.narratorLocked = locked;
+            case "abridgedLocked" -> this.abridgedLocked = locked;
+            case "ageRatingLocked" -> this.ageRatingLocked = locked;
+            case "contentRatingLocked" -> this.contentRatingLocked = locked;
+            default -> throw new IllegalArgumentException("Unknown lock field: " + field);
+        }
+    }
+
     public void applyLockToAllFields(boolean lock) {
         this.titleLocked = lock;
         this.subtitleLocked = lock;
