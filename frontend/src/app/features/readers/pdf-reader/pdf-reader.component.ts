@@ -3,7 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { PageTitleService } from "../../../shared/service/page-title.service";
 import { BookService } from '../../book/service/book.service';
 import { forkJoin, firstValueFrom, from, Observable, of, Subject, Subscription, takeUntil } from "rxjs";
-import { debounceTime, map, switchMap } from 'rxjs/operators';
+import { debounceTime, filter, map, switchMap } from 'rxjs/operators';
 import { BookSetting } from '../../book/model/book.model';
 import { UserService } from '../../settings/user-management/user.service';
 import { AuthService } from '../../../shared/service/auth.service';
@@ -32,7 +32,8 @@ type EmbedPdfMessage =
   | { type: 'documentOpened'; pageCount?: number }
   | { type: 'documentError'; error: string }
   | { type: 'saved'; buffer?: ArrayBuffer }
-  | { type: 'saveError'; error: string };
+  | { type: 'saveError'; error: string }
+  | { type: 'pageChange'; pageNumber: number; totalPages: number };
 
 @Component({
   selector: 'app-pdf-reader',
@@ -116,6 +117,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   isSearchOpen = false;
   isPanActive = false;
   searchQuery = '';
+  @ViewChild('searchInput') searchInputRef?: ElementRef<HTMLInputElement>;
   private readonly searchQuery$ = new Subject<string>();
   private dbAnnotationIds = new Set<string>();
 
@@ -216,12 +218,41 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       // Intercept 'x' key to prevent EmbedPDF from reloading the page;
       // instead close the reader via SPA navigation.
       const keydownHandler = (e: KeyboardEvent) => {
+        const tag = (e.target as HTMLElement)?.tagName;
+        const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable;
+
         if (e.key === 'x' || e.key === 'X') {
-          const tag = (e.target as HTMLElement)?.tagName;
-          if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+          if (isEditing) return;
           e.preventDefault();
           e.stopPropagation();
           this.ngZone.run(() => this.closeReader());
+        }
+
+        // Search: Ctrl+F, Cmd+F, or "/"
+        if (((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) || (e.key === '/' && !isEditing)) {
+          if (isEditing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          this.ngZone.run(() => {
+            if (!this.isSearchOpen) {
+              this.toggleSearch();
+            } else {
+              // Focus search input if already open
+              this.searchInputRef?.nativeElement.focus();
+            }
+          });
+        }
+
+        if (e.key === 'Escape') {
+          if (this.isSearchOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.ngZone.run(() => this.closeSearch());
+          } else if (this.sidebarOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.ngZone.run(() => this.sidebarOpen = false);
+          }
         }
       };
       document.addEventListener('keydown', keydownHandler, true);
@@ -255,7 +286,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     // Debounced search
     this.searchQuery$.pipe(
       takeUntil(this.destroy$),
-      debounceTime(400)
+      debounceTime(400),
+      filter(() => this.isSearchOpen)
     ).subscribe(query => {
       if (query.length > 1) {
         this.embedPdfBook.searchAllPages(query);
@@ -427,7 +459,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
               const id = ev.annotation?.id;
               // Only track specifically allowed user annotation types (exclude links, etc.)
               const type = ev.annotation?.type as number;
-              const isAllowed = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15].includes(type);
+              const isAllowed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15].includes(type);
 
               if (id && isAllowed) {
                 this.dbAnnotationIds.add(id);
@@ -645,6 +677,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   toggleSearch(): void {
     this.isSearchOpen = !this.isSearchOpen;
     if (this.isSearchOpen) {
+      afterNextRender(() => this.searchInputRef?.nativeElement.focus());
       this.embedPdfBook.startSearch();
     } else {
       this.searchQuery = '';
@@ -860,6 +893,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         console.error('[EmbedPDF] Save error:', msg.error);
         this.embedPdfSaveResolve?.(null);
         this.embedPdfSaveResolve = undefined;
+        break;
+      case 'pageChange':
+        this.onPageChange(msg.pageNumber);
+        this.totalPages = msg.totalPages;
         break;
     }
   }
@@ -1130,14 +1167,22 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   // --- Footer page navigation ---
 
   goToFirstPage(): void {
-    if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(1);
+    if (this.viewerMode === 'book') {
+      this.embedPdfBook.scrollToPage(1);
+    } else if (this.embedPdfIframe?.contentWindow) {
+      this.embedPdfIframe.contentWindow.postMessage({ type: 'scrollToPage', pageNumber: 1 }, location.origin);
+    }
     this.onPageChange(1);
   }
 
   goToPreviousPage(): void {
     if (this.page > 1) {
       const p = this.page - 1;
-      if (this.viewerMode === 'book') this.embedPdfBook.scrollToPreviousPage();
+      if (this.viewerMode === 'book') {
+        this.embedPdfBook.scrollToPreviousPage();
+      } else if (this.embedPdfIframe?.contentWindow) {
+        this.embedPdfIframe.contentWindow.postMessage({ type: 'prevPage' }, location.origin);
+      }
       this.onPageChange(p);
     }
   }
@@ -1145,25 +1190,41 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   goToNextPage(): void {
     if (this.page < this.totalPages) {
       const p = this.page + 1;
-      if (this.viewerMode === 'book') this.embedPdfBook.scrollToNextPage();
+      if (this.viewerMode === 'book') {
+        this.embedPdfBook.scrollToNextPage();
+      } else if (this.embedPdfIframe?.contentWindow) {
+        this.embedPdfIframe.contentWindow.postMessage({ type: 'nextPage' }, location.origin);
+      }
       this.onPageChange(p);
     }
   }
 
   goToLastPage(): void {
-    if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(this.totalPages);
+    if (this.viewerMode === 'book') {
+      this.embedPdfBook.scrollToPage(this.totalPages);
+    } else if (this.embedPdfIframe?.contentWindow) {
+      this.embedPdfIframe.contentWindow.postMessage({ type: 'scrollToPage', pageNumber: this.totalPages }, location.origin);
+    }
     this.onPageChange(this.totalPages);
   }
 
   onSliderChange(event: Event): void {
     const value = +(event.target as HTMLInputElement).value;
-    if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(value, 'instant');
+    if (this.viewerMode === 'book') {
+      this.embedPdfBook.scrollToPage(value, 'instant');
+    } else if (this.embedPdfIframe?.contentWindow) {
+      this.embedPdfIframe.contentWindow.postMessage({ type: 'scrollToPage', pageNumber: value }, location.origin);
+    }
     this.onPageChange(value);
   }
 
   onGoToPage(): void {
     if (this.goToPageInput && this.goToPageInput >= 1 && this.goToPageInput <= this.totalPages) {
-      if (this.viewerMode === 'book') this.embedPdfBook.scrollToPage(this.goToPageInput);
+      if (this.viewerMode === 'book') {
+        this.embedPdfBook.scrollToPage(this.goToPageInput);
+      } else if (this.embedPdfIframe?.contentWindow) {
+        this.embedPdfIframe.contentWindow.postMessage({ type: 'scrollToPage', pageNumber: this.goToPageInput }, location.origin);
+      }
       this.onPageChange(this.goToPageInput);
       this.goToPageInput = null;
     }
@@ -1274,7 +1335,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   private filterAndDeduplicateAnnotations(allItems: AnnotationTransferItem[]): AnnotationTransferItem[] {
     const seenIds = new Set<string>();
-    const allowedSubtypes = new Set([1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]);
+    const allowedSubtypes = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]);
 
     return allItems.filter(item => {
       const ann = item.annotation;
