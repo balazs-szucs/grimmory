@@ -14,6 +14,7 @@ import org.booklore.task.tasks.Task;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.TaskScheduler;
 import tools.jackson.databind.ObjectMapper;
@@ -30,6 +31,7 @@ class TaskServiceTest {
     private AuthenticationService authenticationService;
     private TaskHistoryService taskHistoryService;
     private TaskCronService taskCronService;
+    private ObjectProvider<TaskCronService> taskCronServiceProvider;
     private TaskCancellationManager cancellationManager;
     private Executor taskExecutor;
     private ObjectMapper objectMapper;
@@ -38,10 +40,13 @@ class TaskServiceTest {
     private Task mockTask;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
         authenticationService = mock(AuthenticationService.class);
         taskHistoryService = mock(TaskHistoryService.class);
         taskCronService = mock(TaskCronService.class);
+        taskCronServiceProvider = mock(ObjectProvider.class);
+        when(taskCronServiceProvider.getObject()).thenReturn(taskCronService);
         cancellationManager = mock(TaskCancellationManager.class);
         taskExecutor = mock(Executor.class);
         objectMapper = mock(ObjectMapper.class);
@@ -53,7 +58,7 @@ class TaskServiceTest {
         taskService = new TaskService(
                 authenticationService,
                 taskHistoryService,
-                taskCronService,
+                taskCronServiceProvider,
                 List.of(mockTask),
                 cancellationManager,
                 taskExecutor,
@@ -140,7 +145,7 @@ class TaskServiceTest {
         taskService = new TaskService(
                 authenticationService,
                 taskHistoryService,
-                taskCronService,
+                taskCronServiceProvider,
                 List.of(nonParallelTask),
                 cancellationManager,
                 taskExecutor,
@@ -181,7 +186,7 @@ class TaskServiceTest {
         taskService = new TaskService(
                 authenticationService,
                 taskHistoryService,
-                taskCronService,
+                taskCronServiceProvider,
                 List.of(asyncTask),
                 cancellationManager,
                 taskExecutor,

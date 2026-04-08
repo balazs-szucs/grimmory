@@ -7,7 +7,7 @@ import org.springframework.web.filter.GenericFilterBean;
 
 import java.util.Set;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class RequestLoggingFilterConfig {
     private static final Set<String> EXCLUDED_PATHS = Set.of(
             "/api/v1/healthcheck",

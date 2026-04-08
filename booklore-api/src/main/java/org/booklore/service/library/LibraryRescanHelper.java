@@ -20,7 +20,7 @@ import org.booklore.task.TaskStatus;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.TaskType;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,16 +32,16 @@ public class LibraryRescanHelper {
 
     private final LibraryRepository libraryRepository;
     private final MetadataExtractorFactory metadataExtractorFactory;
-    private final BookMetadataUpdater bookMetadataUpdater;
+    private final ObjectProvider<BookMetadataUpdater> bookMetadataUpdaterProvider;
     private final NotificationService notificationService;
     private final TaskCancellationManager cancellationManager;
     private final BookRepository bookRepository;
     private final AudiobookProcessor audiobookProcessor;
 
-    public LibraryRescanHelper(LibraryRepository libraryRepository, MetadataExtractorFactory metadataExtractorFactory, @Lazy BookMetadataUpdater bookMetadataUpdater, NotificationService notificationService, TaskCancellationManager cancellationManager, BookRepository bookRepository, AudiobookProcessor audiobookProcessor) {
+    public LibraryRescanHelper(LibraryRepository libraryRepository, MetadataExtractorFactory metadataExtractorFactory, ObjectProvider<BookMetadataUpdater> bookMetadataUpdaterProvider, NotificationService notificationService, TaskCancellationManager cancellationManager, BookRepository bookRepository, AudiobookProcessor audiobookProcessor) {
         this.libraryRepository = libraryRepository;
         this.metadataExtractorFactory = metadataExtractorFactory;
-        this.bookMetadataUpdater = bookMetadataUpdater;
+        this.bookMetadataUpdaterProvider = bookMetadataUpdaterProvider;
         this.notificationService = notificationService;
         this.cancellationManager = cancellationManager;
         this.bookRepository = bookRepository;
@@ -108,7 +108,7 @@ public class LibraryRescanHelper {
                         .mergeMoods(true)
                         .mergeTags(true)
                         .build();
-                bookMetadataUpdater.setBookMetadata(metadataUpdateContext);
+                bookMetadataUpdaterProvider.getObject().setBookMetadata(metadataUpdateContext);
 
                 if (bookEntity.getPrimaryBookFile().getBookType() == BookFileType.AUDIOBOOK && bookMetadata.getAudiobookMetadata() != null) {
                     audiobookProcessor.setAudiobookTechnicalMetadata(bookEntity, bookMetadata);

@@ -1,0 +1,10 @@
+{
+  "resources": {
+    "includes": [],
+    "excludes": [
+      {
+        "pattern": "META-INF/services/org\\.hibernate\\.bytecode\\.spi\\.BytecodeProvider"
+      }
+    ]
+  }
+}

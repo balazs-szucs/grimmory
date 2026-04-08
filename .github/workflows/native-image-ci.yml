@@ -1,0 +1,186 @@
+name: CI - Native Image
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'booklore-api/src/**'
+      - 'booklore-api/build.gradle.kts'
+      - 'booklore-api/settings.gradle.kts'
+      - 'Dockerfile.native'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'booklore-api/src/**'
+      - 'booklore-api/build.gradle.kts'
+      - 'booklore-api/settings.gradle.kts'
+      - 'Dockerfile.native'
+  schedule:
+    # Weekly Monday 4:00 UTC catch regressions from dependency updates
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: native-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-compile:
+    name: Native Image Compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set Up Oracle GraalVM 25
+        uses: graalvm/setup-graalvm@60c26726de13f8b90771df4bc1641a52a3159994 # v1.5.2
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+
+      - name: Restore Gradle Cache
+        id: restore_gradle_cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-native-${{ runner.os }}-${{ hashFiles('booklore-api/**/*.gradle*', 'booklore-api/settings.gradle*', 'booklore-api/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-native-${{ runner.os }}-
+            gradle-${{ runner.os }}-
+
+      # NightCompress loads libarchive via FFM at AOT processing time
+      - name: Install libarchive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-dev
+          sudo mkdir -p /usr/java/packages/lib/
+          sudo cp /usr/lib/x86_64-linux-gnu/libarchive.* /usr/java/packages/lib/
+
+      - name: Compile Native Image
+        working-directory: booklore-api
+        run: |
+          echo "::group::Spring AOT processing + GraalVM native-image"
+          ./gradlew --no-daemon nativeCompile
+          echo "::endgroup::"
+
+      - name: Verify Binary Exists
+        run: |
+          binary="booklore-api/build/native/nativeCompile/booklore-api"
+          if [ ! -f "$binary" ]; then
+            echo "❌ Native binary not found at $binary"
+            exit 1
+          fi
+          file "$binary"
+          ls -lh "$binary"
+
+      - name: Upload Native Binary
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: success()
+        with:
+          name: native-binary-${{ github.sha }}
+          path: booklore-api/build/native/nativeCompile/booklore-api
+          retention-days: 7
+
+      - name: Upload Build Reports
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: always()
+        with:
+          name: native-build-reports-${{ github.sha }}
+          path: |
+            booklore-api/build/reports/
+            booklore-api/build/native/generated/
+          retention-days: 7
+
+      - name: Save Gradle Cache
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.restore_gradle_cache.outputs.cache-primary-key }}
+
+  native-smoke-test:
+    name: Native Smoke Test
+    needs: [native-compile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MYSQL_ROOT_PASSWORD: grimmory
+          MYSQL_DATABASE: grimmory
+          MYSQL_USER: grimmory
+          MYSQL_PASSWORD: grimmory
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h localhost -uroot -pgrimmory"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Download Native Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-binary-${{ github.sha }}
+          path: .
+
+      - name: Install libarchive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-dev
+          sudo mkdir -p /usr/java/packages/lib/
+          sudo cp /usr/lib/x86_64-linux-gnu/libarchive.* /usr/java/packages/lib/
+
+      - name: Start Native Binary
+        run: |
+          chmod +x ./booklore-api
+          ./booklore-api \
+            --spring.datasource.url=jdbc:mariadb://localhost:3306/grimmory \
+            --spring.datasource.username=grimmory \
+            --spring.datasource.password=grimmory \
+            --server.port=6060 &
+          echo $! > app.pid
+
+      - name: Wait for Startup
+        run: |
+          echo "Waiting for native binary to start..."
+          for i in $(seq 1 30); do
+            if wget -q -O /dev/null http://localhost:6060/api/v1/healthcheck 2>/dev/null; then
+              echo "✅ Application started successfully"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Application did not start within 30 seconds"
+          if [ -f app.pid ]; then
+            kill "$(cat app.pid)" 2>/dev/null || true
+          fi
+          exit 1
+
+      - name: Verify Startup Time
+        run: |
+          echo "Application is healthy — native image startup verified."
+
+      - name: Stop Application
+        if: always()
+        run: |
+          if [ -f app.pid ]; then
+            kill "$(cat app.pid)" 2>/dev/null || true
+          fi

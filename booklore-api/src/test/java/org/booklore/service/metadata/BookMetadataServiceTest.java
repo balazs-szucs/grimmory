@@ -398,8 +398,8 @@ class BookMetadataServiceTest {
             when(bookMetadataRepository.getMetadataForBookIds(List.of(1L))).thenReturn(List.of(entity));
 
             assertThatThrownBy(() -> service.toggleFieldLocks(List.of(1L), Map.of("nonExistentField", "LOCK")))
-                    .isInstanceOf(RuntimeException.class)
-                    .hasMessageContaining("Failed to invoke setter for field: nonExistentField");
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Unknown lock field: nonExistentField");
         }
     }
 

@@ -9,7 +9,7 @@ Thanks for your interest in contributing to Grimmory! Whether you're fixing bugs
 **Tech Stack:**
 
 - **Frontend:** Angular 20, TypeScript, PrimeNG 19
-- **Backend:** Java 25, Spring Boot 3.5
+- **Backend:** Java 25, Spring Boot 4.0, GraalVM native image support
 - **Authentication:** Local JWT + optional OIDC (e.g., Authentik)
 - **Database:** MariaDB
 - **Deployment:** Docker-compatible, reverse proxy-ready
@@ -22,6 +22,7 @@ Thanks for your interest in contributing to Grimmory! Whether you're fixing bugs
 - [Development Setup](#development-setup)
 - [Running Tests](#running-tests)
 - [Building the Production Docker Image](#building-the-production-docker-image)
+- [Native Image (GraalVM)](#native-image-graalvm)
 - [Making Changes](#making-changes)
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [Backend Conventions](#backend-conventions)
@@ -289,6 +290,52 @@ just image-build linux/arm64 grimmory:local-arm64
 - **Memory:** The image defaults to 60% of container RAM. Limit with `--memory=512m` or similar to simulate constrained environments.
 - **Volumes:** Mount your book directories to `/books`, data/config to `/app/data`, and an optional bookdrop folder to `/bookdrop`. The example above reuses the dev stack's `shared/` folders so your existing library and covers are available.
 - **Logs:** Application logs are written to stdout. Use `docker logs -f grimmory-local` to follow them.
+
+---
+
+## Native Image (GraalVM)
+
+Grimmory supports ahead-of-time compilation to a GraalVM native image. Native binaries start in under 1 second and use significantly less memory than the JVM.
+
+> **Native image compilation is resource-intensive (~16 GB RAM, 10+ minutes).** It runs in CI via the `native-image-ci.yml` workflow. Most contributors should **not** build it locally (but you are welcome to).
+
+### CI workflow
+
+The `CI - Native Image` workflow triggers automatically on pushes and PRs to `develop`/`main` that touch `booklore-api/src/**`, `booklore-api/build.gradle.kts`, or `Dockerfile.native`. It also runs weekly and can be triggered manually via `workflow_dispatch`.
+
+The workflow has two jobs:
+
+1. **Native Image Compile**, uses Oracle GraalVM 25 to produce the native binary and uploads it as an artifact.
+2. **Native Smoke Test**, downloads the binary, starts it against a MariaDB service container, and verifies a successful health check within 30 seconds.
+
+### Local native build (optional)
+
+If you need to build locally (e.g., debugging a native-specific failure):
+
+```bash
+# Build the Docker native image
+just native-build
+
+# Start the native stack (backend + frontend + MariaDB)
+just native-up
+
+# Tail logs
+just native-logs
+
+# Stop the stack
+just native-down
+```
+
+**Requirements:** Docker with at least 16 GB memory allocated.
+
+### GraalVM readiness conventions
+
+When adding new code that may be problematic for native image compilation, follow these conventions:
+
+- **Runtime hints:** Register reflection, resource, and proxy hints in `GraalVmRuntimeHints.java` (imported via `@ImportRuntimeHints` on the application class).
+- **Avoid runtime class generation:** Use `MethodHandle`-based access (e.g., Jackson `BlackbirdModule`) instead of reflection where possible.
+- **JPA entities:** Keep entities on the `*Entity` suffix. Register new `@Converter` classes in the runtime hints.
+- **Native library loading:** Libraries loaded via FFM (e.g., libarchive for nightcompress) are not linked into the binary — they must be present in the runtime container. See `Dockerfile.native` for how these are installed.
 
 ---
 

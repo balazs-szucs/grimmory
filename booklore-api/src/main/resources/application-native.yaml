@@ -1,0 +1,8 @@
+# Profile activated in native-image containers (Dockerfile.native CMD).
+# Settings here override the defaults in application.yaml when the binary
+# runs as a GraalVM native image.
+#
+# Hibernate 7 discovers its BytecodeProvider exclusively via ServiceLoader.
+# The ByteBuddy service-file entry is excluded from the native image by
+# META-INF/native-image/org.booklore/hibernate-bytecode-fix/resource-config.json
+# so Hibernate falls back to the built-in "none" provider automatically.

@@ -8,6 +8,7 @@ import org.booklore.model.enums.SidecarSyncStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.module.blackbird.BlackbirdModule;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,7 +25,7 @@ public class SidecarMetadataReader {
     public SidecarMetadataReader(SidecarMetadataMapper mapper) {
         this.mapper = mapper;
         this.objectMapper = JsonMapper.builder()
-                .findAndAddModules()
+                .addModule(new BlackbirdModule())
                 .build();
     }
 

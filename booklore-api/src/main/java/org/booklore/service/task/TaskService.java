@@ -13,7 +13,7 @@ import org.booklore.model.enums.TaskType;
 import org.booklore.task.TaskCancellationManager;
 import org.booklore.task.TaskStatus;
 import org.booklore.task.tasks.Task;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.support.CronTrigger;
@@ -40,7 +40,7 @@ public class TaskService {
 
     private final AuthenticationService authenticationService;
     private final TaskHistoryService taskHistoryService;
-    private final TaskCronService taskCronService;
+    private final ObjectProvider<TaskCronService> taskCronServiceProvider;
     private final Map<TaskType, Task> taskRegistry;
     private final ConcurrentMap<TaskType, String> runningTasks = new ConcurrentHashMap<>();
     private final TaskCancellationManager cancellationManager;
@@ -52,7 +52,7 @@ public class TaskService {
     public TaskService(
             AuthenticationService authenticationService,
             TaskHistoryService taskHistoryService,
-            @Lazy TaskCronService taskCronService,
+            ObjectProvider<TaskCronService> taskCronServiceProvider,
             List<Task> tasks,
             TaskCancellationManager cancellationManager,
             Executor taskExecutor,
@@ -60,7 +60,7 @@ public class TaskService {
             TaskScheduler taskScheduler) {
         this.authenticationService = authenticationService;
         this.taskHistoryService = taskHistoryService;
-        this.taskCronService = taskCronService;
+        this.taskCronServiceProvider = taskCronServiceProvider;
         this.taskRegistry = tasks.stream().collect(Collectors.toMap(Task::getTaskType, Function.identity()));
         this.cancellationManager = cancellationManager;
         this.taskExecutor = taskExecutor;
@@ -69,15 +69,15 @@ public class TaskService {
     }
 
     public void initializeScheduledTasks() {
-        List<TaskCronConfigurationEntity> enabledConfigs = taskCronService.getAllEnabledCronConfigs();
+        List<TaskCronConfigurationEntity> enabledConfigs = taskCronServiceProvider.getObject().getAllEnabledCronConfigs();
         log.info("Initializing {} scheduled tasks", enabledConfigs.size());
         enabledConfigs.forEach(this::scheduleTask);
     }
 
     public void rescheduleTask(TaskType taskType) {
         cancelScheduledTask(taskType);
-        taskCronService.getCronConfigOrDefault(taskType);
-        var cronConfig = taskCronService.getCronConfigOrDefault(taskType);
+        taskCronServiceProvider.getObject().getCronConfigOrDefault(taskType);
+        var cronConfig = taskCronServiceProvider.getObject().getCronConfigOrDefault(taskType);
 
         if (cronConfig.getEnabled() != null && cronConfig.getEnabled() && cronConfig.getCronExpression() != null) {
             TaskCronConfigurationEntity config = TaskCronConfigurationEntity.builder()
@@ -124,7 +124,7 @@ public class TaskService {
                         metadata.setMetadata(task.getMetadata());
                     }
                     if (taskType.isCronSupported()) {
-                        var cronConfig = taskCronService.getCronConfigOrDefault(taskType);
+                        var cronConfig = taskCronServiceProvider.getObject().getCronConfigOrDefault(taskType);
                         metadata.setCronConfig(cronConfig);
                     }
                     return metadata;

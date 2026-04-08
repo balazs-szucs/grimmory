@@ -2,7 +2,6 @@ package org.booklore.config.security.service;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
 import org.booklore.config.AppProperties;
 import org.booklore.config.security.JwtUtils;
 import org.booklore.config.security.userdetails.OpdsUserDetails;
@@ -24,6 +23,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
 import java.util.List;
@@ -48,7 +49,7 @@ public class AuthenticationService {
     private final DefaultSettingInitializer defaultSettingInitializer;
     private final AuditService auditService;
     private final AuthRateLimitService authRateLimitService;
-    private final AppSettingService appSettingService;
+    private final ObjectProvider<AppSettingService> appSettingServiceProvider;
 
     public AuthenticationService(
             AppProperties appProperties,
@@ -60,7 +61,7 @@ public class AuthenticationService {
             DefaultSettingInitializer defaultSettingInitializer,
             AuditService auditService,
             AuthRateLimitService authRateLimitService,
-            @Lazy AppSettingService appSettingService
+            ObjectProvider<AppSettingService> appSettingServiceProvider
     ) {
         this.appProperties = appProperties;
         this.userRepository = userRepository;
@@ -71,7 +72,7 @@ public class AuthenticationService {
         this.defaultSettingInitializer = defaultSettingInitializer;
         this.auditService = auditService;
         this.authRateLimitService = authRateLimitService;
-        this.appSettingService = appSettingService;
+        this.appSettingServiceProvider = appSettingServiceProvider;
     }
 
     @PostConstruct
@@ -127,7 +128,7 @@ public class AuthenticationService {
 
     @Transactional
     public ResponseEntity<Map<String, String>> loginUser(UserLoginRequest loginRequest) {
-        if (appSettingService.getAppSettings().isOidcForceOnlyMode()) {
+        if (appSettingServiceProvider.getObject().getAppSettings().isOidcForceOnlyMode()) {
             BookLoreUserEntity oidcCheckUser = userRepository.findByUsername(loginRequest.getUsername()).orElse(null);
             if (oidcCheckUser == null || !oidcCheckUser.getPermissions().isPermissionAdmin()) {
                 throw ApiError.OIDC_ONLY_MODE.createException();

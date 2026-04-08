@@ -9,7 +9,7 @@ import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
 import org.springframework.security.concurrent.DelegatingSecurityContextRunnable;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class TaskExecutorConfig {
 
     @Bean(name = "taskExecutor")

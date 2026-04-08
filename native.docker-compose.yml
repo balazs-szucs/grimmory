@@ -1,0 +1,78 @@
+# Native-image development stack.
+# Usage:
+#   docker compose -f native.docker-compose.yml up
+#   just native-up        (after Justfile recipe is added)
+#
+# Builds a GraalVM native binary via Dockerfile.native (Oracle GraalVM,
+# glibc / Debian runtime), then runs it against the MariaDB dev database.
+# Heavy build — prefer running in CI via the native-image-ci workflow.
+# For local use, ensure you have sufficient RAM (≥10 GB free for Docker).
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.native
+    ports:
+      - "${BACKEND_PORT:-6060}:6060"
+    environment:
+      - DATABASE_URL=jdbc:mariadb://backend_db:3306/grimmory
+      - DATABASE_USERNAME=grimmory
+      - DATABASE_PASSWORD=grimmory
+      - ALLOWED_ORIGINS=http://localhost:4200
+    restart: unless-stopped
+    depends_on:
+      backend_db:
+        condition: service_healthy
+    volumes:
+      - ./shared/data:/app/data
+      - ./shared/books:/books
+      - ./shared/bookdrop:/bookdrop
+    healthcheck:
+      test: wget -q -O - http://localhost:6060/api/v1/healthcheck
+      interval: 30s
+      retries: 5
+      start_period: 15s
+      timeout: 5s
+
+  frontend:
+    image: node:24-alpine
+    command: |-
+      sh -c "\
+      apk update && apk add --no-cache bash just;\
+      cd /angular-app &&\
+      corepack enable &&\
+      corepack yarn install --immutable &&\
+      corepack yarn ng serve --host 0.0.0.0 --watch --configuration development"
+    environment:
+      - NODE_ENV=development
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    volumes:
+      - './frontend:/angular-app'
+      - native_node_modules:/angular-app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-4200}:4200"
+
+  backend_db:
+    image: mariadb:11.4
+    container_name: backend_db_native
+    volumes:
+      - native_backend_db:/var/lib/mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=grimmory
+      - MYSQL_DATABASE=grimmory
+      - MYSQL_USER=grimmory
+      - MYSQL_PASSWORD=grimmory
+    ports:
+      - "${DB_PORT:-3367}:3306"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-uroot", "-pgrimmory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  native_node_modules:
+  native_backend_db:

@@ -1,0 +1,130 @@
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-build
+
+WORKDIR /workspace/frontend
+
+COPY .yarnrc.yml /workspace/.yarnrc.yml
+COPY frontend/package.json frontend/yarn.lock ./
+
+RUN corepack enable
+RUN --mount=type=cache,target=/workspace/.yarn/cache \
+    corepack yarn install --immutable
+
+COPY frontend/ ./
+RUN --mount=type=cache,target=/workspace/.yarn/cache \
+    --mount=type=cache,target=/workspace/frontend/.angular/cache \
+    CI=1 NG_CLI_ANALYTICS=false corepack yarn build:prod
+
+# Oracle GraalVM (GFTC license free including production, no login required).
+# Non-muslib / glibc build: more reliable than the muslib cross-compilation
+# variant and avoids the ContainerLibraryDirectives exec failures on ARM64.
+# The Oracle build includes PGO, G1 GC tuning and ML-based inlining that are
+# absent from the Community Edition.
+# Pin to 25.0.2 the :25 floating tag resolves to 25.0.0, which ships
+# glibc-static/zlib-ng-compat-static that conflict with repo updates.
+FROM container-registry.oracle.com/graalvm/native-image:25.0.2 AS native-build
+
+ARG TARGETARCH
+
+# The base image ships glibc-devel and zlib-ng-compat-devel pre-installed.
+# Do NOT re-request them microdnf would try to upgrade and conflict with the
+# pinned glibc-static / zlib-ng-compat-static packages already in the image.
+RUN microdnf install -y findutils tar gzip gcc && microdnf clean all
+
+WORKDIR /workspace/booklore-api
+
+# Install Gradle wrapper dependencies first for caching
+COPY booklore-api/gradlew booklore-api/gradlew.bat booklore-api/build.gradle.kts booklore-api/settings.gradle.kts ./
+COPY booklore-api/gradle ./gradle
+RUN chmod +x ./gradlew
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon dependencies
+
+COPY booklore-api/ ./
+COPY --from=frontend-build /workspace/frontend/dist/grimmory/browser /tmp/frontend-dist
+
+# Build the native image using Spring Boot's nativeCompile task.
+# pdfium4j native libs are loaded at runtime via FFM not linked into the binary.
+RUN --mount=type=cache,target=/root/.gradle \
+    TARGETARCH=${TARGETARCH} ./gradlew --no-daemon \
+        -PfrontendDistDir=/tmp/frontend-dist \
+        nativeCompile
+
+RUN cp build/native/nativeCompile/booklore-api /workspace/booklore-api/app
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 3: External tool layers (same as JVM Dockerfile)
+# ──────────────────────────────────────────────────────────────────────────────
+FROM mwader/static-ffmpeg:8.1 AS ffprobe-layer
+
+FROM scratch AS kepubify-layer-amd64
+
+ARG KEPUBIFY_VERSION="4.0.4"
+ARG KEPUBIFY_AMD64_CHECKSUM="sha256:37d7628d26c5c906f607f24b36f781f306075e7073a6fe7820a751bb60431fc5"
+
+ADD \
+      --checksum="${KEPUBIFY_AMD64_CHECKSUM}" \
+      --chmod=755 \
+      https://github.com/pgaskin/kepubify/releases/download/v${KEPUBIFY_VERSION}/kepubify-linux-64bit /kepubify
+
+FROM scratch AS kepubify-layer-arm64
+
+ARG KEPUBIFY_VERSION="4.0.4"
+ARG KEPUBIFY_ARM64_CHECKSUM="sha256:5a15b8f6f6a96216c69330601bca29638cfee50f7bf48712795cff88ae2d03a3"
+
+ADD \
+      --checksum="${KEPUBIFY_ARM64_CHECKSUM}" \
+      --chmod=755 \
+      https://github.com/pgaskin/kepubify/releases/download/v${KEPUBIFY_VERSION}/kepubify-linux-arm64 /kepubify
+
+FROM kepubify-layer-${TARGETARCH} AS kepubify-layer
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 4: Minimal glibc runtime — no JRE needed
+# ──────────────────────────────────────────────────────────────────────────────
+# Why debian:trixie-slim instead of distroless:
+#  • nightcompress loads libarchive via FFM at runtime; libarchive pulls in ~10
+#    transitive native libs (libxml2, libicu, liblzma, ...) absent from distroless.
+#  • Entrypoint script needs a shell for dynamic USER_ID / GROUP_ID management.
+#  • Docker Compose healthchecks rely on wget.
+# Why trixie (Debian 13) instead of bookworm (Debian 12):
+#  • Oracle GraalVM 25.0.2 links against glibc 2.38+; bookworm ships glibc 2.36.
+#  • Trixie (stable since June 2025) ships glibc 2.40.
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gosu libstdc++6 libgcc-s1 libarchive13t64 wget && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/lib/*/libarchive.so.13 /usr/lib/libarchive.so && \
+    mkdir -p /bookdrop
+
+COPY packaging/docker/entrypoint-native.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY --from=ffprobe-layer /ffprobe /usr/local/bin/ffprobe
+COPY --from=kepubify-layer /kepubify /usr/local/bin/kepubify
+
+COPY --from=native-build /workspace/booklore-api/app /app/app
+
+ARG APP_VERSION=development
+ARG APP_REVISION=unknown
+
+LABEL org.opencontainers.image.title="Grimmory (native)" \
+      org.opencontainers.image.description="Grimmory native image: a self-hosted digital library." \
+      org.opencontainers.image.source="https://github.com/grimmory-tools/grimmory" \
+      org.opencontainers.image.version=$APP_VERSION \
+      org.opencontainers.image.revision=$APP_REVISION \
+      org.opencontainers.image.licenses="AGPL-3.0" \
+      org.opencontainers.image.base.name="docker.io/library/debian:trixie-slim"
+
+ENV APP_VERSION=${APP_VERSION} \
+    APP_REVISION=${APP_REVISION}
+
+ARG BOOKLORE_PORT=6060
+EXPOSE ${BOOKLORE_PORT}
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# --spring.profiles.include=native  activates application-native.yaml.
+# Spring Boot auto-activates "native" for AOT binaries, but the explicit
+# flag keeps it obvious and covers edge cases.
+CMD ["/app/app", "--spring.profiles.include=native"]

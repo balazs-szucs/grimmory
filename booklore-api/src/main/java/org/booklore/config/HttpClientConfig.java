@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class HttpClientConfig {
 
     @Bean

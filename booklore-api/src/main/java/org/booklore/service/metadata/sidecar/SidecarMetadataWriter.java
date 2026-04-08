@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.module.blackbird.BlackbirdModule;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,7 +36,7 @@ public class SidecarMetadataWriter {
         this.fileService = fileService;
         this.appSettingService = appSettingService;
         this.objectMapper = JsonMapper.builder()
-                .findAndAddModules()
+                .addModule(new BlackbirdModule())
                 .configure(SerializationFeature.INDENT_OUTPUT, true)
                 .build();
     }

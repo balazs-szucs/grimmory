@@ -6,6 +6,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.ser.BeanPropertyWriter;
 import tools.jackson.databind.ser.ValueSerializerModifier;
+import tools.jackson.module.blackbird.BlackbirdModule;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -13,7 +14,7 @@ import java.util.stream.Collectors;
 /**
  * Jackson configuration for Komga API clean mode.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class JacksonConfig {
 
     public static final String KOMGA_CLEAN_OBJECT_MAPPER = "komgaCleanObjectMapper";
@@ -21,7 +22,7 @@ public class JacksonConfig {
     @Bean(name = KOMGA_CLEAN_OBJECT_MAPPER)
     public ObjectMapper komgaCleanObjectMapper() {
         return JsonMapper.builder()
-                .findAndAddModules()
+                .addModule(new BlackbirdModule())
                 .serializerFactory(
                     tools.jackson.databind.ser.BeanSerializerFactory.instance
                         .withSerializerModifier(new ValueSerializerModifier() {

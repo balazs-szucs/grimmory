@@ -90,3 +90,35 @@ doctor:
     @echo "node: $$(node --version)"
     @echo "yarn: $$(corepack yarn --version)"
     @echo "docker: $$(docker --version)"
+
+# ── Native image (GraalVM) ──────────────────────────────────────
+# The native image build is resource-intensive (~10 GB RAM, 10–20 min).
+# It runs automatically in CI via .github/workflows/native-image-ci.yml.
+# These recipes exist for optional local validation on x86_64 machines.
+
+native_compose := 'docker compose -f native.docker-compose.yml'
+native_image_tag := env_var_or_default('GRIMMORY_NATIVE_TAG', 'grimmory:native')
+
+# Build the native-image Docker image locally.
+native-build platform='linux/amd64' tag=native_image_tag:
+    docker buildx build --platform "{{ platform }}" -f Dockerfile.native -t "{{ tag }}" --load .
+
+# Start the native-image dev stack (builds first, then runs).
+native-up:
+    {{ native_compose }} up --build
+
+# Start the native-image dev stack in the background.
+native-up-detached:
+    {{ native_compose }} up --build -d
+
+# Stop the native-image dev stack.
+native-down:
+    {{ native_compose }} down
+
+# Tail logs from the native-image dev stack.
+native-logs service='':
+    @if [[ -n "{{ service }}" ]]; then \
+      {{ native_compose }} logs -f "{{ service }}"; \
+    else \
+      {{ native_compose }} logs -f; \
+    fi

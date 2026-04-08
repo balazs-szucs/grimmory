@@ -27,9 +27,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -49,7 +49,7 @@ class LibraryRescanHelperTest {
     @Mock private TaskCancellationManager cancellationManager;
     @Mock private BookRepository bookRepository;
     @Mock private AudiobookProcessor audiobookProcessor;
-    @InjectMocks private LibraryRescanHelper libraryRescanHelper;
+    private LibraryRescanHelper libraryRescanHelper;
 
     @Captor private ArgumentCaptor<TaskProgressPayload> payloadCaptor;
     @Captor private ArgumentCaptor<MetadataUpdateContext> metadataContextCaptor;
@@ -59,7 +59,12 @@ class LibraryRescanHelperTest {
     private String taskId;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
+        ObjectProvider<BookMetadataUpdater> bookMetadataUpdaterProvider = mock(ObjectProvider.class);
+        lenient().when(bookMetadataUpdaterProvider.getObject()).thenReturn(bookMetadataUpdater);
+        libraryRescanHelper = new LibraryRescanHelper(libraryRepository, metadataExtractorFactory, bookMetadataUpdaterProvider, notificationService, cancellationManager, bookRepository, audiobookProcessor);
+
         library = new LibraryEntity();
         library.setId(1L);
         library.setName("Test Library");

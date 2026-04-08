@@ -7,6 +7,7 @@ import org.booklore.repository.AppSettingsRepository;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.module.blackbird.BlackbirdModule;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -26,7 +27,7 @@ public class InstallationService {
     public InstallationService(AppSettingsRepository appSettingsRepository, ObjectMapper objectMapper) {
         this.appSettingsRepository = appSettingsRepository;
         this.objectMapper = JsonMapper.builder()
-                .findAndAddModules()
+                .addModule(new BlackbirdModule())
                 .build();
     }
 

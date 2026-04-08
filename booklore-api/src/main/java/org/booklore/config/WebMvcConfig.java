@@ -19,7 +19,7 @@ import java.io.IOException;
 
 import static org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO)
 @RequiredArgsConstructor
 public class WebMvcConfig implements WebMvcConfigurer {

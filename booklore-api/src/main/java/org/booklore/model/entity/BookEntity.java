@@ -73,7 +73,7 @@ public class BookEntity {
     private Instant deletedAt;
 
     @BatchSize(size = 20)
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "book_shelf_mapping",
             joinColumns = @JoinColumn(name = "book_id"),

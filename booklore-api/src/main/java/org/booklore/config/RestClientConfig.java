@@ -11,7 +11,7 @@ import org.springframework.web.client.RestTemplate;
 import java.net.http.HttpClient;
 import java.time.Duration;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class RestClientConfig {
 
     @Bean

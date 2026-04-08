@@ -30,6 +30,8 @@ public class TaskCreateRequest {
     })
     private Object options;
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     public <T> T getOptionsAs(Class<T> optionsClass) {
         if (options == null) {
             return null;
@@ -37,7 +39,6 @@ public class TaskCreateRequest {
         if (optionsClass.isInstance(options)) {
             return optionsClass.cast(options);
         }
-        ObjectMapper mapper = new ObjectMapper();
-        return mapper.convertValue(options, optionsClass);
+        return MAPPER.convertValue(options, optionsClass);
     }
 }

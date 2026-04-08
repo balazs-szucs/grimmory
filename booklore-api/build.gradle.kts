@@ -9,6 +9,7 @@ plugins {
     id("org.springframework.boot") version "4.0.5"
     id("io.spring.dependency-management") version "1.1.7"
     id("org.hibernate.orm") version "7.3.0.Final"
+    id("org.graalvm.buildtools.native") version "1.0.0"
     id("com.github.ben-manes.versions") version "0.53.0"
     jacoco
 }
@@ -185,6 +186,32 @@ hibernate {
     enhancement {
         enableAssociationManagement = false
         enableLazyInitialization = true
+    }
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(25)
+            }
+            buildArgs.addAll(
+                "--gc=G1",
+                "--enable-native-access=ALL-UNNAMED",
+                "-Djava.awt.headless=true",
+                "-H:+ReportExceptionStackTraces",
+                "--emit build-report"
+            )
+        }
+        named("test") {
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(25)
+            }
+            buildArgs.addAll(
+                "--enable-native-access=ALL-UNNAMED",
+                "-Djava.awt.headless=true"
+            )
+        }
     }
 }
 
