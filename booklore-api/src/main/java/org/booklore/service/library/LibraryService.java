@@ -25,12 +25,16 @@ import org.booklore.repository.UserRepository;
 import org.booklore.service.NotificationService;
 import org.booklore.service.audit.AuditService;
 import org.booklore.service.monitoring.LibraryWatchService;
+import org.booklore.task.options.RescanLibraryContext;
 import org.booklore.util.FileService;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
@@ -61,6 +65,9 @@ public class LibraryService {
     private final AuthenticationService authenticationService;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final LibraryProcessingService libraryProcessingService;
+    private final Executor taskExecutor;
+    private final Set<Long> scanningLibraries = ConcurrentHashMap.newKeySet();
 
     @Transactional
     @EventListener(ApplicationReadyEvent.class)
