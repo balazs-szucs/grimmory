@@ -50,8 +50,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   isDarkTheme = true;
   canPrint = false;
 
-  authorization = '';
-
   page!: number;
   spread!: 'none' | 'even' | 'odd';
   zoom!: string;
@@ -72,6 +70,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   private embedPdfSaveResolve?: (buffer: ArrayBuffer | null) => void;
   private embedPdfSaveTimer?: ReturnType<typeof setTimeout>;
   private embedPdfInitTime = 0;
+  private pendingPdfBuffer?: ArrayBuffer;
   private initTimeout?: ReturnType<typeof setTimeout>;
   private isInitializingBookViewer = false;
   private pdfFetchAbortController?: AbortController;
@@ -351,8 +350,6 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         this.page = pdfMeta.pdfProgress?.page || 1;
         this.zoom = this.normalizeZoom(this.zoom);
         this.bookData = bookData;
-        const token = this.authService.getInternalAccessToken();
-        this.authorization = token ? `Bearer ${token}` : '';
         this.isLoading = false;
 
         // Initialize book viewer after loading completes
@@ -528,8 +525,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
   private async fetchAsObjectUrl(url: string, signal?: AbortSignal): Promise<string> {
     const headers: Record<string, string> = {};
-    if (this.authorization) {
-      headers['Authorization'] = this.authorization;
+    const token = this.authService.getInternalAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     try {
       const response = await fetch(url, { headers, credentials: 'include', signal });
@@ -826,8 +824,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
     try {
       const headers: Record<string, string> = {};
-      if (this.authorization) {
-        headers['Authorization'] = this.authorization;
+      const token = this.authService.getInternalAccessToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(this.bookData, { headers, credentials: 'include' });
@@ -857,13 +856,13 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       });
 
       this.embedPdfIframe = iframe;
+      this.pendingPdfBuffer = pdfBuffer;
 
       iframe.contentWindow!.postMessage({
         type: 'init',
-        buffer: pdfBuffer,
         wasmUrl: '/assets/pdfium/pdfium.wasm',
         theme: this.isDarkTheme ? 'dark' : 'light'
-      }, location.origin, [pdfBuffer]);
+      }, location.origin);
 
     } catch (err) {
       console.error('[EmbedPDF] FATAL:', err);
@@ -879,6 +878,15 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     switch (msg.type) {
       case 'ready':
         this.docViewerReady = true;
+        if (this.pendingPdfBuffer && this.embedPdfIframe?.contentWindow) {
+          const buf = this.pendingPdfBuffer;
+          this.pendingPdfBuffer = undefined;
+          this.embedPdfIframe.contentWindow.postMessage(
+            { type: 'load', buffer: buf },
+            location.origin,
+            [buf]
+          );
+        }
         break;
       case 'documentOpened':
         break;
@@ -925,8 +933,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       if (!buffer) return;
 
       const headers: Record<string, string> = { 'Content-Type': 'application/pdf' };
-      if (this.authorization) {
-        headers['Authorization'] = this.authorization;
+      const uploadToken = this.authService.getInternalAccessToken();
+      if (uploadToken) {
+        headers['Authorization'] = `Bearer ${uploadToken}`;
       }
 
       const url = this.altBookType
@@ -965,6 +974,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       this.embedPdfIframe = null;
     }
 
+    this.pendingPdfBuffer = undefined;
     this.embedPdfInitTime = 0;
   }
 
@@ -1287,8 +1297,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     if (!this.bookId || this.lastAnnotationData === null) return;
     const url = `${API_CONFIG.BASE_URL}/api/v1/pdf-annotations/book/${this.bookId}`;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.authorization) {
-      headers['Authorization'] = this.authorization;
+    const syncToken = this.authService.getInternalAccessToken();
+    if (syncToken) {
+      headers['Authorization'] = `Bearer ${syncToken}`;
     }
     fetch(url, {
       method: 'PUT',
@@ -1322,8 +1333,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     }
     const url = `${API_CONFIG.BASE_URL}/api/v1/books/progress`;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.authorization) {
-      headers['Authorization'] = this.authorization;
+    const progressToken = this.authService.getInternalAccessToken();
+    if (progressToken) {
+      headers['Authorization'] = `Bearer ${progressToken}`;
     }
     fetch(url, {
       method: 'POST',
