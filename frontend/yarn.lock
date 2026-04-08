@@ -2140,11 +2140,11 @@ __metadata:
   linkType: hard
 
 "@hono/node-server@npm:^1.19.9":
-  version: 1.19.11
-  resolution: "@hono/node-server@npm:1.19.11"
+  version: 1.19.13
+  resolution: "@hono/node-server@npm:1.19.13"
   peerDependencies:
     hono: ^4
-  checksum: 10c0/34b1c29c249c5cd95469980b5c359370f3cbab49b3603f324a4afbf895d68b8d5485c71f1887769eabeb3499276c49e7102084234b4feb3853edb748aaa85f50
+  checksum: 10c0/e6a13a4831acd6ad2d80f20e9921b9a4207a3c18d78f457647ed102581bd5bbbd3464903b89544a88e5571e470badf105d9ef5c4657a7c2f47f5d0a7beafe51d
   languageName: node
   linkType: hard
 
@@ -6149,9 +6149,9 @@ __metadata:
   linkType: hard
 
 "hono@npm:^4.11.4":
-  version: 4.12.9
-  resolution: "hono@npm:4.12.9"
-  checksum: 10c0/393256552642f681e52935163508d9605e5552e186d9b99ff2caf219d4248341b83e3eb975c40a97149c86890d19d73421efc889aa465a28eb5920ccc42cff34
+  version: 4.12.12
+  resolution: "hono@npm:4.12.12"
+  checksum: 10c0/7e514cac7f0fde53a93b5344605a11bc944c55c7b68e586ab722269a60c2d78e81b91c298e934b232d44aa8fcbfd2584b7cd7e01fb3f0edaaba0597a584b2ead
   languageName: node
   linkType: hard
 
