@@ -51,6 +51,7 @@ export class CanvasRendererComponent implements OnChanges, AfterViewInit, OnDest
 
   imageLoaded = false;
   private currentImage: HTMLImageElement | null = null;
+  private pendingImage: HTMLImageElement | null = null;
 
   private static readonly MAX_CANVAS_SAFARI = 4096;
   private static readonly MAX_CANVAS_OTHER = 16384;
@@ -68,7 +69,10 @@ export class CanvasRendererComponent implements OnChanges, AfterViewInit, OnDest
       canvas.width = 0;
       canvas.height = 0;
     }
+    this.cancelPendingImage();
     if (this.currentImage) {
+      this.currentImage.onload = null;
+      this.currentImage.onerror = null;
       this.currentImage.src = '';
       this.currentImage = null;
     }
@@ -87,15 +91,30 @@ export class CanvasRendererComponent implements OnChanges, AfterViewInit, OnDest
   private loadAndDraw(): void {
     if (!this.imageUrl) return;
 
+    this.cancelPendingImage();
+
     this.imageLoaded = false;
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    this.pendingImage = img;
     img.onload = () => {
-      this.currentImage = img;
-      this.drawImage(img);
-      this.imageLoaded = true;
+      if (this.pendingImage === img) {
+        this.currentImage = img;
+        this.drawImage(img);
+        this.imageLoaded = true;
+        this.pendingImage = null;
+      }
     };
     img.src = this.imageUrl;
+  }
+
+  private cancelPendingImage(): void {
+    if (this.pendingImage) {
+      this.pendingImage.onload = null;
+      this.pendingImage.onerror = null;
+      this.pendingImage.src = '';
+      this.pendingImage = null;
+    }
   }
 
   private drawImage(img: HTMLImageElement): void {

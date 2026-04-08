@@ -795,7 +795,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
     for (const [url, img] of this.preloadedImages.entries()) {
       if (!keepUrls.has(url)) {
-        img.src = '';
+        img.onload = null;
+        img.onerror = null;
         this.preloadedImages.delete(url);
       }
     }
@@ -2276,7 +2277,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
     // Release all preloaded image memory
     for (const img of this.preloadedImages.values()) {
-      img.src = '';
+      img.onload = null;
+      img.onerror = null;
     }
     this.preloadedImages.clear();
 
