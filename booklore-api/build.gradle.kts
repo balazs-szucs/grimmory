@@ -198,10 +198,15 @@ graalvmNative {
             buildArgs.addAll(
                 "--gc=G1",
                 "--enable-native-access=ALL-UNNAMED",
+                "-H:+AddAllCharsets",
                 "-Djava.awt.headless=true",
                 "-H:+ReportExceptionStackTraces",
                 "--emit build-report"
             )
+            val nativeImageXmx = findProperty("nativeImageXmx") as String?
+            if (nativeImageXmx != null) {
+                buildArgs.add("-J-Xmx${nativeImageXmx}")
+            }
         }
         named("test") {
             javaLauncher = javaToolchains.launcherFor {
@@ -211,6 +216,16 @@ graalvmNative {
                 "--enable-native-access=ALL-UNNAMED",
                 "-Djava.awt.headless=true"
             )
+        }
+    }
+    // GraalVM tracing agent: run `./gradlew -Pagent test` then
+    // `./gradlew metadataCopy` to auto-generate reflection/resource metadata.
+    agent {
+        defaultMode = "standard"
+        metadataCopy {
+            mergeWithExisting = true
+            inputTaskNames.add("test")
+            outputDirectories.add("src/main/resources/META-INF/native-image/org.booklore/booklore-api")
         }
     }
 }

@@ -42,10 +42,12 @@ import org.booklore.repository.AuthorRepository;
 import org.booklore.repository.NotebookEntryRepository;
 import org.booklore.repository.projection.BookCoverUpdateProjection;
 import org.booklore.repository.projection.BookEmbeddingProjection;
+import org.booklore.service.metadata.writer.ComicInfo;
 import org.booklore.task.options.LibraryRescanOptions;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
+import org.springframework.aot.hint.TypeReference;
 
 public class GraalVmRuntimeHints implements RuntimeHintsRegistrar {
 
@@ -169,6 +171,62 @@ public class GraalVmRuntimeHints implements RuntimeHintsRegistrar {
         };
         for (Class<?> c : websocketDtos) {
             hints.reflection().registerType(c, allAccess);
+        }
+
+        // JAXB model classes accessed reflectively by jakarta.xml.bind at runtime
+        Class<?>[] jaxbTypes = {
+            ComicInfo.class,
+            ComicInfo.Pages.class,
+        };
+        for (Class<?> c : jaxbTypes) {
+            hints.reflection().registerType(c, allAccess);
+        }
+
+        // JJWT 0.13.0 uses Classes.newInstance(String) throughout its static initializers
+        // across Jwts, Jwts.SIG/ENC/KEY/ZIP, Jwks, Jwks.OP/CRV/HASH, and Keys.
+        // Every such call site is listed here (extracted by scanning all jjwt jars).
+        String[] jjwtClasses = {
+            // Jwts.<clinit>
+            "io.jsonwebtoken.impl.DefaultJwtBuilder$Supplier",
+            "io.jsonwebtoken.impl.DefaultJwtParserBuilder$Supplier",
+            "io.jsonwebtoken.impl.DefaultJwtHeaderBuilder$Supplier",
+            "io.jsonwebtoken.impl.DefaultClaimsBuilder$Supplier",
+            // Jwts.SIG/ENC/KEY/ZIP.<clinit>
+            "io.jsonwebtoken.impl.security.StandardSecureDigestAlgorithms",
+            "io.jsonwebtoken.impl.security.StandardEncryptionAlgorithms",
+            "io.jsonwebtoken.impl.security.StandardKeyAlgorithms",
+            "io.jsonwebtoken.impl.io.StandardCompressionAlgorithms",
+            // Keys.<clinit>
+            "io.jsonwebtoken.impl.security.KeysBridge",
+            // Jwks.<clinit>
+            "io.jsonwebtoken.impl.security.DefaultDynamicJwkBuilder$Supplier",
+            "io.jsonwebtoken.impl.security.DefaultJwkParserBuilder$Supplier",
+            "io.jsonwebtoken.impl.security.DefaultJwkSetBuilder$Supplier",
+            "io.jsonwebtoken.impl.security.DefaultJwkSetParserBuilder$Supplier",
+            // Jwks.OP.<clinit>
+            "io.jsonwebtoken.impl.security.StandardKeyOperations",
+            "io.jsonwebtoken.impl.security.DefaultKeyOperationBuilder$Supplier",
+            "io.jsonwebtoken.impl.security.DefaultKeyOperationPolicyBuilder$Supplier",
+            // Jwks.CRV.<clinit>
+            "io.jsonwebtoken.impl.security.StandardCurves",
+            // Jwks.HASH.<clinit>
+            "io.jsonwebtoken.impl.security.StandardHashAlgorithms",
+        };
+        for (String className : jjwtClasses) {
+            hints.reflection().registerType(TypeReference.of(className), allAccess);
+        }
+
+        // Caffeine cache implementation classes loaded via Class.forName in LocalCacheFactory
+        // and node implementation classes loaded via Class.forName in NodeFactory.
+        // Each cache config requires both a cache class and a node class.
+        String[] caffeineClasses = {
+            "com.github.benmanes.caffeine.cache.SIMSA",   // cache: softValues + maxSize + expireAfterAccess
+            "com.github.benmanes.caffeine.cache.PDAMS",   // node:  softValues + maxSize + expireAfterAccess
+            "com.github.benmanes.caffeine.cache.SSMSW",   // cache: strongValues + maxSize + expireAfterWrite
+            "com.github.benmanes.caffeine.cache.PSWMS",   // node:  strongValues + maxSize + expireAfterWrite
+        };
+        for (String className : caffeineClasses) {
+            hints.reflection().registerType(TypeReference.of(className), allAccess);
         }
     }
 

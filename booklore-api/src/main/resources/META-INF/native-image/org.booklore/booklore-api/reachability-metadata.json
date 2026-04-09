@@ -1,0 +1,74 @@
+{
+  "foreign": {
+    "downcalls": [
+      {
+        "returnType": "int",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "long",
+        "parameterTypes": []
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": ["long"]
+      },
+      {
+        "returnType": "int",
+        "parameterTypes": ["long"]
+      },
+      {
+        "returnType": "long",
+        "parameterTypes": ["long"]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": ["long", "int"]
+      },
+      {
+        "returnType": "int",
+        "parameterTypes": ["long", "int"]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": ["long", "long"]
+      },
+      {
+        "returnType": "int",
+        "parameterTypes": ["long", "long"]
+      },
+      {
+        "returnType": "long",
+        "parameterTypes": ["long", "long"]
+      },
+      {
+        "returnType": "void",
+        "parameterTypes": ["long", "long", "long"]
+      },
+      {
+        "returnType": "int",
+        "parameterTypes": ["long", "long", "long"]
+      },
+      {
+        "returnType": "long",
+        "parameterTypes": ["long", "long", "long"]
+      },
+      {
+        "returnType": "int",
+        "parameterTypes": ["long", "long", "long", "long"]
+      },
+      {
+        "returnType": "long",
+        "parameterTypes": ["long", "long", "long", "long"]
+      },
+      {
+        "returnType": "int",
+        "parameterTypes": ["long", "long", "long", "long", "long"]
+      },
+      {
+        "returnType": "long",
+        "parameterTypes": ["long", "long", "long", "long", "long"]
+      }
+    ]
+  }
+}

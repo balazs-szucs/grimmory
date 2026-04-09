@@ -12,6 +12,7 @@ local_container_name := 'grimmory-local'
 local_db_url := 'jdbc:mariadb://localhost:3366/grimmory?createDatabaseIfNotExist=true'
 local_db_user := 'grimmory'
 local_db_password := 'grimmory'
+host_platform := if arch() == "aarch64" { "linux/arm64" } else { "linux/amd64" }
 
 # Show the primary developer and agent command surface, including submodule recipes.
 help:
@@ -66,7 +67,7 @@ dev-logs service='':
     fi
 
 # Build the production image locally with buildx. Usage: `just image-build [platform] [tag]`.
-image-build platform='linux/amd64' tag=local_image_tag:
+image-build platform=host_platform tag=local_image_tag:
     docker buildx build --platform "{{ platform }}" -t "{{ tag }}" --load .
 
 # Run the locally built production image against the expected development defaults.
@@ -98,17 +99,32 @@ doctor:
 
 native_compose := 'docker compose -f native.docker-compose.yml'
 native_image_tag := env_var_or_default('GRIMMORY_NATIVE_TAG', 'grimmory:native')
+native_min_mem_gb := '10'
+
+# Verify Docker has enough memory for native-image compilation.
+[no-exit-message]
+_native-preflight:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mem_bytes=$(docker info --format '{{{{.MemTotal}}')
+    mem_gb=$(( mem_bytes / 1073741824 ))
+    if (( mem_gb < {{ native_min_mem_gb }} )); then
+      echo "ERROR: Docker has ${mem_gb} GB memory — native-image compilation needs ≥{{ native_min_mem_gb }} GB."
+      echo "Increase memory in Docker Desktop → Settings → Resources, then restart Docker."
+      exit 1
+    fi
+    echo "Docker memory: ${mem_gb} GB (minimum {{ native_min_mem_gb }} GB) ✓"
 
 # Build the native-image Docker image locally.
-native-build platform='linux/amd64' tag=native_image_tag:
+native-build platform=host_platform tag=native_image_tag: _native-preflight
     docker buildx build --platform "{{ platform }}" -f Dockerfile.native -t "{{ tag }}" --load .
 
 # Start the native-image dev stack (builds first, then runs).
-native-up:
+native-up: _native-preflight
     {{ native_compose }} up --build
 
 # Start the native-image dev stack in the background.
-native-up-detached:
+native-up-detached: _native-preflight
     {{ native_compose }} up --build -d
 
 # Stop the native-image dev stack.

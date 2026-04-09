@@ -45,9 +45,15 @@ COPY --from=frontend-build /workspace/frontend/dist/grimmory/browser /tmp/fronte
 
 # Build the native image using Spring Boot's nativeCompile task.
 # pdfium4j native libs are loaded at runtime via FFM not linked into the binary.
+# NATIVE_BUILD_XMX controls the native-image compiler heap (default: 75% of
+# container memory).  Set an explicit value when Docker Desktop memory is tight,
+# e.g.  --build-arg NATIVE_BUILD_XMX=7g .
+ARG NATIVE_BUILD_XMX=
 RUN --mount=type=cache,target=/root/.gradle \
     TARGETARCH=${TARGETARCH} ./gradlew --no-daemon \
+        -Dorg.gradle.jvmargs="-Xmx512m" \
         -PfrontendDistDir=/tmp/frontend-dist \
+        ${NATIVE_BUILD_XMX:+-PnativeImageXmx=${NATIVE_BUILD_XMX}} \
         nativeCompile
 
 RUN cp build/native/nativeCompile/booklore-api /workspace/booklore-api/app
