@@ -30,22 +30,26 @@ class MockIntersectionObserver {
   }
 }
 
-if (!globalThis.matchMedia) {
-  globalThis.matchMedia = (query: string): MediaQueryList => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    dispatchEvent: () => false,
-  });
-}
+const matchMediaMock = (query: string): MediaQueryList => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+  addListener: () => undefined,
+  removeListener: () => undefined,
+  dispatchEvent: () => false,
+});
 
-if (!window.matchMedia) {
-  window.matchMedia = globalThis.matchMedia;
-}
+Object.defineProperty(globalThis, 'matchMedia', {
+  writable: true,
+  value: matchMediaMock,
+});
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: matchMediaMock,
+});
 
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
