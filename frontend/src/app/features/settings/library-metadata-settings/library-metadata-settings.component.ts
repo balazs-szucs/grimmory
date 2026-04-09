@@ -1,4 +1,5 @@
-import {Component, effect, inject} from '@angular/core';
+import {Component, DestroyRef, effect, inject} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {AccordionModule} from 'primeng/accordion';
@@ -29,6 +30,7 @@ export class LibraryMetadataSettingsComponent {
   private messageService = inject(MessageService);
   private sidecarService = inject(SidecarService);
   private t = inject(TranslocoService);
+  private destroyRef = inject(DestroyRef);
 
   defaultMetadataOptions: MetadataRefreshOptions = this.getDefaultMetadataOptions();
   libraryMetadataOptions: Record<number, MetadataRefreshOptions> = {};
@@ -103,7 +105,9 @@ export class LibraryMetadataSettingsComponent {
       }
     ];
 
-    this.appSettingsService.saveSettings(settingsToSave).subscribe({
+    this.appSettingsService.saveSettings(settingsToSave).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: () => {
         this.showMessage('success', this.t.translate('common.success'), this.t.translate('settingsLibMeta.defaultSettings.saveSuccess'));
         this.updateLibrariesUsingDefaults();
@@ -127,7 +131,9 @@ export class LibraryMetadataSettingsComponent {
       }
     ];
 
-    this.appSettingsService.saveSettings(settingsToSave).subscribe({
+    this.appSettingsService.saveSettings(settingsToSave).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: () => {
         this.showMessage('success', this.t.translate('common.success'), this.t.translate('settingsLibMeta.libraryOverrides.saveSuccess'));
       },
@@ -245,7 +251,9 @@ export class LibraryMetadataSettingsComponent {
     event.stopPropagation();
     this.sidecarExporting[libraryId] = true;
 
-    this.sidecarService.bulkExport(libraryId).subscribe({
+    this.sidecarService.bulkExport(libraryId).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: (response) => {
         this.sidecarExporting[libraryId] = false;
         this.showMessage('success', this.t.translate('settingsLibMeta.libraryOverrides.exportComplete'), this.t.translate('settingsLibMeta.libraryOverrides.exportSuccess', {count: response.exported}));
@@ -262,7 +270,9 @@ export class LibraryMetadataSettingsComponent {
     event.stopPropagation();
     this.sidecarImporting[libraryId] = true;
 
-    this.sidecarService.bulkImport(libraryId).subscribe({
+    this.sidecarService.bulkImport(libraryId).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: (response) => {
         this.sidecarImporting[libraryId] = false;
         this.showMessage('success', this.t.translate('settingsLibMeta.libraryOverrides.importComplete'), this.t.translate('settingsLibMeta.libraryOverrides.importSuccess', {count: response.imported}));

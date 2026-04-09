@@ -1,4 +1,4 @@
-import { Component, effect, inject, OnDestroy, ViewChild } from '@angular/core';
+import { Component, DestroyRef, effect, inject, ViewChild } from '@angular/core';
 import { LayoutService } from '../layout.service';
 import { Router, RouterLink } from '@angular/router';
 import { TooltipModule } from 'primeng/tooltip';
@@ -14,8 +14,7 @@ import { AuthService } from '../../service/auth.service';
 import { UserService } from '../../../features/settings/user-management/user.service';
 import { Popover } from 'primeng/popover';
 import { MetadataProgressService } from '../../service/metadata-progress.service';
-import { takeUntil } from 'rxjs/operators';
-import { Subject } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MetadataBatchProgressNotification } from '../../model/metadata-batch-progress.model';
 import { BookdropFileService } from '../../../features/bookdrop/service/bookdrop-file.service';
 import { DialogLauncherService } from '../../services/dialog-launcher.service';
@@ -48,7 +47,7 @@ import type { MenuItem } from 'primeng/api';
     TranslocoDirective,
   ],
 })
-export class AppTopBarComponent implements OnDestroy {
+export class AppTopBarComponent {
   public readonly layoutService = inject(LayoutService);
   protected readonly userService = inject(UserService);
   protected readonly user = this.userService.currentUser;
@@ -70,8 +69,8 @@ export class AppTopBarComponent implements OnDestroy {
   hasAnyTasks = false;
   hasPendingBookdropFiles = false;
 
+  private readonly destroyRef = inject(DestroyRef);
   private eventTimer: number | undefined;
-  private destroy$ = new Subject<void>();
 
   private latestTasks: Record<string, MetadataBatchProgressNotification> = {};
   private latestHasPendingFiles = false;
@@ -86,8 +85,10 @@ export class AppTopBarComponent implements OnDestroy {
     this.subscribeToMetadataProgress();
     this.subscribeToNotifications();
 
+    this.destroyRef.onDestroy(() => clearTimeout(this.eventTimer));
+
     this.metadataProgressService.activeTasks$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tasks) => {
         this.latestTasks = tasks;
         this.hasAnyTasks = Object.keys(tasks).length > 0;
@@ -96,7 +97,7 @@ export class AppTopBarComponent implements OnDestroy {
       });
 
     this.bookdropFileService.hasPendingFiles$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((hasPending) => {
         this.latestHasPendingFiles = hasPending;
         this.hasPendingBookdropFiles = hasPending;
@@ -110,17 +111,13 @@ export class AppTopBarComponent implements OnDestroy {
     });
 
     this.translocoService.langChanges$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.initializeStatsMenu();
       });
   }
 
-  ngOnDestroy(): void {
-    clearTimeout(this.eventTimer);
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
+
 
   toggleMenu() {
     this.isMenuVisible = !this.isMenuVisible;
@@ -161,7 +158,7 @@ export class AppTopBarComponent implements OnDestroy {
 
   switchLanguage(lang: string) {
     if (lang === this.activeLang) return;
-    this.translocoService.load(lang).subscribe(() => {
+    this.translocoService.load(lang).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.translocoService.setActiveLang(lang);
       localStorage.setItem(LANG_STORAGE_KEY, lang);
       this.activeLang = lang;
@@ -185,7 +182,7 @@ export class AppTopBarComponent implements OnDestroy {
 
   private subscribeToMetadataProgress() {
     this.metadataProgressService.progressUpdates$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((progress) => {
         this.progressHighlight = progress.status === 'IN_PROGRESS';
       });
@@ -193,7 +190,7 @@ export class AppTopBarComponent implements OnDestroy {
 
   private subscribeToNotifications() {
     this.notificationService.latestNotification$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((notification: LogNotification) => {
         this.latestNotificationSeverity = notification.severity;
         this.triggerPulseEffect();

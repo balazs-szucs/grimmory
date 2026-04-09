@@ -2,7 +2,6 @@ import {Injectable, inject} from '@angular/core';
 import {AppSettingsService} from './app-settings.service';
 import {MessageService} from 'primeng/api';
 import {TranslocoService} from '@jsverse/transloco';
-import {Observable} from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -13,18 +12,14 @@ export class SettingsHelperService {
   private readonly messageService = inject(MessageService);
   private readonly t = inject(TranslocoService);
 
-  saveSetting(key: string, value: unknown): Observable<void> {
-    const observable = this.appSettingsService.saveSettings([{key, newValue: value}]);
-
-    observable.subscribe({
+  saveSetting(key: string, value: unknown): void {
+    this.appSettingsService.saveSettings([{key, newValue: value}]).subscribe({
       next: () => this.showSuccessMessage(),
       error: (error) => {
         console.error('Failed to save setting:', error);
         this.showErrorMessage();
       }
     });
-
-    return observable;
   }
 
   private showSuccessMessage(): void {
