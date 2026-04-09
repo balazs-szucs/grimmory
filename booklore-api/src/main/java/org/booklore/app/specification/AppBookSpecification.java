@@ -173,6 +173,82 @@ public class AppBookSpecification {
     }
 
     /**
+     * Filter books by multiple file types with mode support.
+     * OR  = books with at least one file of ANY listed type
+     * AND = books with files of ALL listed types
+     * NOT = books with NONE of the listed file types
+     */
+    public static Specification<BookEntity> withFileTypes(List<String> fileTypes, String mode) {
+        return (root, query, cb) -> {
+            List<BookFileType> parsed = fileTypes.stream()
+                    .filter(s -> s != null && !s.isBlank())
+                    .map(s -> {
+                        try { return BookFileType.valueOf(s.trim().toUpperCase()); }
+                        catch (IllegalArgumentException e) { return null; }
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            if (parsed.isEmpty()) return cb.conjunction();
+
+            if ("and".equals(mode)) {
+                List<Predicate> predicates = new ArrayList<>();
+                for (BookFileType ft : parsed) {
+                    Subquery<Long> sub = query.subquery(Long.class);
+                    Root<BookFileEntity> bfRoot = sub.from(BookFileEntity.class);
+                    sub.select(bfRoot.get("book").get("id"))
+                            .where(cb.equal(bfRoot.get("bookType"), ft));
+                    predicates.add(root.get("id").in(sub));
+                }
+                return cb.and(predicates.toArray(new Predicate[0]));
+            }
+
+            Subquery<Long> sub = query.subquery(Long.class);
+            Root<BookFileEntity> bfRoot = sub.from(BookFileEntity.class);
+            sub.select(bfRoot.get("book").get("id"))
+                    .where(bfRoot.get("bookType").in(parsed));
+
+            if ("not".equals(mode)) {
+                return cb.not(root.get("id").in(sub));
+            }
+            return root.get("id").in(sub);
+        };
+    }
+
+    /**
+     * Filter books by multiple read statuses with mode support (per-user).
+     * OR  = books with ANY of the listed read statuses
+     * AND = impossible for a single-value field, treated as OR
+     * NOT = books with NONE of the listed read statuses
+     */
+    public static Specification<BookEntity> withReadStatuses(List<String> statuses, Long userId, String mode) {
+        return (root, query, cb) -> {
+            if (userId == null) return cb.conjunction();
+            List<ReadStatus> parsed = statuses.stream()
+                    .filter(s -> s != null && !s.isBlank())
+                    .map(s -> {
+                        try { return ReadStatus.valueOf(s.trim().toUpperCase()); }
+                        catch (IllegalArgumentException e) { return null; }
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            if (parsed.isEmpty()) return cb.conjunction();
+
+            Subquery<Long> sub = query.subquery(Long.class);
+            Root<UserBookProgressEntity> progressRoot = sub.from(UserBookProgressEntity.class);
+            sub.select(progressRoot.get("book").get("id"))
+                    .where(
+                            cb.equal(progressRoot.get("user").get("id"), userId),
+                            progressRoot.get("readStatus").in(parsed)
+                    );
+
+            if ("not".equals(mode)) {
+                return cb.not(root.get("id").in(sub));
+            }
+            return root.get("id").in(sub);
+        };
+    }
+
+    /**
      * Filter books where the user's personal rating is >= minRating.
      */
     public static Specification<BookEntity> withMinRating(int minRating, Long userId) {
