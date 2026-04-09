@@ -58,7 +58,14 @@ public class EpubReaderService {
         map.put(".smil", "application/smil+xml");
         map.put(".mp3", "audio/mpeg");
         map.put(".mp4", "video/mp4");
+        map.put(".m4a", "audio/mp4");
+        map.put(".m4b", "audio/mp4");
+        map.put(".aac", "audio/aac");
+        map.put(".wav", "audio/wav");
+        map.put(".flac", "audio/flac");
+        map.put(".ogg", "audio/ogg");
         map.put(".webm", "video/webm");
+        map.put(".avif", "image/avif");
         map.put(".opf", "application/oebps-package+xml");
         return Collections.unmodifiableMap(map);
     }
@@ -238,22 +245,7 @@ public class EpubReaderService {
         Resource coverResource = CoverDetector.detectCoverImage(book);
         String coverHref = coverResource != null ? rootPath + coverResource.getHref() : null;
 
-        // Find nav resource: look for XHTML resource not in spine that could be navigation
-        String navHref = null;
-        Set<String> spineHrefs = new HashSet<>();
-        for (SpineReference ref : book.getSpine().getSpineReferences()) {
-            spineHrefs.add(ref.getResource().getHref());
-        }
-        for (Resource resource : book.getResources().getAll()) {
-            if (resource.getMediaType() == MediaTypes.XHTML
-                    && !spineHrefs.contains(resource.getHref())
-                    && resource.getMediaType() != MediaTypes.NCX) {
-                navHref = rootPath + resource.getHref();
-                break;
-            }
-        }
-
-        List<EpubManifestItem> manifest = mapManifest(book, rootPath, coverHref, navHref);
+        List<EpubManifestItem> manifest = mapManifest(book, rootPath);
         List<EpubSpineItem> spine = mapSpine(book, rootPath);
         Map<String, Object> metadata = mapMetadata(book);
         EpubTocItem toc = mapToc(book.getTableOfContents(), rootPath);
@@ -270,23 +262,24 @@ public class EpubReaderService {
                 .build();
     }
 
-    private List<EpubManifestItem> mapManifest(Book book, String rootPath, String coverHref, String navHref) {
+    private List<EpubManifestItem> mapManifest(Book book, String rootPath) {
         List<EpubManifestItem> manifest = new ArrayList<>();
         for (Resource resource : book.getResources().getAll()) {
             String fullHref = rootPath + resource.getHref();
-            List<String> properties = new ArrayList<>();
-            if (coverHref != null && fullHref.equals(coverHref)) {
-                properties.add("cover-image");
-            }
-            if (navHref != null && fullHref.equals(navHref)) {
-                properties.add("nav");
+
+            // Use EPUB3 manifest item properties directly from the parsed resource
+            List<String> properties = null;
+            if (resource.getProperties() != null && !resource.getProperties().isEmpty()) {
+                properties = resource.getProperties().stream()
+                        .map(ManifestItemProperties::getName)
+                        .toList();
             }
 
             manifest.add(EpubManifestItem.builder()
                     .id(resource.getId())
                     .href(fullHref)
                     .mediaType(resource.getMediaType().name())
-                    .properties(properties.isEmpty() ? null : properties)
+                    .properties(properties)
                     .size(resource.getSize())
                     .build());
         }
@@ -335,6 +328,16 @@ public class EpubReaderService {
 
         List<String> descriptions = md.getDescriptions();
         if (descriptions != null && !descriptions.isEmpty()) metadata.put("description", descriptions.get(0));
+
+        // EPUB3 rendition properties
+        if (md.getRenditionLayout() != null) metadata.put("rendition:layout", md.getRenditionLayout());
+        if (md.getRenditionOrientation() != null) metadata.put("rendition:orientation", md.getRenditionOrientation());
+        if (md.getRenditionSpread() != null) metadata.put("rendition:spread", md.getRenditionSpread());
+        if (md.getMediaDuration() != null) metadata.put("media:duration", md.getMediaDuration());
+
+        // Page progression direction from spine
+        String ppd = book.getSpine().getPageProgressionDirection();
+        if (ppd != null && !ppd.isEmpty()) metadata.put("page-progression-direction", ppd);
 
         return metadata;
     }
@@ -401,8 +404,7 @@ public class EpubReaderService {
 
     private void streamEntryFromZip(Path epubPath, String entryName, OutputStream outputStream) throws IOException {
         try (NativeArchive archive = NativeArchive.open(epubPath)) {
-            byte[] data = archive.readEntry(entryName);
-            outputStream.write(data);
+            archive.streamEntry(entryName, outputStream);
         }
     }
 

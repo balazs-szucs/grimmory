@@ -8,6 +8,7 @@ import org.grimmory.epub4j.domain.Spine;
 import org.grimmory.epub4j.epub.EpubReader;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -49,7 +50,9 @@ public class EpubContentReader {
                         String.format("Spine item %d has no resource in: %s", spineIndex, epubFile.getName()));
             }
 
-            return new String(resource.getData(), StandardCharsets.UTF_8);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            resource.writeTo(baos);
+            return baos.toString(StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new EpubReadException("Failed to read EPUB file: " + epubFile.getName(), e);
         }

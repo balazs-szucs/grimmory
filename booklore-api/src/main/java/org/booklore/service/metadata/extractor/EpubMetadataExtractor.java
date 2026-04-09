@@ -21,6 +21,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -95,8 +96,10 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                 CoverDetectionResult result = detection.get();
                 log.debug("Cover detected for {} via {}: {}",
                         epubFile.getName(), result.method(), result.resource().getHref());
-                byte[] data = result.resource().getData();
-                if (data != null && data.length > 0) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                result.resource().writeTo(baos);
+                byte[] data = baos.toByteArray();
+                if (data.length > 0) {
                     return data;
                 }
             }
@@ -118,7 +121,9 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                     String href = URLDecoder.decode(item.getAttribute("href"), StandardCharsets.UTF_8);
                     String fullPath = resolvePath(opfName, href);
                     if (container.exists(fullPath)) {
-                        return container.readBytes(fullPath);
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        container.streamTo(fullPath, baos);
+                        return baos.toByteArray();
                     }
                 }
             }
@@ -135,7 +140,9 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                         String decodedHref = URLDecoder.decode(href, StandardCharsets.UTF_8);
                         String fullPath = resolvePath(opfName, decodedHref);
                         if (container.exists(fullPath)) {
-                            return container.readBytes(fullPath);
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            container.streamTo(fullPath, baos);
+                            return baos.toByteArray();
                         }
                     }
                 }
@@ -146,7 +153,9 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                 String lower = name.toLowerCase();
                 if (lower.contains("cover") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
                         lower.endsWith(".png") || lower.endsWith(".webp"))) {
-                    return container.readBytes(name);
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    container.streamTo(name, baos);
+                    return baos.toByteArray();
                 }
             }
         } catch (Exception e) {
@@ -551,7 +560,9 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
         }
 
         try {
-            return res.getData();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            res.writeTo(baos);
+            return baos.toByteArray();
         } catch (IOException e) {
             log.warn("Failed to read data for resource", e);
             return null;

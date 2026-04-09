@@ -32,6 +32,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -529,7 +530,9 @@ public class EpubMetadataWriter implements MetadataWriter {
                     throw new IOException("ZIP entry outside target directory: " + name);
                 }
                 Files.createDirectories(entryPath.getParent());
-                Files.write(entryPath, container.readBytes(name));
+                try (OutputStream out = Files.newOutputStream(entryPath)) {
+                    container.streamTo(name, out);
+                }
             }
         }
     }

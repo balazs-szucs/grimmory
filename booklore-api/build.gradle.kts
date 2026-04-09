@@ -131,11 +131,11 @@ dependencies {
     implementation("com.twelvemonkeys.imageio:imageio-bmp:3.13.1")
 
     // epub4j-grimmory fork publishes as org.grimmory:epub4j-core
-    val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.0.1"
+    val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.1.0"
     implementation(epub4jCoords)
 
     // epub4j-native for native archive parsing
-    val epub4jNativeCoords = if (useLocalLibs) "org.grimmory:epub4j-native:+" else "org.grimmory:epub4j-native:1.0.1"
+    val epub4jNativeCoords = if (useLocalLibs) "org.grimmory:epub4j-native:+" else "org.grimmory:epub4j-native:1.1.0"
     implementation(epub4jNativeCoords)
 
     // --- Audio Metadata (Audiobook Support) ---
