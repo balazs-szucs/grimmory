@@ -1,16 +1,19 @@
 package org.booklore.app.specification;
 
+import org.booklore.exception.APIException;
 import org.booklore.model.entity.*;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.ReadStatus;
 import jakarta.persistence.criteria.*;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 public class AppBookSpecification {
 
@@ -180,14 +183,23 @@ public class AppBookSpecification {
      */
     public static Specification<BookEntity> withFileTypes(List<String> fileTypes, String mode) {
         return (root, query, cb) -> {
+            List<String> unknown = new ArrayList<>();
             List<BookFileType> parsed = fileTypes.stream()
                     .filter(s -> s != null && !s.isBlank())
                     .map(s -> {
-                        try { return BookFileType.valueOf(s.trim().toUpperCase()); }
-                        catch (IllegalArgumentException e) { return null; }
+                        String trimmed = s.trim().toUpperCase();
+                        try {
+                            return BookFileType.valueOf(trimmed);
+                        } catch (IllegalArgumentException e) {
+                            unknown.add(s.trim());
+                            return null;
+                        }
                     })
-                    .filter(java.util.Objects::nonNull)
+                    .filter(Objects::nonNull)
                     .toList();
+            if (!unknown.isEmpty()) {
+                throw new APIException("Invalid fileType values: " + unknown + ". Valid values: " + List.of(BookFileType.values()), HttpStatus.BAD_REQUEST);
+            }
             if (parsed.isEmpty()) return cb.conjunction();
 
             if ("and".equals(mode)) {
@@ -223,14 +235,23 @@ public class AppBookSpecification {
     public static Specification<BookEntity> withReadStatuses(List<String> statuses, Long userId, String mode) {
         return (root, query, cb) -> {
             if (userId == null) return cb.conjunction();
+            List<String> unknown = new ArrayList<>();
             List<ReadStatus> parsed = statuses.stream()
                     .filter(s -> s != null && !s.isBlank())
                     .map(s -> {
-                        try { return ReadStatus.valueOf(s.trim().toUpperCase()); }
-                        catch (IllegalArgumentException e) { return null; }
+                        String trimmed = s.trim().toUpperCase();
+                        try {
+                            return ReadStatus.valueOf(trimmed);
+                        } catch (IllegalArgumentException e) {
+                            unknown.add(s.trim());
+                            return null;
+                        }
                     })
-                    .filter(java.util.Objects::nonNull)
+                    .filter(Objects::nonNull)
                     .toList();
+            if (!unknown.isEmpty()) {
+                throw new APIException("Invalid status values: " + unknown + ". Valid values: " + List.of(ReadStatus.values()), HttpStatus.BAD_REQUEST);
+            }
             if (parsed.isEmpty()) return cb.conjunction();
 
             Subquery<Long> sub = query.subquery(Long.class);
