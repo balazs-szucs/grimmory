@@ -111,6 +111,7 @@ describe('BookCardComponent', () => {
   };
   let userService: {
     currentUser: WritableSignal<User | null>;
+    getCurrentUser: ReturnType<typeof vi.fn>;
   };
   let emailService: {
     emailBookQuick: ReturnType<typeof vi.fn>;
@@ -165,6 +166,7 @@ describe('BookCardComponent', () => {
     };
     userService = {
       currentUser: signal<User | null>(null),
+      getCurrentUser: vi.fn(() => userService.currentUser()),
     };
     emailService = {
       emailBookQuick: vi.fn(),
