@@ -5,7 +5,7 @@ import {BookService} from '../../../book/service/book.service';
 import {Book, ReadStatus} from '../../../book/model/book.model';
 import {UserService} from '../../../settings/user-management/user.service';
 import {ProgressSpinner} from 'primeng/progressspinner';
-import {TooltipModule} from 'primeng/tooltip';
+import {Tooltip} from 'primeng/tooltip';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {DashboardConfigService} from '../../services/dashboard-config.service';
 import {ScrollerConfig, ScrollerType} from '../../models/dashboard-config.model';
@@ -30,7 +30,7 @@ const DEFAULT_MAX_ITEMS = 20;
     Button,
     DashboardScrollerComponent,
     ProgressSpinner,
-    TooltipModule,
+    Tooltip,
     TranslocoDirective
   ],
   standalone: true

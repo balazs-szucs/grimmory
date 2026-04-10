@@ -1,5 +1,4 @@
 import {Component, effect, inject, OnDestroy} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {BaseChartDirective} from 'ng2-charts';
 import {BehaviorSubject, Observable} from 'rxjs';
 import {Chart, ChartConfiguration, ChartData, TooltipModel} from 'chart.js';
@@ -7,6 +6,7 @@ import {LibraryFilterService} from '../../service/library-filter.service';
 import {BookService} from '../../../../../book/service/book.service';
 import {Book, ReadStatus} from '../../../../../book/model/book.model';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {AsyncPipe} from '@angular/common';
 
 interface AuthorStats {
   name: string;
@@ -40,7 +40,8 @@ const COMPLETION_COLORS = {
 @Component({
   selector: 'app-author-universe-chart',
   standalone: true,
-  imports: [CommonModule, BaseChartDirective, TranslocoDirective],
+  imports: [
+    AsyncPipe,BaseChartDirective, TranslocoDirective],
   templateUrl: './author-universe-chart.component.html',
   styleUrls: ['./author-universe-chart.component.scss']
 })

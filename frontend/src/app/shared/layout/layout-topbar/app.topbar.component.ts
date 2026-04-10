@@ -1,9 +1,9 @@
 import { Component, effect, inject, OnDestroy, ViewChild } from '@angular/core';
 import { LayoutService } from '../layout.service';
 import { Router, RouterLink } from '@angular/router';
-import { TooltipModule } from 'primeng/tooltip';
+import { Tooltip } from 'primeng/tooltip';
 import { FormsModule } from '@angular/forms';
-import { InputTextModule } from 'primeng/inputtext';
+
 import { BookSearcherComponent } from '../../../features/book/components/book-searcher/book-searcher.component';
 import { NgClass, NgStyle } from '@angular/common';
 import { NotificationEventService } from '../../websocket/notification-event.service';
@@ -33,9 +33,8 @@ import type { MenuItem } from 'primeng/api';
   styleUrls: ['./app.topbar.component.scss'],
   imports: [
     RouterLink,
-    TooltipModule,
+    Tooltip,
     FormsModule,
-    InputTextModule,
     BookSearcherComponent,
     ThemeConfiguratorComponent,
     StyleClass,

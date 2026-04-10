@@ -1,4 +1,4 @@
-import {AfterViewInit, ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, OnDestroy, OnInit, signal, untracked, ViewChild} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, OnDestroy, OnInit, signal, untracked, ViewChild} from '@angular/core';
 import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, NavigationStart, Router} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
@@ -13,10 +13,8 @@ import {SortDirection, SortOption} from '../../model/sort.model';
 import {Book} from '../../model/book.model';
 import {LibraryShelfMenuService} from '../../service/library-shelf-menu.service';
 import {BookTableComponent} from './book-table/book-table.component';
-import {animate, style, transition, trigger} from '@angular/animations';
 import {Button} from 'primeng/button';
 import {NgClass, NgStyle} from '@angular/common';
-import {VirtualScrollerComponent, VirtualScrollerModule} from '@iharbeck/ngx-virtual-scroller';
 import {BookCardComponent} from './book-card/book-card.component';
 
 import {Menu} from 'primeng/menu';
@@ -36,7 +34,7 @@ import {Divider} from 'primeng/divider';
 import {MultiSelect} from 'primeng/multiselect';
 import {TableColumnPreferenceService} from './table-column-preference.service';
 import {TieredMenu} from 'primeng/tieredmenu';
-import {BadgeModule} from 'primeng/badge';
+import {Badge} from 'primeng/badge';
 import {BookMenuService} from '../../service/book-menu.service';
 import {SidebarFilterTogglePrefService} from './filters/sidebar-filter-toggle-pref.service';
 import {MetadataRefreshType} from '../../../metadata/model/request/metadata-refresh-type.enum';
@@ -74,23 +72,11 @@ export enum EntityType {
   styleUrls: ['./book-browser.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Button, VirtualScrollerModule, BookCardComponent, Menu, InputText, FormsModule,
+    Button, BookCardComponent, Menu, InputText, FormsModule,
     BookTableComponent, BookFilterComponent, Tooltip, NgClass, NgStyle, Popover,
-    Checkbox, Slider, Divider, MultiSelect, TieredMenu, BadgeModule, MultiSortPopoverComponent, TranslocoDirective
+    Checkbox, Slider, Divider, MultiSelect, TieredMenu, Badge, MultiSortPopoverComponent, TranslocoDirective,
   ],
   providers: [SeriesCollapseFilter],
-  animations: [
-    trigger('slideInOut', [
-      transition(':enter', [
-        style({transform: 'translateY(100%)'}),
-        animate('0.1s ease-in', style({transform: 'translateY(0)'}))
-      ]),
-      transition(':leave', [
-        style({transform: 'translateY(0)'}),
-        animate('0.1s ease-out', style({transform: 'translateY(100%)'}))
-      ])
-    ])
-  ]
 })
 export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
@@ -294,6 +280,29 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     return map;
   });
   readonly compareBookItems = (a: Book, b: Book): boolean => a?.id === b?.id;
+
+  private readonly GRID_GAP = 21;
+  private readonly containerWidth = signal(0);
+  private containerResizeObserver: ResizeObserver | undefined;
+
+  readonly gridColumns = computed(() => {
+    const w = this.containerWidth();
+    if (w === 0) return 1;
+    const minWidth = parseInt(this.gridColumnMinWidth, 10) || 180;
+    return Math.max(1, Math.floor((w + this.GRID_GAP) / (minWidth + this.GRID_GAP)));
+  });
+
+  /** Height in px for the spacer that represents not-yet-loaded items. */
+  readonly remainingSpacerHeight = computed(() => {
+    const total = this.appBooksApi.totalElements();
+    const loaded = this.books()?.length ?? 0;
+    const remaining = Math.max(0, total - loaded);
+    if (remaining === 0) return 0;
+    const cols = this.gridColumns();
+    const rowHeight = this.currentCardSize.height + this.GRID_GAP;
+    return Math.ceil(remaining / cols) * rowHeight;
+  });
+
   protected resetFilterSubject = new Subject<void>();
 
   readonly skeletonSlots = Array.from({length: 24}, (_, index) => index);
@@ -393,8 +402,40 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   bookTableComponent!: BookTableComponent;
   @ViewChild(BookFilterComponent, {static: false})
   bookFilterComponent!: BookFilterComponent;
-  @ViewChild('scroll')
-  virtualScroller: VirtualScrollerComponent | undefined;
+
+  private scrollContainer: HTMLElement | undefined;
+  private sentinelObserver: IntersectionObserver | undefined;
+
+  @ViewChild('scrollContainer')
+  set scrollContainerRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.containerResizeObserver?.disconnect();
+    this.scrollContainer = ref?.nativeElement;
+    if (this.scrollContainer) {
+      const el = this.scrollContainer;
+      this.containerWidth.set(el.clientWidth);
+      this.containerResizeObserver = new ResizeObserver(entries => {
+        this.containerWidth.set(entries[0]?.contentRect.width ?? el.clientWidth);
+      });
+      this.containerResizeObserver.observe(el);
+    }
+  }
+
+  @ViewChild('scrollSentinel')
+  set scrollSentinelRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.sentinelObserver?.disconnect();
+    const el = ref?.nativeElement;
+    if (el) {
+      this.sentinelObserver = new IntersectionObserver(
+        entries => {
+          if (entries[0]?.isIntersecting) {
+            this.checkAndFetchNextPage();
+          }
+        },
+        {root: this.scrollContainer, rootMargin: '600px'}
+      );
+      this.sentinelObserver.observe(el);
+    }
+  }
 
   @HostListener('window:resize')
   onResize(): void {
@@ -533,8 +574,16 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.containerResizeObserver?.disconnect();
+    this.sentinelObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private checkAndFetchNextPage(): void {
+    if (this.appBooksApi.hasNextPage() && !this.appBooksApi.isFetchingNextPage()) {
+      this.appBooksApi.fetchNextPage();
+    }
   }
 
   private getScrollPositionKey(): string {
@@ -552,10 +601,9 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private saveScrollPosition(): void {
-    if (this.virtualScroller?.viewPortInfo) {
+    if (this.scrollContainer) {
       const key = this.getScrollPositionKey();
-      const position = this.virtualScroller.viewPortInfo.scrollStartPosition ?? 0;
-      this.scrollService.savePosition(key, position);
+      this.scrollService.savePosition(key, this.scrollContainer.scrollTop);
     }
   }
 
@@ -1127,12 +1175,6 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     const saved = this.localStorageService.get<number>(this.MOBILE_COLUMNS_STORAGE_KEY);
     if (saved !== null && [2, 3, 4].includes(saved)) {
       this.mobileColumnCount = saved;
-    }
-  }
-
-  onScrollEnd(): void {
-    if (this.appBooksApi.hasNextPage() && !this.appBooksApi.isFetchingNextPage()) {
-      this.appBooksApi.fetchNextPage();
     }
   }
 }

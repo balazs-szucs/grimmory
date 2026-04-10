@@ -1,5 +1,4 @@
 import {Component, DestroyRef, effect, inject, signal} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {Subject} from 'rxjs';
 import {takeUntil, debounceTime, distinctUntilChanged, filter} from 'rxjs/operators';
@@ -7,13 +6,16 @@ import {TranslocoDirective} from '@jsverse/transloco';
 import {ReaderLeftSidebarService, LeftSidebarTab} from './panel.service';
 import {BookNoteV2} from '../../../../../shared/service/book-note-v2.service';
 import {ReaderIconComponent} from '../../shared/icon.component';
+import {DatePipe, DecimalPipe} from '@angular/common';
 
 @Component({
   selector: 'app-reader-left-sidebar',
   standalone: true,
   templateUrl: './panel.component.html',
   styleUrls: ['./panel.component.scss'],
-  imports: [CommonModule, FormsModule, TranslocoDirective, ReaderIconComponent]
+  imports: [
+    DecimalPipe,
+    DatePipe,FormsModule, TranslocoDirective, ReaderIconComponent]
 })
 export class ReaderLeftSidebarComponent {
   private readonly leftSidebarService = inject(ReaderLeftSidebarService);

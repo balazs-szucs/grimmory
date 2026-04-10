@@ -1,5 +1,4 @@
 import {Component, inject, OnDestroy, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {BaseChartDirective} from 'ng2-charts';
 import {Tooltip} from 'primeng/tooltip';
 import {BehaviorSubject, EMPTY, Observable, Subject} from 'rxjs';
@@ -7,13 +6,16 @@ import {catchError, takeUntil} from 'rxjs/operators';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {PageTurnerScoreResponse, UserStatsService} from '../../../../../settings/user-management/user-stats.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {AsyncPipe, SlicePipe} from '@angular/common';
 
 type PageTurnerChartData = ChartData<'bar', number[], string>;
 
 @Component({
   selector: 'app-page-turner-chart',
   standalone: true,
-  imports: [CommonModule, BaseChartDirective, Tooltip, TranslocoDirective],
+  imports: [
+    SlicePipe,
+    AsyncPipe,BaseChartDirective, Tooltip, TranslocoDirective],
   templateUrl: './page-turner-chart.component.html',
   styleUrls: ['./page-turner-chart.component.scss']
 })

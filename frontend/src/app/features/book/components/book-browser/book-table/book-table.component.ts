@@ -3,7 +3,7 @@ import {TableModule} from 'primeng/table';
 import {DatePipe, NgClass} from '@angular/common';
 import {Rating} from 'primeng/rating';
 import {FormsModule} from '@angular/forms';
-import {TooltipModule} from "primeng/tooltip";
+import {Tooltip} from "primeng/tooltip";
 import {Book, BookMetadata, ReadStatus} from '../../../model/book.model';
 import {SortOption} from '../../../model/sort.model';
 import {UrlHelperService} from '../../../../../shared/service/url-helper.service';
@@ -27,7 +27,7 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
     Rating,
     FormsModule,
     Button,
-    TooltipModule,
+    Tooltip,
     NgClass,
     RouterLink,
     TranslocoDirective,

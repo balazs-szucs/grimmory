@@ -2,8 +2,8 @@ import {Component, inject, OnDestroy, OnInit} from '@angular/core';
 import {Subject} from 'rxjs';
 import {takeUntil} from 'rxjs/operators';
 import {KeyValuePipe} from '@angular/common';
-import {ProgressBarModule} from 'primeng/progressbar';
-import {ButtonModule} from 'primeng/button';
+import {ProgressBar} from 'primeng/progressbar';
+import {Button} from 'primeng/button';
 import {Divider} from 'primeng/divider';
 import {Tooltip} from 'primeng/tooltip';
 import {MessageService} from 'primeng/api';
@@ -21,7 +21,7 @@ import {DialogLauncherService} from '../../services/dialog-launcher.service';
   templateUrl: './metadata-progress-widget-component.html',
   styleUrls: ['./metadata-progress-widget-component.scss'],
   standalone: true,
-  imports: [KeyValuePipe, ProgressBarModule, ButtonModule, Divider, Tooltip, Tag, TranslocoDirective]
+  imports: [KeyValuePipe, ProgressBar, Button, Divider, Tooltip, Tag, TranslocoDirective]
 })
 export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
   activeTasks: Record<string, MetadataBatchProgressNotification> = {};

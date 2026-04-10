@@ -1,5 +1,4 @@
 import {Component, inject, OnDestroy, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {Button} from 'primeng/button';
 import {ProgressBar} from 'primeng/progressbar';
 import {MessageService} from 'primeng/api';
@@ -24,12 +23,13 @@ import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-
 import {ToggleSwitch} from 'primeng/toggleswitch';
 import {Tooltip} from 'primeng/tooltip';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
+import {NgClass} from '@angular/common';
 
 @Component({
   selector: 'app-task-management',
   standalone: true,
   imports: [
-    CommonModule,
+    NgClass,
     Button,
     ProgressBar,
     Select,

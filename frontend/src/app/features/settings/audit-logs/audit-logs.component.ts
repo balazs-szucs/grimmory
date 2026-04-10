@@ -1,5 +1,4 @@
 import {Component, inject, OnInit, OnDestroy} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {ActivatedRoute, Router} from '@angular/router';
 import {TableLazyLoadEvent, TableModule} from 'primeng/table';
 import {Select} from 'primeng/select';
@@ -9,6 +8,7 @@ import {TranslocoDirective} from '@jsverse/transloco';
 import {Subscription, interval} from 'rxjs';
 import {AuditLog, AuditLogService} from './audit-log.service';
 import {TagColor, TagComponent} from '../../../shared/components/tag/tag.component';
+import {DatePipe} from '@angular/common';
 
 const ACTION_COLOR_GROUPS: [TagColor, string[]][] = [
   ['red', ['USER_DELETED', 'LIBRARY_DELETED', 'BOOK_DELETED', 'SHELF_DELETED', 'MAGIC_SHELF_DELETED', 'EMAIL_PROVIDER_DELETED', 'OPDS_USER_DELETED', 'AUTHOR_DELETED']],
@@ -40,7 +40,8 @@ interface UsernameOption {
 @Component({
   selector: 'app-audit-logs',
   standalone: true,
-  imports: [CommonModule, TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
+  imports: [
+    DatePipe,TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
   templateUrl: './audit-logs.component.html',
   styleUrl: './audit-logs.component.scss'
 })

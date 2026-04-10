@@ -12,12 +12,14 @@ import {Button} from 'primeng/button';
 import {Divider} from 'primeng/divider';
 import {Tooltip} from 'primeng/tooltip';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
-import {VirtualScrollerComponent, VirtualScrollerModule} from '@iharbeck/ngx-virtual-scroller';
+import {CdkVirtualScrollViewport, CdkVirtualForOf} from '@angular/cdk/scrolling';
+import {CdkAutoSizeVirtualScroll} from '@angular/cdk-experimental/scrolling';
 import {BookBrowserScrollService} from '../../../book/components/book-browser/book-browser-scroll.service';
 import {MessageService} from 'primeng/api';
 import {AuthorService} from '../../service/author.service';
 import {AuthorSummary, EnrichedAuthor, AuthorFilters, DEFAULT_AUTHOR_FILTERS} from '../../model/author.model';
 import {AuthorCardComponent} from '../author-card/author-card.component';
+import {chunk} from '../../../../shared/util/array.util';
 import {AuthorScalePreferenceService} from '../../service/author-scale-preference.service';
 import {AuthorSelectionService, AuthorCheckboxClickEvent} from '../../service/author-selection.service';
 import {PageTitleService} from '../../../../shared/service/page-title.service';
@@ -68,7 +70,9 @@ const DEFAULT_SORT_DIRECTIONS: Record<string, SortDirection> = {
     Tooltip,
     TranslocoDirective,
     AuthorCardComponent,
-    VirtualScrollerModule
+    CdkVirtualScrollViewport,
+    CdkVirtualForOf,
+    CdkAutoSizeVirtualScroll,
   ]
 })
 export class AuthorBrowserComponent implements OnInit {
@@ -91,8 +95,25 @@ export class AuthorBrowserComponent implements OnInit {
   protected authorScaleService = inject(AuthorScalePreferenceService);
   protected selectionService = inject(AuthorSelectionService);
 
+  virtualScroller: CdkVirtualScrollViewport | undefined;
+
   @ViewChild('scroll')
-  virtualScroller: VirtualScrollerComponent | undefined;
+  set scrollViewport(vp: CdkVirtualScrollViewport | undefined) {
+    this.virtualScroller = vp;
+    this.viewportResizeObserver?.disconnect();
+    if (vp) {
+      const el = vp.elementRef.nativeElement as HTMLElement;
+      this.viewportWidth.set(el.clientWidth);
+      this.viewportResizeObserver = new ResizeObserver(entries => {
+        this.viewportWidth.set(entries[0]?.contentRect.width ?? el.clientWidth);
+      });
+      this.viewportResizeObserver.observe(el);
+    }
+  }
+
+  private static readonly GRID_GAP = 20;
+  private readonly viewportWidth = signal(0);
+  private viewportResizeObserver: ResizeObserver | undefined;
 
   screenWidth = window.innerWidth;
   thumbnailCacheBusters = new Map<number, number>();
@@ -203,6 +224,18 @@ export class AuthorBrowserComponent implements OnInit {
     return `${this.cardWidth}px`;
   }
 
+  readonly gridColumns = computed(() => {
+    const vw = this.viewportWidth();
+    if (vw === 0) return 1;
+    const minWidth = this.cardWidth || 165;
+    const gap = AuthorBrowserComponent.GRID_GAP;
+    return Math.max(1, Math.floor((vw + gap) / (minWidth + gap)));
+  });
+
+  readonly authorRows = computed(() => {
+    return chunk(this.filteredAuthors(), this.gridColumns());
+  });
+
   sortOptions: SortOption[] = [];
 
   private readonly validSortValues = [
@@ -212,6 +245,7 @@ export class AuthorBrowserComponent implements OnInit {
 
   ngOnInit(): void {
     this.pageTitle.setPageTitle(this.t.translate('authorBrowser.pageTitle'));
+    this.destroyRef.onDestroy(() => this.viewportResizeObserver?.disconnect());
 
     this.sortOptions = [
       {label: this.t.translate('authorBrowser.sort.name'), value: 'name'},
@@ -235,6 +269,8 @@ export class AuthorBrowserComponent implements OnInit {
     this.setupScrollPositionTracking();
     this.destroyRef.onDestroy(() => this.selectionService.deselectAll());
   }
+
+
 
   onSearchChange(value: string): void {
     this.searchTerm.set(value);
@@ -515,9 +551,9 @@ export class AuthorBrowserComponent implements OnInit {
   }
 
   private saveScrollPosition(): void {
-    if (this.virtualScroller?.viewPortInfo) {
+    if (this.virtualScroller) {
       const key = this.getScrollPositionKey();
-      const position = this.virtualScroller.viewPortInfo.scrollStartPosition ?? 0;
+      const position = this.virtualScroller.measureScrollOffset('top') ?? 0;
       this.scrollService.savePosition(key, position);
     }
   }

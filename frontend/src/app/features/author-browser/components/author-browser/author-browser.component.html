@@ -193,15 +193,14 @@
           <p>{{ t('noAuthorsFound') }}</p>
         </div>
       } @else {
-        <virtual-scroller
+        <cdk-virtual-scroll-viewport autosize
+          [minBufferPx]="600" [maxBufferPx]="1200"
           #scroll
-          [items]="authorList"
-          [bufferAmount]="16"
           class="virtual-scroller">
           <div class="author-grid"
-            #container
-            [ngStyle]="{'grid-template-columns': 'repeat(auto-fill, minmax(' + gridColumnMinWidth + ', 1fr))'}">
-            @for (author of scroll.viewPortItems; track author.id; let i = $index) {
+            *cdkVirtualFor="let row of authorRows()"
+            [ngStyle]="{'grid-template-columns': 'repeat(' + gridColumns() + ', 1fr)'}">
+            @for (author of row; track author.id) {
               <div class="virtual-scroller-item"
                 [ngStyle]="{width: cardWidth + 'px', height: cardHeight + 'px'}"
                 [style.--card-scale]="authorScaleService.scaleFactor()">
@@ -223,7 +222,7 @@
               </div>
             }
           </div>
-        </virtual-scroller>
+        </cdk-virtual-scroll-viewport>
       }
     }
 

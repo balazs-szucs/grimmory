@@ -10,7 +10,6 @@ import {BookMetadataManageService} from "../../service/book-metadata-manage.serv
 import {BookCardComponent} from "../book-browser/book-card/book-card.component";
 import {CoverScalePreferenceService} from "../book-browser/cover-scale-preference.service";
 import {Tab, TabList, TabPanel, TabPanels, Tabs} from "primeng/tabs";
-import {VirtualScrollerModule} from "@iharbeck/ngx-virtual-scroller";
 import {ProgressSpinner} from "primeng/progressspinner";
 import {ProgressBar} from "primeng/progressbar";
 import {DynamicDialogRef} from "primeng/dynamicdialog";
@@ -27,7 +26,6 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {Tooltip} from "primeng/tooltip";
 import {Divider} from "primeng/divider";
 import {TagComponent} from "../../../../shared/components/tag/tag.component";
-import {animate, style, transition, trigger} from "@angular/animations";
 import {AfterViewChecked, Component, computed, effect, ElementRef, inject, ViewChild} from '@angular/core';
 import {BookCardOverlayPreferenceService} from '../book-browser/book-card-overlay-preference.service';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
@@ -84,26 +82,13 @@ interface SeriesStats {
     Tab,
     TabPanels,
     TabPanel,
-    VirtualScrollerModule,
     TieredMenu,
     Tooltip,
     Divider,
     TranslocoDirective,
     TagComponent,
-    CoverPlaceholderComponent
+    CoverPlaceholderComponent,
   ],
-  animations: [
-    trigger('slideInOut', [
-      transition(':enter', [
-        style({transform: 'translateY(100%)'}),
-        animate('0.1s ease-in', style({transform: 'translateY(0)'}))
-      ]),
-      transition(':leave', [
-        style({transform: 'translateY(0)'}),
-        animate('0.1s ease-out', style({transform: 'translateY(100%)'}))
-      ])
-    ])
-  ]
 })
 export class SeriesPageComponent implements AfterViewChecked {
 

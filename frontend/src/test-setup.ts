@@ -1,7 +1,5 @@
 import '@angular/compiler';
 import {vi} from 'vitest';
-import 'zone.js';
-import 'zone.js/testing';
 import '@testing-library/jest-dom/vitest';
 import 'vitest-canvas-mock';
 import {TestBed} from '@angular/core/testing';

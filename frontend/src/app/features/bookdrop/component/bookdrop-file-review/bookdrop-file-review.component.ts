@@ -16,7 +16,7 @@ import {Divider} from 'primeng/divider';
 import {ConfirmationService, MessageService} from 'primeng/api';
 import {Subscription} from 'rxjs';
 import {InputGroup} from 'primeng/inputgroup';
-import {InputGroupAddonModule} from 'primeng/inputgroupaddon';
+import {InputGroupAddon} from 'primeng/inputgroupaddon';
 
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
 import {BookMetadata} from '../../../book/model/book.model';
@@ -60,7 +60,7 @@ export interface BookdropFileUI {
     NgClass,
     Paginator,
     InputGroup,
-    InputGroupAddonModule,
+    InputGroupAddon,
     TranslocoDirective,
   ],
 })

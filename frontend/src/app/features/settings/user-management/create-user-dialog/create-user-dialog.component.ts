@@ -2,7 +2,7 @@ import {Component, inject, OnInit} from '@angular/core';
 import {InputText} from 'primeng/inputtext';
 import {FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Checkbox} from 'primeng/checkbox';
-import {MultiSelectModule} from 'primeng/multiselect';
+import {MultiSelect} from 'primeng/multiselect';
 import {Library} from '../../../book/model/library.model';
 import {Button} from 'primeng/button';
 import {LibraryService} from '../../../book/service/library.service';
@@ -21,7 +21,7 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
     ReactiveFormsModule,
     FormsModule,
     Checkbox,
-    MultiSelectModule,
+    MultiSelect,
     Button,
     TranslocoDirective,
     TranslocoPipe

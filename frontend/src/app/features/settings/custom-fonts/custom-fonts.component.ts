@@ -1,5 +1,4 @@
 import {Component, inject, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {Button} from 'primeng/button';
 import {MessageService} from 'primeng/api';
 import {CustomFontService} from '../../../shared/service/custom-font.service';
@@ -12,11 +11,13 @@ import {FontUploadDialogComponent} from './font-upload-dialog/font-upload-dialog
 import {Skeleton} from 'primeng/skeleton';
 import {DialogSize, DialogStyle} from '../../../shared/services/dialog-launcher.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {DatePipe} from '@angular/common';
 
 @Component({
   selector: 'app-custom-fonts',
   standalone: true,
-  imports: [CommonModule, Button, ConfirmDialog, Tooltip, Skeleton, TranslocoDirective],
+  imports: [
+    DatePipe,Button, ConfirmDialog, Tooltip, Skeleton, TranslocoDirective],
   templateUrl: './custom-fonts.component.html',
   styleUrls: ['./custom-fonts.component.scss'],
   providers: [ConfirmationService, DialogService]

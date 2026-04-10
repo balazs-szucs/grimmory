@@ -1,18 +1,19 @@
 import {Component, inject, Input, OnDestroy, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {BaseChartDirective} from 'ng2-charts';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {BehaviorSubject, EMPTY, Observable, Subject} from 'rxjs';
 import {catchError, takeUntil} from 'rxjs/operators';
 import {CompletionTimelineResponse, UserStatsService} from '../../../../../settings/user-management/user-stats.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {AsyncPipe} from '@angular/common';
 
 type CompletionChartData = ChartData<'bar', number[], string>;
 
 @Component({
   selector: 'app-completion-timeline-chart',
   standalone: true,
-  imports: [CommonModule, BaseChartDirective, TranslocoDirective],
+  imports: [
+    AsyncPipe,BaseChartDirective, TranslocoDirective],
   templateUrl: './completion-timeline-chart.component.html',
   styleUrls: ['./completion-timeline-chart.component.scss']
 })

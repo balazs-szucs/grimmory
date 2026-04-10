@@ -1,5 +1,4 @@
 import {Component, inject, Input, OnDestroy, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {BaseChartDirective} from 'ng2-charts';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {BehaviorSubject, EMPTY, Observable, Subject} from 'rxjs';
@@ -7,13 +6,15 @@ import {catchError, takeUntil} from 'rxjs/operators';
 import {Tooltip} from 'primeng/tooltip';
 import {GenreStatsResponse, UserStatsService} from '../../../../../settings/user-management/user-stats.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {AsyncPipe} from '@angular/common';
 
 type GenreChartData = ChartData<'bar', number[], string>;
 
 @Component({
   selector: 'app-genre-stats-chart',
   standalone: true,
-  imports: [CommonModule, BaseChartDirective, Tooltip, TranslocoDirective],
+  imports: [
+    AsyncPipe,BaseChartDirective, Tooltip, TranslocoDirective],
   templateUrl: './genre-stats-chart.component.html',
   styleUrls: ['./genre-stats-chart.component.scss']
 })

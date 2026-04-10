@@ -1,12 +1,11 @@
 import {Component, inject, OnDestroy, OnInit} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {of, Subject} from 'rxjs';
 import {debounceTime, switchMap, takeUntil} from 'rxjs/operators';
-import {InputTextModule} from 'primeng/inputtext';
+import {InputText} from 'primeng/inputtext';
 import {Select} from 'primeng/select';
 import {Button} from 'primeng/button';
-import {TooltipModule} from 'primeng/tooltip';
+import {Tooltip} from 'primeng/tooltip';
 import {Paginator} from 'primeng/paginator';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {NotebookService} from '../../service/notebook.service';
@@ -14,6 +13,7 @@ import {NotebookEntry, NotebookPage} from '../../model/notebook.model';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {CoverPlaceholderComponent} from '../../../../shared/components/cover-generator/cover-generator.component';
 import {PageTitleService} from '../../../../shared/service/page-title.service';
+import {DatePipe} from '@angular/common';
 
 interface BookGroup {
   bookId: number;
@@ -36,12 +36,12 @@ const EMPTY_PAGE: NotebookPage = {
   selector: 'app-notebook',
   standalone: true,
   imports: [
-    CommonModule,
+    DatePipe,
     FormsModule,
-    InputTextModule,
+    InputText,
     Select,
     Button,
-    TooltipModule,
+    Tooltip,
     Paginator,
     TranslocoDirective,
     CoverPlaceholderComponent,

@@ -1,13 +1,11 @@
 import {ChangeDetectionStrategy, Component, computed, inject, input, output, signal} from '@angular/core';
-import {TooltipModule} from 'primeng/tooltip';
+import {Tooltip} from 'primeng/tooltip';
 import {AdditionalFile, Book, BookType, ReadStatus} from '../../../model/book.model';
-import {Button} from 'primeng/button';
-import {MenuModule} from 'primeng/menu';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
 import {BookService} from '../../../service/book.service';
 import {BookFileService} from '../../../service/book-file.service';
 import {BookMetadataManageService} from '../../../service/book-metadata-manage.service';
-import {CheckboxChangeEvent, CheckboxModule} from 'primeng/checkbox';
+import {CheckboxChangeEvent, Checkbox} from 'primeng/checkbox';
 import {FormsModule} from '@angular/forms';
 import {MetadataRefreshType} from '../../../../metadata/model/request/metadata-refresh-type.enum';
 import {UrlHelperService} from '../../../../../shared/service/url-helper.service';
@@ -17,7 +15,6 @@ import {UserService} from '../../../../settings/user-management/user.service';
 import {EmailService} from '../../../../settings/email-v2/email.service';
 import {TieredMenu} from 'primeng/tieredmenu';
 import {Router, RouterLink} from '@angular/router';
-import {ProgressBar} from 'primeng/progressbar';
 import {readStatusLabels} from '../book-filter/book-filter.config';
 import {ResetProgressTypes} from '../../../../../shared/constants/reset-progress-type';
 import {ReadStatusHelper} from '../../../helpers/read-status.helper';
@@ -33,7 +30,7 @@ import {QueryClient} from '@tanstack/angular-query-experimental';
   selector: 'app-book-card',
   templateUrl: './book-card.component.html',
   styleUrls: ['./book-card.component.scss'],
-  imports: [Button, MenuModule, CheckboxModule, FormsModule, NgClass, TieredMenu, ProgressBar, TooltipModule, RouterLink, TranslocoPipe, CoverPlaceholderComponent],
+  imports: [Checkbox, FormsModule, NgClass, TieredMenu, Tooltip, RouterLink, TranslocoPipe, CoverPlaceholderComponent],
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -49,6 +46,8 @@ export class BookCardComponent {
   readonly seriesViewEnabled = input(false);
   readonly isSeriesCollapsed = input(false);
   readonly overlayPreferenceService = input<BookCardOverlayPreferenceService | undefined>();
+  private readonly overlayService = inject(BookCardOverlayPreferenceService);
+  readonly showBookTypePill = computed(() => this.overlayService.showBookTypePill());
   readonly forceEbookMode = input(false);
   readonly useSquareCovers = input(false);
 

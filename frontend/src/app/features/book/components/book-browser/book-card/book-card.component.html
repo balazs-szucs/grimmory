@@ -22,7 +22,7 @@
     }
 
     <div class="top-left-overlay-stack">
-      @if ((overlayPreferenceService()?.showBookTypePill() ?? true) && displayFormat(); as fmt) {
+      @if (showBookTypePill() && displayFormat(); as fmt) {
         <div class="book-type-pill-overlay" [ngClass]="'book-type-' + fmt.toLowerCase()">
           {{ fmt }}
         </div>
@@ -40,17 +40,24 @@
     </div>
 
     @if (isSeriesViewActive()) {
-      <p-button [rounded]="true" icon="pi pi-info" class="info-btn" (click)="openSeriesInfo()" [ariaLabel]="'book.card.alt.viewSeriesInfo' | transloco"></p-button>
+      <button type="button" class="p-button p-component p-button-rounded info-btn" (click)="openSeriesInfo()" [attr.aria-label]="'book.card.alt.viewSeriesInfo' | transloco">
+        <i class="pi pi-info"></i>
+      </button>
     } @else {
-      <p-button [rounded]="true" icon="pi pi-info" class="info-btn" (click)="openBookInfo(book())" [ariaLabel]="'book.card.alt.viewDetails' | transloco">
-      </p-button>
+      <button type="button" class="p-button p-component p-button-rounded info-btn" (click)="openBookInfo(book())" [attr.aria-label]="'book.card.alt.viewDetails' | transloco">
+        <i class="pi pi-info"></i>
+      </button>
     }
 
     @if (!isSeriesViewActive() && hasDigitalFile()) {
-      <a [routerLink]="readingUrl()" (click)="readBook(book())"><p-button [rounded]="true" [icon]="readButtonIcon()" class="read-btn"
-        [pTooltip]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : ''"
-        tooltipPosition="bottom"
-        [ariaLabel]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : (isAudiobook() ? ('book.card.alt.playAudiobook' | transloco) : ('book.card.alt.readBook' | transloco))"></p-button></a>
+      <a [routerLink]="readingUrl()" (click)="readBook(book())">
+        <button type="button" class="p-button p-component p-button-rounded read-btn"
+          [pTooltip]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : ''"
+          tooltipPosition="bottom"
+          [attr.aria-label]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : (isAudiobook() ? ('book.card.alt.playAudiobook' | transloco) : ('book.card.alt.readBook' | transloco))">
+          <i [class]="readButtonIcon()"></i>
+        </button>
+      </a>
     }
 
     @if (isCheckboxEnabled()) {
@@ -66,28 +73,19 @@
     @if (hasProgress()) {
       <div class="cover-progress-bar-container" [pTooltip]="progressTooltip()" tooltipPosition="top">
         @if (progressPercentage() !== null) {
-          <p-progressBar
-            [value]="progressPercentage()!"
-            [showValue]="false"
-            class="cover-progress-bar"
-            [ngClass]="{ 'progress-complete': progressPercentage() === 100, 'progress-incomplete': progressPercentage()! < 100 }">
-          </p-progressBar>
+          <div class="cover-progress-bar" [ngClass]="{ 'progress-complete': progressPercentage() === 100, 'progress-incomplete': progressPercentage()! < 100 }">
+            <div class="progress-fill" [style.width.%]="progressPercentage()!"></div>
+          </div>
         }
         @if (koProgressPercentage() !== null) {
-          <p-progressBar
-            [value]="koProgressPercentage()!"
-            [showValue]="false"
-            class="cover-progress-bar"
-            [ngClass]="koProgressPercentage() === 100 ? 'progress-complete-ko' : 'progress-incomplete-ko'">
-          </p-progressBar>
+          <div class="cover-progress-bar" [ngClass]="koProgressPercentage() === 100 ? 'progress-complete-ko' : 'progress-incomplete-ko'">
+            <div class="progress-fill" [style.width.%]="koProgressPercentage()!"></div>
+          </div>
         }
         @if (koboProgressPercentage() !== null) {
-          <p-progressBar
-            [value]="koboProgressPercentage()!"
-            [showValue]="false"
-            class="cover-progress-bar"
-            [ngClass]="koboProgressPercentage() === 100 ? 'progress-complete-kobo' : 'progress-incomplete-kobo'">
-          </p-progressBar>
+          <div class="cover-progress-bar" [ngClass]="koboProgressPercentage() === 100 ? 'progress-complete-kobo' : 'progress-incomplete-kobo'">
+            <div class="progress-fill" [style.width.%]="koboProgressPercentage()!"></div>
+          </div>
         }
       </div>
     }
@@ -113,14 +111,12 @@
         {{ displayTitle() }}
       </h4>
       <p-tieredmenu #menu [model]="items()" [popup]="true" appendTo="body" (onShow)="onMenuShow()" (onHide)="onMenuHide()"></p-tieredmenu>
-      <p-button
-        class="custom-button-padding"
-        size="small"
-        [text]="true"
+      <button type="button"
+        class="p-button p-component p-button-text p-button-sm custom-button-padding"
         (click)="onMenuToggle($event, menu)"
-        icon="pi pi-ellipsis-v"
-        [ariaLabel]="'book.card.alt.bookMenu' | transloco">
-      </p-button>
+        [attr.aria-label]="'book.card.alt.bookMenu' | transloco">
+        <i class="pi pi-ellipsis-v"></i>
+      </button>
     </div>
   }
 </div>
