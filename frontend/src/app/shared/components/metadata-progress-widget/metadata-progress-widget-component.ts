@@ -1,6 +1,5 @@
-import {Component, inject, OnDestroy, OnInit} from '@angular/core';
-import {Subject} from 'rxjs';
-import {takeUntil} from 'rxjs/operators';
+import {Component, DestroyRef, inject, OnDestroy, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {KeyValuePipe} from '@angular/common';
 import {ProgressBar} from 'primeng/progressbar';
 import {Button} from 'primeng/button';
@@ -26,7 +25,7 @@ import {DialogLauncherService} from '../../services/dialog-launcher.service';
 export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
   activeTasks: Record<string, MetadataBatchProgressNotification> = {};
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private dialogLauncherService = inject(DialogLauncherService);
   private metadataProgressService = inject(MetadataProgressService);
   private metadataTaskService = inject(MetadataTaskService);
@@ -40,7 +39,7 @@ export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.metadataProgressService.activeTasks$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(tasks => {
         this.activeTasks = tasks;
         this.checkForStalledTasks(tasks);
@@ -137,8 +136,6 @@ export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
     for (const timeout of this.timeoutHandles.values()) {
       clearTimeout(timeout);
     }

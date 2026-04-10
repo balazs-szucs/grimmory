@@ -40,6 +40,13 @@ export function flushSignalAndQueryEffects(): void {
   TestBed.flushEffects();
 }
 
+/**
+ * Asynchronously flushes Angular effects and query state across multiple rounds.
+ * Use this for tests involving async operations like HTTP requests or timers.
+ * For synchronous signal/effect flushing, use `flushSignalAndQueryEffects()` instead.
+ *
+ * @param rounds Number of cycles to await macrotask and microtask resolutions. Defaults to 5.
+ */
 export async function flushQueryAsync(rounds = 5): Promise<void> {
   const appRef = TestBed.inject(ApplicationRef);
   for (let i = 0; i < rounds; i++) {

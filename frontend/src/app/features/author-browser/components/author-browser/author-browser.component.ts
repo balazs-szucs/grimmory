@@ -1,4 +1,5 @@
 import {Component, computed, DestroyRef, effect, HostListener, inject, OnInit, signal, ViewChild} from '@angular/core';
+import {computeGridColumns} from '../../../../shared/util/viewport.util';
 import {NgStyle} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
@@ -115,7 +116,7 @@ export class AuthorBrowserComponent implements OnInit {
   private readonly viewportWidth = signal(0);
   private viewportResizeObserver: ResizeObserver | undefined;
 
-  screenWidth = window.innerWidth;
+  readonly screenWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1024);
   thumbnailCacheBusters = new Map<number, number>();
   private selectedAuthors = this.selectionService.selectedAuthors;
   private allAuthorsState = signal<AuthorSummary[] | null>(null);
@@ -199,37 +200,29 @@ export class AuthorBrowserComponent implements OnInit {
 
   @HostListener('window:resize')
   onResize(): void {
-    this.screenWidth = window.innerWidth;
+    this.screenWidth.set(window.innerWidth);
   }
 
-  get isMobile(): boolean {
-    return this.screenWidth <= 767;
-  }
+  readonly isMobile = computed(() => this.screenWidth() <= 767);
 
-  get cardWidth(): number {
-    const base = this.isMobile
+  readonly cardWidth = computed(() => {
+    const base = this.isMobile()
       ? AuthorBrowserComponent.MOBILE_BASE_WIDTH
       : AuthorBrowserComponent.BASE_WIDTH;
     return Math.round(base * this.authorScaleService.scaleFactor());
-  }
+  });
 
-  get cardHeight(): number {
-    const base = this.isMobile
+  readonly cardHeight = computed(() => {
+    const base = this.isMobile()
       ? AuthorBrowserComponent.MOBILE_BASE_HEIGHT
       : AuthorBrowserComponent.BASE_HEIGHT;
     return Math.round(base * this.authorScaleService.scaleFactor());
-  }
+  });
 
-  get gridColumnMinWidth(): string {
-    return `${this.cardWidth}px`;
-  }
+  readonly gridColumnMinWidth = computed(() => `${this.cardWidth()}px`);
 
   readonly gridColumns = computed(() => {
-    const vw = this.viewportWidth();
-    if (vw === 0) return 1;
-    const minWidth = this.cardWidth || 165;
-    const gap = AuthorBrowserComponent.GRID_GAP;
-    return Math.max(1, Math.floor((vw + gap) / (minWidth + gap)));
+    return computeGridColumns(this.viewportWidth(), this.cardWidth() || 165, AuthorBrowserComponent.GRID_GAP);
   });
 
   readonly authorRows = computed(() => {

@@ -1,5 +1,5 @@
-import {AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, OnDestroy, OnInit, signal, untracked, ViewChild} from '@angular/core';
-import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, OnDestroy, OnInit, signal, untracked, ViewChild} from '@angular/core';
+import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, NavigationStart, Router} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
 import {PageTitleService} from '../../../../shared/service/page-title.service';
@@ -13,6 +13,7 @@ import {SortDirection, SortOption} from '../../model/sort.model';
 import {Book} from '../../model/book.model';
 import {LibraryShelfMenuService} from '../../service/library-shelf-menu.service';
 import {BookTableComponent} from './book-table/book-table.component';
+import {computeGridColumns} from '../../../../shared/util/viewport.util';
 import {Button} from 'primeng/button';
 import {NgClass, NgStyle} from '@angular/common';
 import {BookCardComponent} from './book-card/book-card.component';
@@ -109,6 +110,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private localStorageService = inject(LocalStorageService);
   private scrollService = inject(BookBrowserScrollService);
   private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly defaultSortCriteria: SortOption[] = [{
     field: 'addedOn',
@@ -286,10 +288,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private containerResizeObserver: ResizeObserver | undefined;
 
   readonly gridColumns = computed(() => {
-    const w = this.containerWidth();
-    if (w === 0) return 1;
-    const minWidth = parseInt(this.gridColumnMinWidth, 10) || 180;
-    return Math.max(1, Math.floor((w + this.GRID_GAP) / (minWidth + this.GRID_GAP)));
+    return computeGridColumns(this.containerWidth(), parseInt(this.gridColumnMinWidth, 10) || 180, this.GRID_GAP);
   });
 
   /**
@@ -649,7 +648,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private setupScrollPositionTracking(): void {
     this.router.events.pipe(
       filter(event => event instanceof NavigationStart),
-      takeUntil(this.destroy$)
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe(() => {
       this.saveScrollPosition();
     });

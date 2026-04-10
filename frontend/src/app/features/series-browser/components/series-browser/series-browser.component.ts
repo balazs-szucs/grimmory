@@ -1,4 +1,5 @@
 import {Component, DestroyRef, HostListener, computed, inject, OnInit, signal, ViewChild} from '@angular/core';
+import {computeGridColumns} from '../../../../shared/util/viewport.util';
 import {NgStyle} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {ProgressSpinner} from 'primeng/progressspinner';
@@ -135,11 +136,7 @@ export class SeriesBrowserComponent implements OnInit {
   }
 
   readonly gridColumns = computed(() => {
-    const vw = this.viewportWidth();
-    if (vw === 0) return 1;
-    const minWidth = this.cardWidth || 230;
-    const gap = SeriesBrowserComponent.GRID_GAP;
-    return Math.max(1, Math.floor((vw + gap) / (minWidth + gap)));
+    return computeGridColumns(this.viewportWidth(), this.cardWidth || 230, SeriesBrowserComponent.GRID_GAP);
   });
 
   readonly seriesRows = computed(() => {

@@ -247,6 +247,7 @@ function createHarness(options?: {
           const _filters = signal<AppBookFilters>({});
           const _sort = signal<AppBookSort>({field: 'addedOn', dir: 'desc'});
           const _search = signal('');
+          const _hasNextPage = signal(false);
 
           const filteredSortedBooks = computed(() => {
             let result = books();
@@ -266,7 +267,8 @@ function createHarness(options?: {
           return {
             books: filteredSortedBooks,
             totalElements: computed(() => filteredSortedBooks().length),
-            hasNextPage: computed(() => false),
+            hasNextPage: _hasNextPage.asReadonly(),
+            setHasNextPage: (v: boolean) => _hasNextPage.set(v),
             isLoading: isBooksLoading.asReadonly(),
             isFetchingNextPage: computed(() => false),
             isError: computed(() => !!booksError()),
@@ -444,7 +446,8 @@ describe('BookBrowserComponent', () => {
     TestBed.flushEffects();
 
     // Mock hasNextPage to be true
-    vi.spyOn(appBooksApi, 'hasNextPage').mockReturnValue(true);
+    // @ts-expect-error test helper
+    appBooksApi.setHasNextPage(true);
     const fetchNextPageSpy = vi.spyOn(appBooksApi, 'fetchNextPage');
 
     // Mock scroll container

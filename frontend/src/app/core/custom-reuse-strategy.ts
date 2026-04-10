@@ -1,5 +1,5 @@
 import {inject, Injectable} from '@angular/core';
-import {ActivatedRouteSnapshot, DetachedRouteHandle, RouteReuseStrategy} from '@angular/router';
+import {ActivatedRouteSnapshot, DetachedRouteHandle, destroyDetachedRouteHandle, RouteReuseStrategy} from '@angular/router';
 import {BookBrowserScrollService} from '../features/book/components/book-browser/book-browser-scroll.service';
 import {BookSelectionService} from '../features/book/components/book-browser/book-selection.service';
 
@@ -68,8 +68,12 @@ export class CustomReuseStrategy implements RouteReuseStrategy {
       // Evict oldest routes when we exceed the budget.
       while (this.insertionOrder.length > MAX_STORED_ROUTES) {
         const evictKey = this.insertionOrder.shift()!;
+        const evictedHandle = this.storedRoutes.get(evictKey);
         this.storedRoutes.delete(evictKey);
         this.scrollService.clearPosition(evictKey);
+        if (evictedHandle) {
+          destroyDetachedRouteHandle(evictedHandle);
+        }
       }
     }
   }

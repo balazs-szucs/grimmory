@@ -50,13 +50,12 @@
     }
 
     @if (!isSeriesViewActive() && hasDigitalFile()) {
-      <a [routerLink]="readingUrl()" (click)="readBook(book())">
-        <button type="button" class="p-button p-component p-button-rounded read-btn"
-          [pTooltip]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : ''"
-          tooltipPosition="bottom"
-          [attr.aria-label]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : (isAudiobook() ? ('book.card.alt.playAudiobook' | transloco) : ('book.card.alt.readBook' | transloco))">
-          <i [class]="readButtonIcon()"></i>
-        </button>
+      <a [routerLink]="readingUrl()" (click)="readBook(book())"
+         class="p-button p-component p-button-rounded read-btn"
+         [pTooltip]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : ''"
+         tooltipPosition="bottom"
+         [attr.aria-label]="isContinueReading() ? ('book.card.alt.continueReading' | transloco) : (isAudiobook() ? ('book.card.alt.playAudiobook' | transloco) : ('book.card.alt.readBook' | transloco))">
+        <i [class]="readButtonIcon()"></i>
       </a>
     }
 

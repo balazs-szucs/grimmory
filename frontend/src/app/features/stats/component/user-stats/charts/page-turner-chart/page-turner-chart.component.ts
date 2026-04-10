@@ -1,8 +1,9 @@
-import {Component, inject, OnDestroy, OnInit} from '@angular/core';
+import {Component, DestroyRef, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {BaseChartDirective} from 'ng2-charts';
 import {Tooltip} from 'primeng/tooltip';
-import {BehaviorSubject, EMPTY, Observable, Subject} from 'rxjs';
-import {catchError, takeUntil} from 'rxjs/operators';
+import {BehaviorSubject, EMPTY, Observable} from 'rxjs';
+import {catchError} from 'rxjs/operators';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {PageTurnerScoreResponse, UserStatsService} from '../../../../../settings/user-management/user-stats.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -19,7 +20,7 @@ type PageTurnerChartData = ChartData<'bar', number[], string>;
   templateUrl: './page-turner-chart.component.html',
   styleUrls: ['./page-turner-chart.component.scss']
 })
-export class PageTurnerChartComponent implements OnInit, OnDestroy {
+export class PageTurnerChartComponent implements OnInit {
   public readonly chartType = 'bar' as const;
   public readonly chartData$: Observable<PageTurnerChartData>;
   public readonly chartOptions: ChartConfiguration['options'];
@@ -29,7 +30,7 @@ export class PageTurnerChartComponent implements OnInit, OnDestroy {
 
   private readonly userStatsService = inject(UserStatsService);
   private readonly t = inject(TranslocoService);
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private readonly chartDataSubject: BehaviorSubject<PageTurnerChartData>;
 
   constructor() {
@@ -94,15 +95,10 @@ export class PageTurnerChartComponent implements OnInit, OnDestroy {
     this.loadData();
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   private loadData(): void {
     this.userStatsService.getPageTurnerScores()
       .pipe(
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         catchError((error) => {
           console.error('Error loading page turner scores:', error);
           return EMPTY;

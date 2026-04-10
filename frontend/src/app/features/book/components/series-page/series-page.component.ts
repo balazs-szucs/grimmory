@@ -3,7 +3,7 @@ import {Button} from "primeng/button";
 import {ActivatedRoute, Router} from "@angular/router";
 import {toSignal} from '@angular/core/rxjs-interop';
 import {DecimalPipe, KeyValuePipe, NgClass, NgStyle} from "@angular/common";
-import {finalize, map} from "rxjs/operators";
+import {finalize, map, take} from "rxjs/operators";
 import {Book, BookType, computeSeriesReadStatus, ReadStatus} from "../../model/book.model";
 import {BookService} from "../../service/book.service";
 import {BookMetadataManageService} from "../../service/book-metadata-manage.service";
@@ -591,7 +591,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   openShelfAssigner(): void {
     this.dialogRef = this.dialogHelperService.openShelfAssignerDialog(null, this.selectedBooks);
     if (this.dialogRef) {
-      this.dialogRef.onClose.subscribe(result => {
+      this.dialogRef.onClose.pipe(take(1)).subscribe(result => {
         if (result.assigned) {
           this.selectedBooks.clear();
         }
@@ -602,7 +602,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   lockUnlockMetadata(): void {
     this.dialogRef = this.dialogHelperService.openLockUnlockMetadataDialog(this.selectedBooks);
     if (this.dialogRef) {
-      this.dialogRef.onClose.subscribe(() => {
+      this.dialogRef.onClose.pipe(take(1)).subscribe(() => {
         this.deselectAllBooks();
       });
     }
@@ -623,7 +623,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   bulkEditMetadata(): void {
     this.dialogRef = this.dialogHelperService.openBulkMetadataEditDialog(this.selectedBooks);
     if (this.dialogRef) {
-      this.dialogRef.onClose.subscribe(() => {
+      this.dialogRef.onClose.pipe(take(1)).subscribe(() => {
         this.deselectAllBooks();
       });
     }
@@ -632,7 +632,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   multiBookEditMetadata(): void {
     this.dialogRef = this.dialogHelperService.openMultibookMetadataEditorDialog(this.selectedBooks);
     if (this.dialogRef) {
-      this.dialogRef.onClose.subscribe(() => {
+      this.dialogRef.onClose.pipe(take(1)).subscribe(() => {
         this.deselectAllBooks();
       });
     }

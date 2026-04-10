@@ -1,4 +1,5 @@
 import {AfterViewChecked, Component, computed, DestroyRef, ElementRef, inject, OnInit, signal, ViewChild} from '@angular/core';
+import {computeGridColumns} from '../../../../shared/util/viewport.util';
 import {ActivatedRoute, Router} from '@angular/router';
 import {NgClass, NgStyle} from '@angular/common';
 import {Tab, TabList, TabPanel, TabPanels, Tabs} from 'primeng/tabs';
@@ -113,11 +114,7 @@ export class AuthorDetailComponent implements OnInit, AfterViewChecked {
   }
 
   readonly gridColumns = computed(() => {
-    const vw = this.viewportWidth();
-    if (vw === 0) return 1;
-    const minWidth = parseInt(this.gridColumnMinWidth, 10) || 180;
-    const gap = AuthorDetailComponent.GRID_GAP;
-    return Math.max(1, Math.floor((vw + gap) / (minWidth + gap)));
+    return computeGridColumns(this.viewportWidth(), parseInt(this.gridColumnMinWidth, 10) || 180, AuthorDetailComponent.GRID_GAP);
   });
 
   readonly bookRows = computed(() => {

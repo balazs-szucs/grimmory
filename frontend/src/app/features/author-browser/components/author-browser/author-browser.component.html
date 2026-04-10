@@ -198,15 +198,15 @@
           #scroll
           class="virtual-scroller">
           <div class="author-grid"
-            *cdkVirtualFor="let row of authorRows()"
+            *cdkVirtualFor="let row of authorRows(); let rowIndex = index"
             [ngStyle]="{'grid-template-columns': 'repeat(' + gridColumns() + ', 1fr)'}">
-            @for (author of row; track author.id) {
+            @for (author of row; track author.id; let colIdx = $index) {
               <div class="virtual-scroller-item"
-                [ngStyle]="{width: cardWidth + 'px', height: cardHeight + 'px'}"
+                [ngStyle]="{width: cardWidth() + 'px', height: cardHeight() + 'px'}"
                 [style.--card-scale]="authorScaleService.scaleFactor()">
                 <app-author-card
                   [author]="author"
-                  [index]="authorList.indexOf(author)"
+                  [index]="rowIndex * gridColumns() + colIdx"
                   [cacheBuster]="thumbnailCacheBusters.get(author.id) || 0"
                   [canQuickMatch]="canEditMetadata"
                   [canDelete]="canDeleteBook"

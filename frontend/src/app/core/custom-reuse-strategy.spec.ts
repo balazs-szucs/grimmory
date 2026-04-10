@@ -14,7 +14,7 @@ function createRoute(path: string, params: Record<string, string> = {}): Activat
 }
 
 describe('CustomReuseStrategy', () => {
-  const handle = {componentRef: {} as never} as DetachedRouteHandle;
+  const handle = {componentRef: {destroy: vi.fn()} as never} as DetachedRouteHandle;
 
   let strategy: CustomReuseStrategy;
   let scrollService: BookBrowserScrollService;
@@ -129,10 +129,10 @@ describe('CustomReuseStrategy', () => {
     const route3 = createRoute('library/:libraryId/books', {libraryId: '3'});
     const route4 = createRoute('library/:libraryId/books', {libraryId: '4'});
 
-    const handle1 = {componentRef: {id: 1} as never} as DetachedRouteHandle;
-    const handle2 = {componentRef: {id: 2} as never} as DetachedRouteHandle;
-    const handle3 = {componentRef: {id: 3} as never} as DetachedRouteHandle;
-    const handle4 = {componentRef: {id: 4} as never} as DetachedRouteHandle;
+    const handle1 = {componentRef: {id: 1, destroy: vi.fn()} as never} as DetachedRouteHandle;
+    const handle2 = {componentRef: {id: 2, destroy: vi.fn()} as never} as DetachedRouteHandle;
+    const handle3 = {componentRef: {id: 3, destroy: vi.fn()} as never} as DetachedRouteHandle;
+    const handle4 = {componentRef: {id: 4, destroy: vi.fn()} as never} as DetachedRouteHandle;
 
     strategy.store(route1, handle1);
     strategy.store(route2, handle2);

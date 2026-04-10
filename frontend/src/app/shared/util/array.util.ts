@@ -7,7 +7,7 @@
  */
 export function chunk<T>(array: T[], size: number): T[][] {
   if (size <= 0) {
-    return array.length > 0 ? [array] : [];
+    return array.length > 0 ? [[...array]] : [];
   }
 
   const chunks: T[][] = [];

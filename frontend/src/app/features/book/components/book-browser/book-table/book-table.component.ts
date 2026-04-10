@@ -1,4 +1,4 @@
-import {Component, EventEmitter, inject, Input, OnChanges, OnDestroy, OnInit, Output} from '@angular/core';
+import {Component, ElementRef, EventEmitter, inject, Input, OnChanges, OnDestroy, OnInit, Output} from '@angular/core';
 import {TableModule} from 'primeng/table';
 import {DatePipe, NgClass} from '@angular/common';
 import {Rating} from 'primeng/rating';
@@ -54,6 +54,7 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
   private datePipe = inject(DatePipe);
   private readStatusHelper = inject(ReadStatusHelper);
   private readonly t = inject(TranslocoService);
+  private elementRef = inject(ElementRef);
 
   private metadataCenterViewMode: 'route' | 'dialog' = 'route';
   private destroy$ = new Subject<void>();
@@ -112,7 +113,7 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   scrollToTop(): void {
-    const tableElement = document.querySelector('.p-datatable-wrapper');
+    const tableElement = this.elementRef.nativeElement.querySelector('.p-datatable-wrapper');
     if (tableElement) {
       tableElement.scrollTop = 0;
     }

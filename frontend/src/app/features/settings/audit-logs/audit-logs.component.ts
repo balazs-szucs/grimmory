@@ -1,4 +1,5 @@
-import {Component, inject, OnInit, OnDestroy} from '@angular/core';
+import {Component, DestroyRef, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router} from '@angular/router';
 import {TableLazyLoadEvent, TableModule} from 'primeng/table';
 import {Select} from 'primeng/select';
@@ -45,7 +46,7 @@ interface UsernameOption {
   templateUrl: './audit-logs.component.html',
   styleUrl: './audit-logs.component.scss'
 })
-export class AuditLogsComponent implements OnInit, OnDestroy {
+export class AuditLogsComponent implements OnInit {
   private readonly auditLogService = inject(AuditLogService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -60,6 +61,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   expandedRows = new Set<number>();
   autoRefresh = false;
   private autoRefreshSub?: Subscription;
+  private readonly destroyRef = inject(DestroyRef);
 
   usernameOptions: UsernameOption[] = [{label: 'All Users', value: ''}];
 
@@ -110,10 +112,6 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     this.restoreFromQueryParams();
     this.loadUsernames();
     this.loadLogs();
-  }
-
-  ngOnDestroy(): void {
-    this.autoRefreshSub?.unsubscribe();
   }
 
   loadUsernames(): void {
@@ -169,7 +167,9 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   toggleAutoRefresh(): void {
     this.autoRefresh = !this.autoRefresh;
     if (this.autoRefresh) {
-      this.autoRefreshSub = interval(10000).subscribe(() => this.loadLogs(false));
+      this.autoRefreshSub = interval(10000)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => this.loadLogs(false));
     } else {
       this.autoRefreshSub?.unsubscribe();
     }

@@ -47,7 +47,7 @@ export class BookCardComponent {
   readonly isSeriesCollapsed = input(false);
   readonly overlayPreferenceService = input<BookCardOverlayPreferenceService | undefined>();
   private readonly overlayService = inject(BookCardOverlayPreferenceService);
-  readonly showBookTypePill = computed(() => this.overlayService.showBookTypePill());
+  readonly showBookTypePill = computed(() => this.overlayPreferenceService()?.showBookTypePill() ?? this.overlayService.showBookTypePill());
   readonly forceEbookMode = input(false);
   readonly useSquareCovers = input(false);
 
@@ -254,12 +254,12 @@ export class BookCardComponent {
         .then((fetchedBook) => {
           if (this.book().id !== requestedBookId) return;
           this.additionalFilesLoaded.set(true);
-          this.isSubMenuLoading.set(false);
           this.initMenu(fetchedBook);
         })
-        .catch(() => {
-          if (this.book().id !== requestedBookId) return;
-          this.isSubMenuLoading.set(false);
+        .finally(() => {
+          if (this.book().id === requestedBookId) {
+            this.isSubMenuLoading.set(false);
+          }
         });
     }
   }
