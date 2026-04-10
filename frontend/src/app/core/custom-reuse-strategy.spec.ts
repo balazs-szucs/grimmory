@@ -138,12 +138,10 @@ describe('CustomReuseStrategy', () => {
     strategy.store(route2, handle2);
     strategy.store(route3, handle3);
 
-    // All 3 should be stored
     expect(strategy.shouldAttach(route1)).toBe(true);
     expect(strategy.shouldAttach(route2)).toBe(true);
     expect(strategy.shouldAttach(route3)).toBe(true);
 
-    // Store a 4th — oldest (route1) should be evicted
     strategy.store(route4, handle4);
 
     expect(strategy.shouldAttach(route1)).toBe(false);
@@ -183,10 +181,8 @@ describe('CustomReuseStrategy', () => {
     strategy.store(route2, handle);
     strategy.store(route3, handle);
 
-    // Re-store route1 — makes it most-recently-used
     strategy.store(route1, handle);
 
-    // Now add route4 — route2 should be evicted (it's the oldest)
     strategy.store(route4, handle);
 
     expect(strategy.shouldAttach(route1)).toBe(true);

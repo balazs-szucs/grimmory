@@ -292,15 +292,18 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     return Math.max(1, Math.floor((w + this.GRID_GAP) / (minWidth + this.GRID_GAP)));
   });
 
-  /** Height in px for the spacer that represents not-yet-loaded items. */
-  readonly remainingSpacerHeight = computed(() => {
+  /**
+   * Estimated total content height based on totalElements from the first API page.
+   * Used as min-height so the scrollbar reflects the full collection from the start.
+   * Only grows, never shrinks — prevents scroll teleportation.
+   */
+  readonly estimatedTotalHeight = computed(() => {
     const total = this.appBooksApi.totalElements();
-    const loaded = this.books()?.length ?? 0;
-    const remaining = Math.max(0, total - loaded);
-    if (remaining === 0) return 0;
+    if (total === 0) return 0;
     const cols = this.gridColumns();
+    const rows = Math.ceil(total / cols);
     const rowHeight = this.currentCardSize.height + this.GRID_GAP;
-    return Math.ceil(remaining / cols) * rowHeight;
+    return rows * rowHeight;
   });
 
   protected resetFilterSubject = new Subject<void>();

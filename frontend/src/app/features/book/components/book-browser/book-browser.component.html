@@ -319,31 +319,30 @@
           }
           @if (currentViewMode === 'grid') {
             <div class="virtual-scroller" #scrollContainer>
-              <div class="book-grid"
-                [ngStyle]="{'grid-template-columns': 'repeat(auto-fill, minmax(' + gridColumnMinWidth + ', 1fr))'}">
-                @for (book of books; track book.id; let i = $index) {
-                  <div
-                    class="virtual-scroller-item"
-                    [ngStyle]="{width: currentCardSize.width + 'px', height: currentCardSize.height + 'px'}">
-                    <app-book-card
-                      [index]="i"
-                      [book]="book"
-                      [isCheckboxEnabled]="true"
-                      [seriesViewEnabled]="seriesViewEnabled"
-                      [onBookSelect]="onBookCardSelect"
-                      [isSeriesCollapsed]="seriesCollapseFilter.seriesCollapsed()"
-                      (checkboxClick)="onCheckboxClicked($event)"
-                      [isSelected]="selectedBooks().has(book.id)"
-                      [useSquareCovers]="isAudiobookOnlyLibrary"
-                      [overlayPreferenceService]="bookCardOverlayPreferenceService">
-                    </app-book-card>
-                  </div>
-                }
+              <div class="scroll-height-anchor" [ngStyle]="{'min-height': estimatedTotalHeight() + 'px'}">
+                <div class="book-grid"
+                  [ngStyle]="{'grid-template-columns': 'repeat(auto-fill, minmax(' + gridColumnMinWidth + ', 1fr))'}">
+                  @for (book of books; track book.id; let i = $index) {
+                    <div
+                      class="virtual-scroller-item"
+                      [ngStyle]="{width: currentCardSize.width + 'px', height: currentCardSize.height + 'px'}">
+                      <app-book-card
+                        [index]="i"
+                        [book]="book"
+                        [isCheckboxEnabled]="true"
+                        [seriesViewEnabled]="seriesViewEnabled"
+                        [onBookSelect]="onBookCardSelect"
+                        [isSeriesCollapsed]="seriesCollapseFilter.seriesCollapsed()"
+                        (checkboxClick)="onCheckboxClicked($event)"
+                        [isSelected]="selectedBooks().has(book.id)"
+                        [useSquareCovers]="isAudiobookOnlyLibrary"
+                        [overlayPreferenceService]="bookCardOverlayPreferenceService">
+                      </app-book-card>
+                    </div>
+                  }
+                </div>
+                <div class="scroll-sentinel" #scrollSentinel></div>
               </div>
-              <div class="scroll-sentinel" #scrollSentinel></div>
-              @if (remainingSpacerHeight() > 0) {
-                <div class="scroll-spacer" [ngStyle]="{height: remainingSpacerHeight() + 'px'}"></div>
-              }
             </div>
           }
           @if (userService.currentUser(); as currentUser) {
