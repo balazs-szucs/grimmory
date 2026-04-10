@@ -111,6 +111,13 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
+  scrollToTop(): void {
+    const tableElement = document.querySelector('.p-datatable-wrapper');
+    if (tableElement) {
+      tableElement.scrollTop = 0;
+    }
+  }
+
   selectAllBooks(): void {
     this.selectedBookIds = new Set(this.books.map(book => book.id));
     this.selectedBooks = [...this.books];

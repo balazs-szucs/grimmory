@@ -306,6 +306,18 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     return rows * rowHeight;
   });
 
+  /**
+   * Total height of currently loaded books in grid view.
+   */
+  readonly renderedHeight = computed(() => {
+    const books = this.books();
+    if (!books || books.length === 0) return 0;
+    const cols = this.gridColumns();
+    const rows = Math.ceil(books.length / cols);
+    const rowHeight = this.currentCardSize.height + this.GRID_GAP;
+    return rows * rowHeight;
+  });
+
   protected resetFilterSubject = new Subject<void>();
 
   readonly skeletonSlots = Array.from({length: 24}, (_, index) => index);
@@ -401,6 +413,17 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     );
   });
 
+  /**
+   * Triggers sequential page loads if the current scroll position is beyond the loaded content.
+   * This is critical for scroll restoration on page reload.
+   */
+  private readonly fillScrollGapEffect = effect(() => {
+    const books = this.books();
+    if (books && books.length > 0) {
+      this.checkAndFetchIfNeeded();
+    }
+  });
+
   @ViewChild(BookTableComponent)
   bookTableComponent!: BookTableComponent;
   @ViewChild(BookFilterComponent, {static: false})
@@ -412,6 +435,9 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('scrollContainer')
   set scrollContainerRef(ref: ElementRef<HTMLElement> | undefined) {
     this.containerResizeObserver?.disconnect();
+    if (this.scrollContainer) {
+      this.scrollContainer.removeEventListener('scroll', this.onScroll);
+    }
     this.scrollContainer = ref?.nativeElement;
     if (this.scrollContainer) {
       const el = this.scrollContainer;
@@ -420,6 +446,9 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
         this.containerWidth.set(entries[0]?.contentRect.width ?? el.clientWidth);
       });
       this.containerResizeObserver.observe(el);
+      el.addEventListener('scroll', this.onScroll, {passive: true});
+      // Initial check in case we are already scrolled down
+      globalThis.requestAnimationFrame(() => this.checkAndFetchIfNeeded());
     }
   }
 
@@ -577,10 +606,33 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.scrollContainer) {
+      this.scrollContainer.removeEventListener('scroll', this.onScroll);
+    }
     this.containerResizeObserver?.disconnect();
     this.sentinelObserver?.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private onScroll = (): void => {
+    this.checkAndFetchIfNeeded();
+  };
+
+  /**
+   * Checks if the current scroll position plus viewport exceeds the rendered height (with a buffer)
+   * and fetches the next page if necessary.
+   */
+  private checkAndFetchIfNeeded(): void {
+    if (!this.scrollContainer || this.currentViewMode === VIEW_MODES.TABLE) return;
+
+    const {scrollTop, clientHeight} = this.scrollContainer;
+    const buffer = 1000; // Large buffer to facilitate scroll restoration
+    const renderedHeight = untracked(() => this.renderedHeight());
+
+    if (scrollTop + clientHeight >= renderedHeight - buffer) {
+      untracked(() => this.checkAndFetchNextPage());
+    }
   }
 
   private checkAndFetchNextPage(): void {
@@ -616,7 +668,17 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
       this.bookTitle = '';
       this.bookSelectionService.deselectAll();
       this.clearFilter();
+      this.scrollToTop();
     });
+  }
+
+  private scrollToTop(): void {
+    if (this.scrollContainer) {
+      this.scrollContainer.scrollTop = 0;
+    }
+    if (this.bookTableComponent) {
+      this.bookTableComponent.scrollToTop();
+    }
   }
 
   private readonly syncMetadataMenuEffect = effect(() => {

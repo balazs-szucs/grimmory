@@ -164,9 +164,10 @@ describe('BookCardComponent', () => {
     taskHelperService = {
       refreshMetadataTask: vi.fn(),
     };
+    const currentUser = signal<User | null>(null);
     userService = {
-      currentUser: signal<User | null>(null),
-      getCurrentUser: vi.fn(() => userService.currentUser()),
+      currentUser,
+      getCurrentUser: vi.fn(() => currentUser()),
     };
     emailService = {
       emailBookQuick: vi.fn(),

@@ -423,4 +423,36 @@ describe('BookBrowserComponent', () => {
     expect(component.showGridLoadingPlaceholder).toBe(false);
     expect(component.showTableLoadingPlaceholder).toBe(false);
   });
+
+  it('triggers next page fetch when scrolled near the bottom of rendered content', async () => {
+    const {component} = createHarness();
+    const appBooksApi = TestBed.inject(AppBooksApiService);
+
+    // Initial load
+    vi.runOnlyPendingTimers();
+    TestBed.flushEffects();
+
+    // Mock hasNextPage to be true
+    vi.spyOn(appBooksApi, 'hasNextPage').mockReturnValue(true);
+    const fetchNextPageSpy = vi.spyOn(appBooksApi, 'fetchNextPage');
+
+    // Mock scroll container
+    const mockElement = {
+      scrollTop: 2000,
+      clientHeight: 1000,
+      clientWidth: 1000,
+      scrollHeight: 5000,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement;
+
+    component.currentViewMode = VIEW_MODES.GRID;
+    component.scrollContainerRef = {nativeElement: mockElement} as any;
+
+    // Trigger initial check
+    vi.runOnlyPendingTimers(); // For requestAnimationFrame
+    TestBed.flushEffects();
+
+    expect(fetchNextPageSpy).toHaveBeenCalled();
+  });
 });
