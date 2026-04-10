@@ -17,7 +17,7 @@ type PeakHoursChartData = ChartData<'line', number[], string>;
   selector: 'app-peak-hours-chart',
   standalone: true,
   imports: [
-    AsyncPipe,BaseChartDirective, Select, FormsModule, Tooltip, TranslocoDirective],
+    AsyncPipe, BaseChartDirective, Select, FormsModule, Tooltip, TranslocoDirective],
   templateUrl: './peak-hours-chart.component.html',
   styleUrls: ['./peak-hours-chart.component.scss']
 })

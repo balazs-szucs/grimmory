@@ -1,11 +1,11 @@
-import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, OnDestroy, OnInit, signal, untracked, ViewChild} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, OnInit, signal, untracked, ViewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, NavigationStart, Router} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
 import {PageTitleService} from '../../../../shared/service/page-title.service';
 import {BookService} from '../../service/book.service';
 import {BookMetadataManageService} from '../../service/book-metadata-manage.service';
-import {debounceTime, distinctUntilChanged, filter, map, take, takeUntil} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, map, take} from 'rxjs/operators';
 import {combineLatest, finalize, Subject} from 'rxjs';
 import {DynamicDialogRef} from 'primeng/dynamicdialog';
 import {Library} from '../../model/library.model';
@@ -79,7 +79,7 @@ export enum EntityType {
   ],
   providers: [SeriesCollapseFilter],
 })
-export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
+export class BookBrowserComponent implements OnInit, AfterViewInit {
 
   protected userService = inject(UserService);
   protected coverScalePreferenceService = inject(CoverScalePreferenceService);
@@ -344,7 +344,6 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly MOBILE_COLUMNS_STORAGE_KEY = 'mobileColumnsPreference';
 
   private settingFiltersFromUrl = false;
-  private destroy$ = new Subject<void>();
   protected metadataMenuItems: MenuItem[] | undefined;
   protected moreActionsMenuItems: MenuItem[] | undefined;
   protected readonly onBookCardSelect = (book: Book, selected: boolean): void => {
@@ -610,8 +609,6 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     this.containerResizeObserver?.disconnect();
     this.sentinelObserver?.disconnect();
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   private onScroll = (): void => {
@@ -662,7 +659,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private setupRouteChangeHandlers(): void {
-    this.activatedRoute.paramMap.pipe(takeUntil(this.destroy$)).subscribe(() => {
+    this.activatedRoute.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.searchTerm.set('');
       this.bookTitle = '';
       this.bookSelectionService.deselectAll();
@@ -701,7 +698,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
       this.activatedRoute.queryParamMap,
       this.currentUser$,
     ]).pipe(
-      takeUntil(this.destroy$)
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe(([entityInfo, queryParamMap, currentUser]) => {
       const parseResult = this.queryParamsService.parseQueryParams(
         queryParamMap,

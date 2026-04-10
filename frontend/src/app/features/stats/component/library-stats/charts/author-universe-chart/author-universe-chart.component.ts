@@ -41,7 +41,7 @@ const COMPLETION_COLORS = {
   selector: 'app-author-universe-chart',
   standalone: true,
   imports: [
-    AsyncPipe,BaseChartDirective, TranslocoDirective],
+    AsyncPipe, BaseChartDirective, TranslocoDirective],
   templateUrl: './author-universe-chart.component.html',
   styleUrls: ['./author-universe-chart.component.scss']
 })

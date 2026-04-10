@@ -3,7 +3,7 @@ import {TableModule} from 'primeng/table';
 import {DatePipe, NgClass} from '@angular/common';
 import {Rating} from 'primeng/rating';
 import {FormsModule} from '@angular/forms';
-import {Tooltip} from "primeng/tooltip";
+import {Tooltip} from 'primeng/tooltip';
 import {Book, BookMetadata, ReadStatus} from '../../../model/book.model';
 import {SortOption} from '../../../model/sort.model';
 import {UrlHelperService} from '../../../../../shared/service/url-helper.service';
@@ -13,7 +13,7 @@ import {BookService} from '../../../service/book.service';
 import {BookMetadataManageService} from '../../../service/book-metadata-manage.service';
 import {MessageService} from 'primeng/api';
 import {RouterLink} from '@angular/router';
-import {Subject} from 'rxjs';
+import {finalize} from 'rxjs';
 import {UserService} from '../../../../settings/user-management/user.service';
 import {ReadStatusHelper} from '../../../helpers/read-status.helper';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -57,7 +57,7 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
   private elementRef = inject(ElementRef);
 
   private metadataCenterViewMode: 'route' | 'dialog' = 'route';
-  private destroy$ = new Subject<void>();
+  private resizeListener = this.setScrollHeight.bind(this);
 
   readonly allColumns: { field: string; header: string }[] = [
     {field: 'readStatus', header: this.t.translate('book.columnPref.columns.readStatus')},
@@ -95,7 +95,7 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
     this.selectedBookIds = this.preselectedBookIds;
     this.selectedBooks = this.bookService.getBooksByIds([...this.selectedBookIds]);
     this.setScrollHeight();
-    window.addEventListener('resize', this.setScrollHeight.bind(this));
+    window.addEventListener('resize', this.resizeListener);
   }
 
   setScrollHeight() {
@@ -353,8 +353,6 @@ export class BookTableComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    window.removeEventListener('resize', this.setScrollHeight.bind(this));
+    window.removeEventListener('resize', this.resizeListener);
   }
 }
