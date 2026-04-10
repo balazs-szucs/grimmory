@@ -1,4 +1,4 @@
-import { Component, DestroyRef, effect, inject, ViewChild } from '@angular/core';
+import { Component, DestroyRef, effect, inject, OnDestroy, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LayoutService } from '../layout.service';
 import { Router, RouterLink } from '@angular/router';
@@ -15,7 +15,6 @@ import { AuthService } from '../../service/auth.service';
 import { UserService } from '../../../features/settings/user-management/user.service';
 import { Popover } from 'primeng/popover';
 import { MetadataProgressService } from '../../service/metadata-progress.service';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MetadataBatchProgressNotification } from '../../model/metadata-batch-progress.model';
 import { BookdropFileService } from '../../../features/bookdrop/service/bookdrop-file.service';
 import { DialogLauncherService } from '../../services/dialog-launcher.service';
@@ -47,7 +46,7 @@ import type { MenuItem } from 'primeng/api';
     TranslocoDirective,
   ],
 })
-export class AppTopBarComponent {
+export class AppTopBarComponent implements OnDestroy {
   public readonly layoutService = inject(LayoutService);
   protected readonly userService = inject(UserService);
   protected readonly user = this.userService.currentUser;
@@ -71,7 +70,6 @@ export class AppTopBarComponent {
 
   private readonly destroyRef = inject(DestroyRef);
   private eventTimer: number | undefined;
-  private readonly destroyRef = inject(DestroyRef);
 
   private latestTasks: Record<string, MetadataBatchProgressNotification> = {};
   private latestHasPendingFiles = false;
@@ -120,7 +118,6 @@ export class AppTopBarComponent {
 
   ngOnDestroy(): void {
     clearTimeout(this.eventTimer);
-    this.destroyRef.onDestroy(() => clearTimeout(this.eventTimer));
   }
 
   toggleMenu() {

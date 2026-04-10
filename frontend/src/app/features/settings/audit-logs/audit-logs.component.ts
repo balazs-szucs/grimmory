@@ -1,6 +1,5 @@
 import {Component, DestroyRef, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router} from '@angular/router';
 import {TableLazyLoadEvent, TableModule} from 'primeng/table';
 import {Select} from 'primeng/select';
@@ -63,7 +62,6 @@ export class AuditLogsComponent implements OnInit {
   expandedRows = new Set<number>();
   autoRefresh = false;
   private autoRefreshSub?: Subscription;
-  private readonly destroyRef = inject(DestroyRef);
 
   usernameOptions: UsernameOption[] = [{label: 'All Users', value: ''}];
 

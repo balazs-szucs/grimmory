@@ -1,6 +1,5 @@
 import {Component, DestroyRef, effect, inject} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {Accordion, AccordionPanel, AccordionHeader, AccordionContent} from 'primeng/accordion';
 import {MessageService} from 'primeng/api';

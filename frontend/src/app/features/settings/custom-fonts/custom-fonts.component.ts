@@ -1,7 +1,5 @@
 import {Component, DestroyRef, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {take} from 'rxjs/operators';
 import {Button} from 'primeng/button';
 import {MessageService} from 'primeng/api';
 import {CustomFontService} from '../../../shared/service/custom-font.service';
