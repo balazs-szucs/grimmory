@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, computed, inject, input, output, signal} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, EventEmitter, inject, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, ViewChild} from '@angular/core';
 import {TooltipModule} from 'primeng/tooltip';
 import {AdditionalFile, Book, BookType, ReadStatus} from '../../../model/book.model';
 import {Button} from 'primeng/button';
@@ -37,7 +37,7 @@ import {QueryClient} from '@tanstack/angular-query-experimental';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class BookCardComponent {
+export class BookCardComponent implements OnInit, OnChanges {
 
   // --- Inputs ---
   readonly book = input.required<Book>();
@@ -78,7 +78,64 @@ export class BookCardComponent {
   private appSettingsService = inject(AppSettingsService);
   private readonly t = inject(TranslocoService);
   private queryClient = inject(QueryClient);
-  private readStatusHelper = inject(ReadStatusHelper);
+  protected _progressPercentage: number | null = null;
+  protected _koProgressPercentage: number | null = null;
+  protected _koboProgressPercentage: number | null = null;
+  protected _displayTitle: string | undefined = undefined;
+  protected _isSeriesViewActive: boolean = false;
+  protected _coverImageUrl: string | null = null;
+  protected _readStatusIcon: string = '';
+  protected _readStatusClass: string = '';
+  protected _readStatusTooltip: string = '';
+  protected _shouldShowStatusIcon: boolean = false;
+  protected _seriesCountTooltip: string = '';
+  protected _titleTooltip: string = '';
+  protected _hasProgress: boolean = false;
+  protected _isAudiobook: boolean = false;
+  protected _progressTooltip: string = '';
+  protected _isContinueReading: boolean = false;
+  protected _readButtonIcon: string = 'pi pi-book';
+
+  private metadataCenterViewMode: 'route' | 'dialog' = 'route';
+  protected readStatusHelper = inject(ReadStatusHelper);
+  private user: User | null = null;
+  private diskType: string = 'LOCAL';
+  private menuInitialized = false;
+
+  ngOnInit(): void {
+    this.computeAllMemoizedValues();
+    const currentUser = this.userService.currentUser();
+    if (currentUser) {
+      this.user = currentUser;
+      this.metadataCenterViewMode = currentUser.userSettings?.metadataCenterViewMode ?? 'route';
+    }
+
+    const settings = this.appSettingsService.appSettings();
+    if (settings) {
+      this.diskType = settings.diskType ?? 'LOCAL';
+    }
+
+  }
+
+  ngOnDestroy(): void {
+    this._coverImageUrl = null;
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['book'] || changes['forceEbookMode'] || changes['useSquareCovers']) {
+      this.computeAllMemoizedValues();
+      if (changes['book'] && !changes['book'].firstChange && this.menuInitialized) {
+        this.additionalFilesLoaded = false;
+        this.initMenu();
+      }
+    }
+
+    if (changes['seriesViewEnabled'] || changes['isSeriesCollapsed']) {
+      this._isSeriesViewActive = this.seriesViewEnabled && !!this.book.seriesCount && this.book.seriesCount >= 1;
+      this._displayTitle = (this.isSeriesCollapsed && this.book.metadata?.seriesName) ? this.book.metadata?.seriesName : this.book.metadata?.title;
+      this._titleTooltip = this.t.translate('book.card.alt.titleTooltip', { title: this._displayTitle });
+    }
+  }
 
   get user(): User | null { return this.userService.currentUser() ?? null; }
   get metadataCenterViewMode(): 'route' | 'dialog' { return this.user?.userSettings?.metadataCenterViewMode ?? 'route'; }
