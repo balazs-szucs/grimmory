@@ -1,6 +1,6 @@
 import {Component, DestroyRef, inject, OnInit} from '@angular/core';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CommonModule} from '@angular/common';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Button} from 'primeng/button';
 import {ProgressBar} from 'primeng/progressbar';
 import {MessageService} from 'primeng/api';
@@ -21,16 +21,18 @@ import {
 } from './task.service';
 import {MetadataRefreshRequest} from '../../metadata/model/request/metadata-refresh-request.model';
 import {finalize, forkJoin} from 'rxjs';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-link/external-doc-link.component';
 import {ToggleSwitch} from 'primeng/toggleswitch';
 import {Tooltip} from 'primeng/tooltip';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
+import {NgClass} from '@angular/common';
 
 @Component({
   selector: 'app-task-management',
   standalone: true,
   imports: [
-    CommonModule,
+    NgClass,
     Button,
     ProgressBar,
     Select,
@@ -49,7 +51,6 @@ export class TaskManagementComponent implements OnInit {
   private messageService = inject(MessageService);
   private taskService = inject(TaskService);
   private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
 
   // State
   taskInfos: TaskInfo[] = [];
@@ -121,11 +122,13 @@ export class TaskManagementComponent implements OnInit {
   }
 
   private subscribeToTaskProgress(): void {
-    this.taskService.taskProgress$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(progress => {
-      if (progress) {
-        this.updateTaskWithProgress(progress);
-      }
-    });
+    this.taskService.taskProgress$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe(progress => {
+        if (progress) {
+          this.updateTaskWithProgress(progress);
+        }
+      });
   }
 
   private updateTaskWithProgress(progress: TaskProgressPayload): void {

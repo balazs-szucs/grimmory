@@ -1,6 +1,6 @@
 import {Component, DestroyRef, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {CommonModule} from '@angular/common';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router} from '@angular/router';
 import {TableLazyLoadEvent, TableModule} from 'primeng/table';
 import {Select} from 'primeng/select';
@@ -10,6 +10,7 @@ import {TranslocoDirective} from '@jsverse/transloco';
 import {Subscription, interval} from 'rxjs';
 import {AuditLog, AuditLogService} from './audit-log.service';
 import {TagColor, TagComponent} from '../../../shared/components/tag/tag.component';
+import {DatePipe} from '@angular/common';
 
 const ACTION_COLOR_GROUPS: [TagColor, string[]][] = [
   ['red', ['USER_DELETED', 'LIBRARY_DELETED', 'BOOK_DELETED', 'SHELF_DELETED', 'MAGIC_SHELF_DELETED', 'EMAIL_PROVIDER_DELETED', 'OPDS_USER_DELETED', 'AUTHOR_DELETED']],
@@ -41,7 +42,8 @@ interface UsernameOption {
 @Component({
   selector: 'app-audit-logs',
   standalone: true,
-  imports: [CommonModule, TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
+  imports: [
+    DatePipe,TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
   templateUrl: './audit-logs.component.html',
   styleUrl: './audit-logs.component.scss'
 })
@@ -61,6 +63,7 @@ export class AuditLogsComponent implements OnInit {
   expandedRows = new Set<number>();
   autoRefresh = false;
   private autoRefreshSub?: Subscription;
+  private readonly destroyRef = inject(DestroyRef);
 
   usernameOptions: UsernameOption[] = [{label: 'All Users', value: ''}];
 
@@ -169,7 +172,9 @@ export class AuditLogsComponent implements OnInit {
     this.autoRefresh = !this.autoRefresh;
     if (this.autoRefresh) {
       this.autoRefreshSub?.unsubscribe();
-      this.autoRefreshSub = interval(10000).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadLogs(false));
+      this.autoRefreshSub = interval(10000)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadLogs(false));
     } else {
       this.autoRefreshSub?.unsubscribe();
     }

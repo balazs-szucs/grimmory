@@ -1,9 +1,10 @@
 import { Component, DestroyRef, effect, inject, ViewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LayoutService } from '../layout.service';
 import { Router, RouterLink } from '@angular/router';
-import { TooltipModule } from 'primeng/tooltip';
+import { Tooltip } from 'primeng/tooltip';
 import { FormsModule } from '@angular/forms';
-import { InputTextModule } from 'primeng/inputtext';
+
 import { BookSearcherComponent } from '../../../features/book/components/book-searcher/book-searcher.component';
 import { NgClass, NgStyle } from '@angular/common';
 import { NotificationEventService } from '../../websocket/notification-event.service';
@@ -32,9 +33,8 @@ import type { MenuItem } from 'primeng/api';
   styleUrls: ['./app.topbar.component.scss'],
   imports: [
     RouterLink,
-    TooltipModule,
+    Tooltip,
     FormsModule,
-    InputTextModule,
     BookSearcherComponent,
     ThemeConfiguratorComponent,
     StyleClass,
@@ -71,6 +71,7 @@ export class AppTopBarComponent {
 
   private readonly destroyRef = inject(DestroyRef);
   private eventTimer: number | undefined;
+  private readonly destroyRef = inject(DestroyRef);
 
   private latestTasks: Record<string, MetadataBatchProgressNotification> = {};
   private latestHasPendingFiles = false;
@@ -117,7 +118,10 @@ export class AppTopBarComponent {
       });
   }
 
-
+  ngOnDestroy(): void {
+    clearTimeout(this.eventTimer);
+    this.destroyRef.onDestroy(() => clearTimeout(this.eventTimer));
+  }
 
   toggleMenu() {
     this.isMenuVisible = !this.isMenuVisible;

@@ -21,7 +21,6 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
   selector: 'app-content-restrictions-editor',
   standalone: true,
   imports: [
-    CommonModule,
     FormsModule,
     Button,
     Select,
