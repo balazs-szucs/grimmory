@@ -1,4 +1,4 @@
-import {computed, signal, WritableSignal} from '@angular/core';
+import {computed, ElementRef, signal, WritableSignal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {ActivatedRoute, convertToParamMap, ParamMap, Router} from '@angular/router';
 import {BehaviorSubject, Subject} from 'rxjs';
@@ -447,7 +447,7 @@ describe('BookBrowserComponent', () => {
     } as unknown as HTMLElement;
 
     component.currentViewMode = VIEW_MODES.GRID;
-    component.scrollContainerRef = {nativeElement: mockElement} as any;
+    component.scrollContainerRef = {nativeElement: mockElement} as ElementRef<HTMLElement>;
 
     // Trigger initial check
     vi.runOnlyPendingTimers(); // For requestAnimationFrame
