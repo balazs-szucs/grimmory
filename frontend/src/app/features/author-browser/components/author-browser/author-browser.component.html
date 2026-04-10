@@ -47,7 +47,7 @@
             }
           </button>
 
-          @if (!isMobile) {
+          @if (!isMobile()) {
             <button class="display-settings-btn" (click)="displaySettingsPopover.toggle($event)">
               <i class="pi pi-sliders-h"></i>
             </button>
