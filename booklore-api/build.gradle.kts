@@ -209,6 +209,8 @@ graalvmNative {
             buildArgs.addAll(
                 "--gc=G1",
                 "--enable-native-access=ALL-UNNAMED",
+                "-H:+UnlockExperimentalVMOptions",
+                "-H:+ForeignAPISupport",
                 "-H:+AddAllCharsets",
                 "-Djava.awt.headless=true",
                 "-H:+ReportExceptionStackTraces",
