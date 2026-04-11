@@ -592,36 +592,6 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     return !!selectedFilter && Object.keys(selectedFilter).length > 0;
   });
 
-  readonly computedFilterLabel = computed(() => {
-    const filters = this.selectedFilter();
-
-    if (!filters || Object.keys(filters).length === 0) {
-      return this.t.translate('book.browser.labels.allBooks');
-    }
-
-    const filterEntries = Object.entries(filters);
-
-    if (filterEntries.length === 1) {
-      const [filterType, values] = filterEntries[0];
-      const filterName = FilterLabelHelper.getFilterTypeName(filterType);
-
-      if (values.length === 1) {
-        const displayValue = FilterLabelHelper.getFilterDisplayValue(filterType, values[0]);
-        return `${filterName}: ${displayValue}`;
-      }
-
-      return `${filterName} (${values.length})`;
-    }
-
-    const filterSummary = filterEntries
-      .map(([type, values]) => `${FilterLabelHelper.getFilterTypeName(type)} (${values.length})`)
-      .join(', ');
-
-    return filterSummary.length > 50
-      ? this.t.translate('book.browser.labels.activeFilters', {count: filterEntries.length})
-      : filterSummary;
-  });
-
   readonly isAudiobookOnlyLibrary = computed(() => {
     const entity = this.entity();
     if (!entity || this.entityType() !== EntityType.LIBRARY) return false;
