@@ -111,14 +111,26 @@ export class LibraryCreatorComponent {
 
   private initFromDialogData(): void {
     const data = this.dynamicDialogConfig?.data as LibraryCreatorDialogData;
-    if (data?.mode !== 'edit') return;
+    if (data?.mode !== 'edit') {
+      this.mode.set('create');
+      return;
+    }
+
+    this.mode.set('edit');
 
     const library = this.libraryService.findLibraryById(data.libraryId!);
-    if (!library) return;
+    if (!library) {
+      this.messageService.add({
+        severity: 'error',
+        summary: this.t.translate('libraryCreator.creator.toast.updateFailedSummary'),
+        detail: this.t.translate('libraryCreator.creator.toast.updateFailedDetail'),
+      });
+      this.dynamicDialogRef.close();
+      return;
+    }
 
     const { name, icon, iconType, paths, watch, formatPriority, allowedFormats } = library;
 
-    this.mode.set(data.mode);
     this.chosenLibraryName.set(name);
     this.editModeLibraryName.set(name);
     this.watch.set(watch);
@@ -176,6 +188,9 @@ export class LibraryCreatorComponent {
     if (checked) {
       next.add(formatType);
     } else {
+      if (next.size === 1 && next.has(formatType)) {
+        return;
+      }
       next.delete(formatType);
     }
     this.selectedAllowedFormats.set(next);
