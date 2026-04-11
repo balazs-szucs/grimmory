@@ -378,11 +378,11 @@ describe('BookBrowserComponent', () => {
   it('switches view mode through the display settings control', () => {
     const {component, queryParamsService} = createHarness();
 
-    component.currentViewMode = VIEW_MODES.GRID;
+    component.currentViewMode.set(VIEW_MODES.GRID);
 
     component.onViewModeChange(VIEW_MODES.TABLE);
 
-    expect(component.currentViewMode).toBe(VIEW_MODES.TABLE);
+    expect(component.currentViewMode()).toBe(VIEW_MODES.TABLE);
     expect(queryParamsService.updateViewMode).toHaveBeenCalledWith(VIEW_MODES.TABLE);
   });
 
@@ -432,9 +432,9 @@ describe('BookBrowserComponent', () => {
       isBooksLoading: true,
     });
 
-    expect(component.showBooksLoadingPlaceholder).toBe(false);
-    expect(component.showGridLoadingPlaceholder).toBe(false);
-    expect(component.showTableLoadingPlaceholder).toBe(false);
+    expect(component.showBooksLoadingPlaceholder()).toBe(false);
+    expect(component.showGridLoadingPlaceholder()).toBe(false);
+    expect(component.showTableLoadingPlaceholder()).toBe(false);
   });
 
   it('triggers next page fetch when scrolled near the bottom of rendered content', async () => {
@@ -460,7 +460,7 @@ describe('BookBrowserComponent', () => {
       removeEventListener: vi.fn(),
     } as unknown as HTMLElement;
 
-    component.currentViewMode = VIEW_MODES.GRID;
+    component.currentViewMode.set(VIEW_MODES.GRID);
     component.scrollContainerRef = {nativeElement: mockElement} as ElementRef<HTMLElement>;
 
     // Trigger initial check
