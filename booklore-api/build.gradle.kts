@@ -212,6 +212,8 @@ graalvmNative {
                 "-H:+UnlockExperimentalVMOptions",
                 "-H:+ForeignAPISupport",
                 "-H:+AddAllCharsets",
+                "-Dfile.encoding=UTF-8",
+                "-Dsun.jnu.encoding=UTF-8",
                 "-Djava.awt.headless=true",
                 "-H:+ReportExceptionStackTraces",
                 "--emit build-report"

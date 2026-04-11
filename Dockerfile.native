@@ -30,6 +30,8 @@ ARG TARGETARCH
 # pinned glibc-static / zlib-ng-compat-static packages already in the image.
 RUN microdnf install -y findutils tar gzip gcc && microdnf clean all
 
+ENV LANG=C.UTF-8
+
 WORKDIR /workspace/booklore-api
 
 # Install Gradle wrapper dependencies first for caching
@@ -57,6 +59,14 @@ RUN --mount=type=cache,target=/root/.gradle \
         nativeCompile
 
 RUN cp build/native/nativeCompile/booklore-api /workspace/booklore-api/app
+
+# Collect AWT shared libraries required for ImageIO support
+RUN mkdir -p /workspace/booklore-api/libs && \
+    find /usr/lib64/ -name "libawt.so" -exec cp {} /workspace/booklore-api/libs/ \; && \
+    find /usr/lib64/ -name "libjava.so" -exec cp {} /workspace/booklore-api/libs/ \; && \
+    find /usr/lib64/ -name "libjvm.so" -exec cp {} /workspace/booklore-api/libs/ \; && \
+    find /usr/lib64/ -name "libawt_headless.so" -exec cp {} /workspace/booklore-api/libs/ \; && \
+    find /usr/lib64/ -name "libfontmanager.so" -exec cp {} /workspace/booklore-api/libs/ \;
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 3: External tool layers (same as JVM Dockerfile)
@@ -99,7 +109,10 @@ FROM kepubify-layer-${TARGETARCH} AS kepubify-layer
 FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        gosu libstdc++6 libgcc-s1 libarchive13t64 wget && \
+        gosu libstdc++6 libgcc-s1 libarchive13t64 wget locales \
+        libfontconfig1 libfreetype6 libx11-6 libxext6 libxrender1 && \
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
     rm -rf /var/lib/apt/lists/* && \
     ln -sf /usr/lib/*/libarchive.so.13 /usr/lib/libarchive.so && \
     mkdir -p /bookdrop
@@ -109,6 +122,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 COPY --from=ffprobe-layer /ffprobe /usr/local/bin/ffprobe
 COPY --from=kepubify-layer /kepubify /usr/local/bin/kepubify
+
+# Copy AWT/Java native libraries
+COPY --from=native-build /workspace/booklore-api/libs/* /usr/lib/
 
 COPY --from=native-build /workspace/booklore-api/app /app/app
 
@@ -123,7 +139,10 @@ LABEL org.opencontainers.image.title="Grimmory (native)" \
       org.opencontainers.image.licenses="AGPL-3.0" \
       org.opencontainers.image.base.name="docker.io/library/debian:trixie-slim"
 
-ENV APP_VERSION=${APP_VERSION} \
+ENV LANG=C.UTF-8 \
+    LANGUAGE=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    APP_VERSION=${APP_VERSION} \
     APP_REVISION=${APP_REVISION}
 
 ARG BOOKLORE_PORT=6060

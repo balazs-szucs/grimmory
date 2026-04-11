@@ -139,9 +139,17 @@ public class LibraryProcessingService {
     private void validateLibraryPathsAccessible(LibraryEntity libraryEntity) {
         for (var pathEntity : libraryEntity.getLibraryPaths()) {
             Path path = Path.of(pathEntity.getPath());
-            if (!Files.exists(path) || !Files.isDirectory(path) || !Files.isReadable(path)) {
-                log.error("Library path not accessible: {}", path);
-                throw ApiError.LIBRARY_PATH_NOT_ACCESSIBLE.createException(path.toString());
+            if (!Files.exists(path)) {
+                log.error("Library path does not exist: {}", path);
+                throw ApiError.LIBRARY_PATH_NOT_ACCESSIBLE.createException(path.toString() + " (does not exist)");
+            }
+            if (!Files.isDirectory(path)) {
+                log.error("Library path is not a directory: {}", path);
+                throw ApiError.LIBRARY_PATH_NOT_ACCESSIBLE.createException(path.toString() + " (not a directory)");
+            }
+            if (!Files.isReadable(path)) {
+                log.error("Library path is not readable: {}", path);
+                throw ApiError.LIBRARY_PATH_NOT_ACCESSIBLE.createException(path.toString() + " (not readable)");
             }
         }
     }

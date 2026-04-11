@@ -224,9 +224,70 @@ import org.springframework.aot.hint.TypeReference;
             "com.github.benmanes.caffeine.cache.PDAMS",   // node:  softValues + maxSize + expireAfterAccess
             "com.github.benmanes.caffeine.cache.SSMSW",   // cache: strongValues + maxSize + expireAfterWrite
             "com.github.benmanes.caffeine.cache.PSWMS",   // node:  strongValues + maxSize + expireAfterWrite
+            "com.github.benmanes.caffeine.cache.SSMSA",   // cache: strongValues + maxSize + expireAfterAccess
+            "com.github.benmanes.caffeine.cache.PSAMS",   // node:  strongValues + maxSize + expireAfterAccess
         };
         for (String className : caffeineClasses) {
             hints.reflection().registerType(TypeReference.of(className), allAccess);
+        }
+
+        // Jaudiotagger reflection hints. It uses reflection extensively to handle
+        // different ID3 tag versions and cloning data types.
+        String[] jaudiotaggerClasses = {
+            "org.jaudiotagger.tag.id3.ID3v24Tag",
+            "org.jaudiotagger.tag.id3.ID3v23Tag",
+            "org.jaudiotagger.tag.id3.ID3v22Tag",
+            "org.jaudiotagger.tag.id3.AbstractID3v2Tag",
+            "org.jaudiotagger.tag.id3.AbstractID3v2Frame",
+            "org.jaudiotagger.tag.id3.ID3v24Frame",
+            "org.jaudiotagger.tag.id3.ID3v23Frame",
+            "org.jaudiotagger.tag.id3.AbstractTagFrameBody",
+            "org.jaudiotagger.tag.id3.framebody.AbstractID3v2FrameBody",
+            "org.jaudiotagger.tag.id3.framebody.AbstractFrameBodyTextInfo",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyUnsupported",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyCHAP",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTIT2",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTPE1",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTALB",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTCOM",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyCOMM",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyAPIC",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTDRC",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTCON",
+            "org.jaudiotagger.tag.id3.framebody.FrameBodyTYER",
+            "org.jaudiotagger.tag.datatype.ByteArraySizeTerminated",
+            "org.jaudiotagger.tag.datatype.NumberHashMap",
+            "org.jaudiotagger.tag.datatype.NumberFixedLength",
+            "org.jaudiotagger.tag.datatype.StringFixedLength",
+            "org.jaudiotagger.tag.datatype.StringNullTerminated",
+            "org.jaudiotagger.tag.datatype.TextEncodedStringSizeTerminated",
+            "org.jaudiotagger.tag.datatype.TextEncodedStringNullTerminated",
+            "org.jaudiotagger.tag.datatype.DataTypes",
+            "org.jaudiotagger.audio.mp3.MP3File",
+            "org.jaudiotagger.audio.AudioFile",
+            "org.jaudiotagger.audio.asf.io.ContentDescriptionReader",
+            "org.jaudiotagger.audio.asf.io.ContentBrandingReader",
+            "org.jaudiotagger.audio.asf.io.MetadataReader",
+            "org.jaudiotagger.audio.asf.io.LanguageListReader",
+            "org.jaudiotagger.audio.asf.io.FileHeaderReader",
+            "org.jaudiotagger.audio.asf.io.StreamChunkReader",
+            "org.jaudiotagger.audio.asf.io.EncodingChunkReader",
+            "org.jaudiotagger.audio.asf.io.EncryptionChunkReader",
+            "org.jaudiotagger.audio.asf.io.StreamBitratePropertiesReader",
+        };
+        for (String className : jaudiotaggerClasses) {
+            hints.reflection().registerType(TypeReference.of(className), allAccess);
+        }
+
+        // Apache Tika reflection hints
+        Class<?>[] tikaClasses = {
+            org.apache.tika.Tika.class,
+            org.apache.tika.config.TikaConfig.class,
+            org.apache.tika.mime.MimeTypes.class,
+            org.apache.tika.mime.MimeType.class,
+        };
+        for (Class<?> c : tikaClasses) {
+            hints.reflection().registerType(c, allAccess);
         }
     }
 
@@ -248,6 +309,10 @@ import org.springframework.aot.hint.TypeReference;
 
         // SPI service descriptors (TwelveMonkeys ImageIO, JAXB, JJWT, etc.)
         hints.resources().registerPattern("META-INF/services/**");
+
+        // Apache Tika mimetypes
+        hints.resources().registerPattern("org/apache/tika/mime/tika-mimetypes.xml");
+        hints.resources().registerPattern("org/apache/tika/mime/custom-mimetypes.xml");
     }
 
 }

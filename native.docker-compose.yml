@@ -19,6 +19,8 @@ services:
       - DATABASE_USERNAME=grimmory
       - DATABASE_PASSWORD=grimmory
       - ALLOWED_ORIGINS=http://localhost:4200
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
     restart: unless-stopped
     depends_on:
       backend_db:
