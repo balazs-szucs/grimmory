@@ -16,6 +16,7 @@ import org.booklore.service.kobo.KepubConversionService;
 import org.booklore.util.FileUtils;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,14 +27,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.net.URLEncoder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.List;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -41,8 +40,6 @@ import java.util.zip.ZipOutputStream;
 @AllArgsConstructor
 @Service
 public class BookDownloadService {
-
-    private static final Pattern NON_ASCII_PATTERN = Pattern.compile("[^\\x00-\\x7F]");
 
     private final BookRepository bookRepository;
     private final BookFileRepository bookFileRepository;
@@ -59,7 +56,8 @@ public class BookDownloadService {
             if (primaryFile == null) {
                 throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(bookId);
             }
-            Path file = FileUtils.getBookFullPath(bookEntity).toAbsolutePath().normalize();
+            Path libraryRoot = Path.of(bookEntity.getLibraryPath().getPath());
+            Path file = FileUtils.requirePathWithinBase(primaryFile.getFullFilePath(), libraryRoot);
 
             if (!Files.exists(file)) {
                 throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(bookId);
@@ -75,15 +73,10 @@ public class BookDownloadService {
             // Use FileSystemResource which properly handles file resources and closing
             Resource resource = new FileSystemResource(bookFile);
 
-            String encodedFilename = URLEncoder.encode(file.getFileName().toString(), StandardCharsets.UTF_8)
-                    .replace("+", "%20");
-            String fallbackFilename = NON_ASCII_PATTERN.matcher(file.getFileName().toString()).replaceAll("_");
-            String contentDisposition = String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
-                    fallbackFilename, encodedFilename);
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .contentLength(bookFile.length())
-                    .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, getContentDisposition(file))
                     .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                     .header(HttpHeaders.PRAGMA, "no-cache")
                     .header(HttpHeaders.EXPIRES, "0")
@@ -104,7 +97,8 @@ public class BookDownloadService {
                 throw ApiError.FILE_NOT_FOUND.createException(fileId);
             }
 
-            Path file = bookFileEntity.getFullFilePath().toAbsolutePath().normalize();
+            Path libraryRoot = Path.of(bookFileEntity.getBook().getLibraryPath().getPath());
+            Path file = FileUtils.requirePathWithinBase(bookFileEntity.getFullFilePath(), libraryRoot);
 
             if (!Files.exists(file)) {
                 throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(fileId);
@@ -118,15 +112,10 @@ public class BookDownloadService {
             File bookFile = file.toFile();
             Resource resource = new FileSystemResource(bookFile);
 
-            String encodedFilename = URLEncoder.encode(file.getFileName().toString(), StandardCharsets.UTF_8)
-                    .replace("+", "%20");
-            String fallbackFilename = NON_ASCII_PATTERN.matcher(file.getFileName().toString()).replaceAll("_");
-            String contentDisposition = String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
-                    fallbackFilename, encodedFilename);
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .contentLength(bookFile.length())
-                    .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, getContentDisposition(file))
                     .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                     .header(HttpHeaders.PRAGMA, "no-cache")
                     .header(HttpHeaders.EXPIRES, "0")
@@ -135,6 +124,24 @@ public class BookDownloadService {
             log.error("Failed to download book file {}: {}", fileId, e.getMessage(), e);
             throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(fileId);
         }
+    }
+
+    private String getContentDisposition(File file) {
+        return getContentDisposition(file.getName());
+    }
+
+    private String getContentDisposition(Path path) {
+        return getContentDisposition(path.getFileName().toString());
+    }
+
+    private String getContentDisposition(String filename) {
+        Charset charset = filename.matches("\\p{ASCII}*") ?
+                StandardCharsets.US_ASCII : StandardCharsets.UTF_8;
+
+        return ContentDisposition.builder("attachment")
+                .filename(filename, charset)
+                .build()
+                .toString();
     }
 
     public void downloadAllBookFiles(Long bookId, HttpServletResponse response) {
@@ -146,10 +153,12 @@ public class BookDownloadService {
             throw ApiError.FILE_NOT_FOUND.createException(bookId);
         }
 
+        Path libraryRoot = Path.of(bookEntity.getLibraryPath().getPath());
+
         // If only one file and it's not folder-based, download it directly
         if (allFiles.size() == 1) {
             BookFileEntity singleFile = allFiles.get(0);
-            Path filePath = singleFile.getFullFilePath();
+            Path filePath = FileUtils.requirePathWithinBase(singleFile.getFullFilePath(), libraryRoot);
 
             if (!Files.exists(filePath)) {
                 throw ApiError.FAILED_TO_DOWNLOAD_FILE.createException(bookId);
@@ -175,15 +184,12 @@ public class BookDownloadService {
         String zipFileName = safeTitle + ".zip";
 
         response.setContentType("application/zip");
-        String encodedFilename = URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20");
-        String fallbackFilename = NON_ASCII_PATTERN.matcher(zipFileName).replaceAll("_");
-        String contentDisposition = String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
-                fallbackFilename, encodedFilename);
-        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, contentDisposition);
+
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, getContentDisposition(zipFileName));
 
         try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream())) {
             for (BookFileEntity bookFile : allFiles) {
-                Path filePath = bookFile.getFullFilePath();
+                Path filePath = FileUtils.requirePathWithinBase(bookFile.getFullFilePath(), libraryRoot);
 
                 if (!Files.exists(filePath)) {
                     log.warn("Skipping missing file during ZIP creation: {}", filePath);
@@ -258,7 +264,9 @@ public class BookDownloadService {
         int compressionPercentage = koboSettings.getConversionImageCompressionPercentage();
         Path tempDir = null;
         try {
-            File inputFile = FileUtils.getBookFullPath(bookEntity).toFile();
+            Path libraryRoot = Path.of(bookEntity.getLibraryPath().getPath());
+            Path normalizedInputPath = FileUtils.requirePathWithinBase(primaryFile.getFullFilePath(), libraryRoot);
+            File inputFile = normalizedInputPath.toFile();
             File fileToSend = inputFile;
 
             if (convertCbxToEpub || convertEpubToKepub) {
@@ -290,11 +298,7 @@ public class BookDownloadService {
     private void setResponseHeaders(HttpServletResponse response, File file) {
         response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
         response.setContentLengthLong(file.length());
-        String encodedFilename = URLEncoder.encode(file.getName(), StandardCharsets.UTF_8).replace("+", "%20");
-        String fallbackFilename = NON_ASCII_PATTERN.matcher(file.getName()).replaceAll("_");
-        String contentDisposition = String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
-                fallbackFilename, encodedFilename);
-        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, contentDisposition);
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, getContentDisposition(file));
     }
 
     private void streamFileToResponse(File file, HttpServletResponse response) {
@@ -339,14 +343,10 @@ public class BookDownloadService {
         Resource resource = new org.springframework.core.io.ByteArrayResource(zipBytes);
 
         String zipFileName = folderName + ".zip";
-        String encodedFilename = URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20");
-        String fallbackFilename = NON_ASCII_PATTERN.matcher(zipFileName).replaceAll("_");
-        String contentDisposition = String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
-                fallbackFilename, encodedFilename);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.valueOf("application/zip"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                .header(HttpHeaders.CONTENT_DISPOSITION, getContentDisposition(zipFileName))
                 .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(zipBytes.length))
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                 .header(HttpHeaders.PRAGMA, "no-cache")

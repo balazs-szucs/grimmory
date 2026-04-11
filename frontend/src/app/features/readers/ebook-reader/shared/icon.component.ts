@@ -1,5 +1,4 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {CommonModule} from '@angular/common';
 
 export type ReaderIconName =
   | 'menu'
@@ -35,7 +34,8 @@ export type ReaderIconName =
   | 'long-strip'
   | 'direction-ltr'
   | 'direction-rtl'
-  | 'magnifier';
+  | 'magnifier'
+  | 'link';
 
 interface IconPath {
   d: string;
@@ -199,6 +199,10 @@ const ICONS: Record<ReaderIconName, IconPath[]> = {
     {d: 'M21 21l-5-5'},
     {d: 'M7,10 L13,10', type: 'line'},
     {d: 'M10,7 L10,13', type: 'line'}
+  ],
+  'link': [
+    {d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'},
+    {d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'}
   ]
 };
 
@@ -206,7 +210,7 @@ const ICONS: Record<ReaderIconName, IconPath[]> = {
   selector: 'app-reader-icon',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [],
   template: `
     <svg
       [attr.width]="size"

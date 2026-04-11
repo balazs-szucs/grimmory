@@ -446,24 +446,28 @@
   }
 }
 
-.grid {
+.book-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(1px, 1fr));
-  column-gap: 21px;
+  gap: 21px;
   align-items: start;
   width: 100%;
 
-  // Mobile: fixed 2 or 3 columns based on phone width
   @media (width <= 767px) {
-    column-gap: 8px;
+    gap: 0.5rem 8px;
     padding: 0 0.5rem;
   }
 }
 
+.scroll-sentinel {
+  height: 1px;
+}
+
 .virtual-scroller-item {
   position: relative;
-  margin-bottom: 21px; // Whole px to avoid parseInt truncation in ngx-virtual-scroller
-  transition: width 0.2s ease, height 0.2s ease;
+  margin-bottom: 21px;
+  contain: strict;
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--virtual-scroller-item-height, 220px);
 
   @media (width <= 767px) {
     margin-bottom: 0.5rem;

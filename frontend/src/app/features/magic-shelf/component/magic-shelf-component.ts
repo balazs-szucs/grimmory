@@ -1,4 +1,4 @@
-import {Component, computed, effect, inject, OnInit} from '@angular/core';
+import {Component, computed, effect, inject, Injector, OnInit, runInInjectionContext} from '@angular/core';
 import {AbstractControl, FormArray, FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Button} from 'primeng/button';
 import {NgTemplateOutlet} from '@angular/common';
@@ -15,14 +15,14 @@ import {MultiSelect} from 'primeng/multiselect';
 import {AutoComplete} from 'primeng/autocomplete';
 import {EMPTY_CHECK_OPERATORS, MULTI_VALUE_OPERATORS, RELATIVE_DATE_OPERATORS, parseValue, removeNulls, serializeDateRules} from '../service/magic-shelf-utils';
 import {IconPickerService, IconSelection} from '../../../shared/service/icon-picker.service';
-import {CheckboxChangeEvent, CheckboxModule} from "primeng/checkbox";
+import {CheckboxChangeEvent, Checkbox} from "primeng/checkbox";
 import {UserService} from "../../settings/user-management/user.service";
 import {IconDisplayComponent} from '../../../shared/components/icon-display/icon-display.component';
 import {Tooltip} from 'primeng/tooltip';
 import {BookService} from '../../book/service/book.service';
 import {ShelfService} from '../../book/service/shelf.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
-import {TextareaModule} from 'primeng/textarea';
+import {Textarea} from 'primeng/textarea';
 
 export type RuleOperator =
   | 'equals'
@@ -238,16 +238,17 @@ const READ_STATUS_KEYS: Record<string, string> = {
     InputNumber,
     MultiSelect,
     AutoComplete,
-    CheckboxModule,
+    Checkbox,
     IconDisplayComponent,
     Tooltip,
     TranslocoDirective,
-    TextareaModule
+    Textarea
   ]
 })
 export class MagicShelfComponent implements OnInit {
 
   private readonly t = inject(TranslocoService);
+  private readonly injector = inject(Injector);
   private readonly controlIds = new WeakMap<AbstractControl, string>();
   private controlIdCounter = 0;
 
@@ -514,14 +515,16 @@ export class MagicShelfComponent implements OnInit {
 
     if (id) {
       this.shelfId = id;
-      effect(() => {
-        const shelf = this.magicShelfService.findShelfById(id);
-        if (!shelf || this.formInitializedFromShelf) {
-          return;
-        }
+      runInInjectionContext(this.injector, () => {
+        effect(() => {
+          const shelf = this.magicShelfService.findShelfById(id);
+          if (!shelf || this.formInitializedFromShelf) {
+            return;
+          }
 
-        this.initializeForm(shelf);
-        this.formInitializedFromShelf = true;
+          this.initializeForm(shelf);
+          this.formInitializedFromShelf = true;
+        });
       });
     } else {
       this.initializeForm();

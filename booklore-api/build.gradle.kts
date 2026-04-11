@@ -27,6 +27,10 @@ java {
     }
 }
 
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("--enable-preview")
+}
+
 val useLocalLibs = providers.gradleProperty("useLocalLibs").isPresent
 
 repositories {
@@ -128,8 +132,12 @@ dependencies {
     implementation("com.twelvemonkeys.imageio:imageio-bmp:3.13.1")
 
     // epub4j-grimmory fork publishes as org.grimmory:epub4j-core
-    val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "io.documentnode:epub4j-core:4.2.3"
+    val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.1.0"
     implementation(epub4jCoords)
+
+    // epub4j-native for native archive parsing
+    val epub4jNativeCoords = if (useLocalLibs) "org.grimmory:epub4j-native:+" else "org.grimmory:epub4j-native:1.1.0"
+    implementation(epub4jNativeCoords)
 
     // --- Audio Metadata (Audiobook Support) ---
     implementation("com.github.RouHim:jaudiotagger:2.0.19")
@@ -149,6 +157,9 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("org.tukaani:xz:1.12") // Required by commons-compress for 7z support
     implementation("org.apache.commons:commons-text:1.15.0")
+
+    // --- MIME Detection ---
+    implementation("org.apache.tika:tika-core:3.3.0")
 
     // --- XML Support (JAXB) ---
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
@@ -233,7 +244,7 @@ graalvmNative {
 tasks.named<Test>("test") {
     useJUnitPlatform()
     maxHeapSize = "2560m"
-    jvmArgs("-XX:+EnableDynamicAgentLoading", "--enable-native-access=ALL-UNNAMED")
+    jvmArgs("-XX:+EnableDynamicAgentLoading", "--enable-native-access=ALL-UNNAMED", "--enable-preview")
     finalizedBy(tasks.named("jacocoTestReport"))
 }
 
@@ -261,7 +272,7 @@ tasks.named<Copy>("processResources") {
 }
 
 tasks.named<BootRun>("bootRun") {
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "--enable-preview")
     if (System.getenv("REMOTE_DEBUG_ENABLED") == "true") {
         jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
     }

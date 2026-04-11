@@ -12,7 +12,6 @@ import org.booklore.config.BookmarkProperties;
 import org.booklore.config.GraalVmRuntimeHints;
 
 @EnableScheduling
-@EnableAsync
 @EnableConfigurationProperties({AppProperties.class, BookmarkProperties.class})
 @ImportRuntimeHints(GraalVmRuntimeHints.class)
 @SpringBootApplication

@@ -1,4 +1,4 @@
-import {signal, WritableSignal} from '@angular/core';
+import {computed, ElementRef, signal, WritableSignal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {ActivatedRoute, convertToParamMap, ParamMap, Router} from '@angular/router';
 import {BehaviorSubject, Subject} from 'rxjs';
@@ -31,6 +31,8 @@ import {AppSettingsService} from '../../../../shared/service/app-settings.servic
 import {BookBrowserComponent, EntityType} from './book-browser.component';
 import {SortService} from '../../service/sort.service';
 import {TranslocoService} from '@jsverse/transloco';
+import {AppBooksApiService} from '../../service/app-books-api.service';
+import {AppBookFilters, AppBookSort} from '../../model/app-book.model';
 
 function makeBook(id: number, libraryId: number, title: string, addedOn: string): Book {
   return {
@@ -239,6 +241,47 @@ function createHarness(options?: {
           booksError: booksError.asReadonly(),
         },
       },
+      {
+        provide: AppBooksApiService,
+        useFactory: () => {
+          const _filters = signal<AppBookFilters>({});
+          const _sort = signal<AppBookSort>({field: 'addedOn', dir: 'desc'});
+          const _search = signal('');
+          const _hasNextPage = signal(false);
+
+          const filteredSortedBooks = computed(() => {
+            let result = books();
+            const f = _filters();
+            if (f.libraryId) result = result.filter(b => b.libraryId === f.libraryId);
+
+            const s = _sort();
+            const dir = s.dir === 'asc' ? 1 : -1;
+            result = [...result].sort((a, b) => {
+              if (s.field === 'title') return dir * ((a.metadata?.title ?? '') as string).localeCompare((b.metadata?.title ?? '') as string);
+              if (s.field === 'addedOn') return dir * (a.addedOn ?? '').localeCompare(b.addedOn ?? '');
+              return 0;
+            });
+            return result;
+          });
+
+          return {
+            books: filteredSortedBooks,
+            totalElements: computed(() => filteredSortedBooks().length),
+            hasNextPage: _hasNextPage.asReadonly(),
+            setHasNextPage: (v: boolean) => _hasNextPage.set(v),
+            isLoading: isBooksLoading.asReadonly(),
+            isFetchingNextPage: computed(() => false),
+            isError: computed(() => !!booksError()),
+            error: computed(() => booksError()),
+            filterOptions: computed(() => null),
+            setFilters: (f: AppBookFilters) => _filters.set(f),
+            setSort: (s: AppBookSort) => _sort.set(s),
+            setSearch: (s: string) => _search.set(s),
+            fetchNextPage: vi.fn(),
+            invalidate: vi.fn(),
+          };
+        },
+      },
       {provide: BookMetadataManageService, useValue: {}},
       {provide: BookDialogHelperService, useValue: {}},
       {
@@ -313,9 +356,20 @@ function createHarness(options?: {
 describe('BookBrowserComponent', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal('ResizeObserver', class {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    });
+    vi.stubGlobal('IntersectionObserver', class {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    });
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
     TestBed.resetTestingModule();
@@ -381,5 +435,38 @@ describe('BookBrowserComponent', () => {
     expect(component.showBooksLoadingPlaceholder).toBe(false);
     expect(component.showGridLoadingPlaceholder).toBe(false);
     expect(component.showTableLoadingPlaceholder).toBe(false);
+  });
+
+  it('triggers next page fetch when scrolled near the bottom of rendered content', async () => {
+    const {component} = createHarness();
+    const appBooksApi = TestBed.inject(AppBooksApiService);
+
+    // Initial load
+    vi.runOnlyPendingTimers();
+    TestBed.flushEffects();
+
+    // Mock hasNextPage to be true
+    // @ts-expect-error test helper
+    appBooksApi.setHasNextPage(true);
+    const fetchNextPageSpy = vi.spyOn(appBooksApi, 'fetchNextPage');
+
+    // Mock scroll container
+    const mockElement = {
+      scrollTop: 2000,
+      clientHeight: 1000,
+      clientWidth: 1000,
+      scrollHeight: 5000,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement;
+
+    component.currentViewMode = VIEW_MODES.GRID;
+    component.scrollContainerRef = {nativeElement: mockElement} as ElementRef<HTMLElement>;
+
+    // Trigger initial check
+    vi.runOnlyPendingTimers(); // For requestAnimationFrame
+    TestBed.flushEffects();
+
+    expect(fetchNextPageSpy).toHaveBeenCalled();
   });
 });

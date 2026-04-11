@@ -7,6 +7,7 @@ export interface TextSelection {
   cfi: string;
   range: Range;
   index: number;
+  linkUrl?: string;
 }
 
 interface PopupPosition {
@@ -99,6 +100,7 @@ export class ReaderEventService {
   private longHoldTimeout: ReturnType<typeof setTimeout> | null = null;
   private keydownHandler?: (event: KeyboardEvent) => void;
   private clickedDocs = new WeakSet<Document>();
+  private iframeCleanupFns: (() => void)[] = [];
 
   private touchStartX = 0;
   private touchStartY = 0;
@@ -119,12 +121,26 @@ export class ReaderEventService {
   }
 
   destroy(): void {
+    window.removeEventListener('message', this.windowMessageHandler);
+    for (const fn of this.iframeCleanupFns) fn();
+    this.iframeCleanupFns = [];
     if (this.keydownHandler) {
       document.removeEventListener('keydown', this.keydownHandler);
       this.keydownHandler = undefined;
     }
+    if (this.longHoldTimeout) {
+      clearTimeout(this.longHoldTimeout);
+      this.longHoldTimeout = null;
+    }
+    if (this.selectionChangeTimeout) {
+      clearTimeout(this.selectionChangeTimeout);
+      this.selectionChangeTimeout = null;
+    }
     this.view = null;
     this.viewCallbacks = null;
+    this.isNavigating = false;
+    this.lastClickTime = 0;
+    this.lastClickZone = null;
     this.clickedDocs = new WeakSet<Document>();
   }
 
@@ -140,7 +156,9 @@ export class ReaderEventService {
       this.eventSubject.next({type: 'load', detail: e.detail});
       if (e.detail?.doc) {
         if (this.keydownHandler) {
-          e.detail.doc.addEventListener('keydown', this.keydownHandler);
+          const handler = this.keydownHandler;
+          e.detail.doc.addEventListener('keydown', handler);
+          this.iframeCleanupFns.push(() => e.detail?.doc?.removeEventListener('keydown', handler));
         }
         this.attachIframeEventHandlers(e.detail.doc);
       }
@@ -233,12 +251,14 @@ export class ReaderEventService {
     document.addEventListener('keydown', this.keydownHandler);
   }
 
+  private readonly windowMessageHandler = (event: MessageEvent): void => {
+    if (this.isIframeClickMessage(event.data)) {
+      this.handleIframeClickMessage(event.data);
+    }
+  };
+
   private attachWindowMessageHandler(): void {
-    window.addEventListener('message', (event) => {
-      if (this.isIframeClickMessage(event.data)) {
-        this.handleIframeClickMessage(event.data);
-      }
-    });
+    window.addEventListener('message', this.windowMessageHandler);
   }
 
   private isIframeClickMessage(value: unknown): value is IframeClickMessage {
@@ -251,17 +271,22 @@ export class ReaderEventService {
     }
     this.clickedDocs.add(doc);
 
-    doc.addEventListener('mousedown', () => {
+    const track = (target: EventTarget, type: string, handler: EventListenerOrEventListenerObject, options?: AddEventListenerOptions | boolean): void => {
+      target.addEventListener(type, handler, options);
+      this.iframeCleanupFns.push(() => target.removeEventListener(type, handler, options));
+    };
+
+    track(doc, 'mousedown', () => {
       this.longHoldTimeout = setTimeout(() => {
         this.longHoldTimeout = null;
       }, this.LONG_HOLD_THRESHOLD_MS);
-    }, true);
+    }, {capture: true});
 
-    doc.addEventListener('mouseup', () => {
+    track(doc, 'mouseup', () => {
       this.handleSelectionEnd(doc);
     });
 
-    doc.addEventListener('click', (event: MouseEvent) => {
+    track(doc, 'click', ((event: MouseEvent) => {
       // Ignore synthesized mouse events that follow touch events
       if (Date.now() - this.lastTouchTime < 500) {
         return;
@@ -283,21 +308,21 @@ export class ReaderEventService {
         eventClientX: event.clientX,
         target: (event.target as HTMLElement)?.tagName
       }, '*');
-    }, true);
+    }) as EventListener, {capture: true});
 
-    doc.addEventListener('touchstart', (event: TouchEvent) => {
+    track(doc, 'touchstart', ((event: TouchEvent) => {
       this.handleTouchStart(event, doc);
-    }, {passive: true});
+    }) as EventListener, {passive: true});
 
-    doc.addEventListener('touchmove', (event: TouchEvent) => {
+    track(doc, 'touchmove', ((event: TouchEvent) => {
       this.handleTouchMove(event, doc);
-    }, {passive: false});
+    }) as EventListener, {passive: false});
 
-    doc.addEventListener('touchend', (event: TouchEvent) => {
+    track(doc, 'touchend', ((event: TouchEvent) => {
       this.handleTouchEnd(event, doc);
-    }, {passive: false});
+    }) as EventListener, {passive: false});
 
-    doc.addEventListener('selectionchange', () => {
+    track(doc, 'selectionchange', () => {
       this.handleSelectionChange(doc);
     });
 
@@ -476,13 +501,56 @@ export class ReaderEventService {
 
         popupX = Math.max(100, Math.min(popupX, window.innerWidth - 150));
 
+        const linkUrl = this.getLinkUrl(range, selection);
+
         this.eventSubject.next({
           type: 'text-selected',
-          detail: {text, cfi, range, index},
+          detail: {text, cfi, range, index, linkUrl},
           popupPosition: {x: popupX, y: popupY, showBelow}
         });
       }
     }, 10);
+  }
+
+  private getLinkUrl(range: Range, selection: Selection): string | undefined {
+    const getLinkFromNode = (node: Node | null | undefined): string | undefined => {
+      let current: Node | null | undefined = node;
+      while (current && current.nodeType !== Node.DOCUMENT_NODE) {
+        if (current.nodeType === Node.ELEMENT_NODE) {
+          const element = current as HTMLElement;
+          if (element.tagName?.toLowerCase() === 'a') {
+            return element.getAttribute('href') || undefined;
+          }
+          const closestLink = typeof element.closest === 'function' ? element.closest('a') : null;
+          if (closestLink?.getAttribute('href')) {
+            return closestLink.getAttribute('href')!;
+          }
+        }
+        current = current.parentNode;
+      }
+      return undefined;
+    };
+
+    // Check ancestors and self for common ancestor, start, end, anchor and focus nodes
+    let linkUrl = getLinkFromNode(range.commonAncestorContainer) ||
+                 getLinkFromNode(range.startContainer) ||
+                 getLinkFromNode(range.endContainer) ||
+                 getLinkFromNode(selection.anchorNode) ||
+                 getLinkFromNode(selection.focusNode);
+
+    // If still not found, check if the range contains any links
+    if (!linkUrl && range.commonAncestorContainer?.nodeType === Node.ELEMENT_NODE) {
+      const containerElement = range.commonAncestorContainer as HTMLElement;
+      // Find all links in the container
+      if (typeof containerElement.querySelectorAll === 'function') {
+        const links = Array.from(containerElement.querySelectorAll('a'));
+        // Find the first link that intersects with the selection range
+        const internalLink = links.find(link => typeof range.intersectsNode === 'function' && range.intersectsNode(link));
+        linkUrl = internalLink?.getAttribute('href') || undefined;
+      }
+    }
+
+    return linkUrl;
   }
 
   private handleIframeClickMessage(data: IframeClickMessage): void {

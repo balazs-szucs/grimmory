@@ -1,4 +1,5 @@
-import {Component, effect, inject, OnInit} from '@angular/core';
+import {Component, DestroyRef, effect, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {MenuItem, MessageService} from 'primeng/api';
 import {Button} from 'primeng/button';
@@ -10,7 +11,6 @@ import {BookMetadataManageService} from '../../book/service/book-metadata-manage
 import {AppSettingKey, CoverCroppingSettings} from '../../../shared/model/app-settings.model';
 import {InputText} from 'primeng/inputtext';
 import {Slider} from 'primeng/slider';
-import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-link/external-doc-link.component';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -23,7 +23,6 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
     InputText,
     Slider,
     SplitButton,
-    ExternalDocLinkComponent,
     TranslocoDirective,
     TranslocoPipe
   ],
@@ -48,6 +47,7 @@ export class GlobalPreferencesComponent implements OnInit {
   private bookMetadataManageService = inject(BookMetadataManageService);
   private messageService = inject(MessageService);
   private t = inject(TranslocoService);
+  private destroyRef = inject(DestroyRef);
 
   private readonly syncSettingsEffect = effect(() => {
     const settings = this.appSettingsService.appSettings();
@@ -105,7 +105,9 @@ export class GlobalPreferencesComponent implements OnInit {
   }
 
   regenerateCovers(missingOnly = false): void {
-    this.bookMetadataManageService.regenerateCovers(missingOnly).subscribe({
+    this.bookMetadataManageService.regenerateCovers(missingOnly).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: () =>
         this.showMessage('success', this.t.translate('settingsApp.covers.regenerateStarted'), this.t.translate('settingsApp.covers.regenerateStartedDetail')),
       error: () =>
@@ -114,7 +116,9 @@ export class GlobalPreferencesComponent implements OnInit {
   }
 
   private saveSetting(key: string, value: unknown): void {
-    this.appSettingsService.saveSettings([{key, newValue: value}]).subscribe({
+    this.appSettingsService.saveSettings([{key, newValue: value}]).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: () =>
         this.showMessage('success', this.t.translate('settingsApp.settingsSaved'), this.t.translate('settingsApp.settingsSavedDetail')),
       error: () =>

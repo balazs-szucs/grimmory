@@ -1,5 +1,4 @@
 import { Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { TranslocoService, TranslocoPipe } from '@jsverse/transloco';
 import {
   CbxFitMode,
@@ -18,7 +17,7 @@ import { CbxQuickSettingsService } from './cbx-quick-settings.service';
 @Component({
   selector: 'app-cbx-quick-settings',
   standalone: true,
-  imports: [CommonModule, TranslocoPipe, ReaderIconComponent],
+  imports: [TranslocoPipe, ReaderIconComponent],
   templateUrl: './cbx-quick-settings.component.html',
   styleUrls: ['./cbx-quick-settings.component.scss']
 })
@@ -51,8 +50,8 @@ export class CbxQuickSettingsComponent {
   get scrollModeOptions(): { value: CbxScrollMode, label: string }[] {
     return [
       { value: CbxScrollMode.PAGINATED, label: this.t.translate('readerCbx.quickSettings.paginated') },
-      { value: CbxScrollMode.INFINITE, label: this.t.translate('readerCbx.quickSettings.infinite') }
-      // { value: CbxScrollMode.LONG_STRIP, label: this.t.translate('readerCbx.quickSettings.longStrip') }
+      { value: CbxScrollMode.INFINITE, label: this.t.translate('readerCbx.quickSettings.infinite') },
+      { value: CbxScrollMode.LONG_STRIP, label: this.t.translate('readerCbx.quickSettings.longStrip') }
     ];
   }
 
@@ -97,6 +96,17 @@ export class CbxQuickSettingsComponent {
 
   get isPhonePortrait(): boolean {
     return window.innerWidth < 768 && window.innerHeight > window.innerWidth;
+  }
+
+  get showStripWidthControl(): boolean {
+    if (this.isPhonePortrait) return false;
+    const m = this.state().scrollMode;
+    return m === CbxScrollMode.INFINITE || m === CbxScrollMode.LONG_STRIP;
+  }
+
+  onStripMaxWidthInput(event: Event): void {
+    const value = +(event.target as HTMLInputElement).value;
+    this.quickSettingsService.setStripMaxWidthPercent(value);
   }
 
   get currentScrollModeLabel(): string {

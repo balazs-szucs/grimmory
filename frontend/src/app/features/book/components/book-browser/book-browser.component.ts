@@ -1,11 +1,11 @@
-import {AfterViewInit, Component, HostListener, computed, effect, inject, OnDestroy, OnInit, signal, untracked, ViewChild} from '@angular/core';
-import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, OnDestroy, computed, effect, inject, OnInit, signal, untracked, ViewChild} from '@angular/core';
+import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, NavigationStart, Router} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
 import {PageTitleService} from '../../../../shared/service/page-title.service';
 import {BookService} from '../../service/book.service';
 import {BookMetadataManageService} from '../../service/book-metadata-manage.service';
-import {debounceTime, distinctUntilChanged, filter, map, takeUntil} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, map, take} from 'rxjs/operators';
 import {combineLatest, finalize, Subject} from 'rxjs';
 import {DynamicDialogRef} from 'primeng/dynamicdialog';
 import {Library} from '../../model/library.model';
@@ -13,10 +13,9 @@ import {SortDirection, SortOption} from '../../model/sort.model';
 import {Book} from '../../model/book.model';
 import {LibraryShelfMenuService} from '../../service/library-shelf-menu.service';
 import {BookTableComponent} from './book-table/book-table.component';
-import {animate, style, transition, trigger} from '@angular/animations';
+import {computeGridColumns} from '../../../../shared/util/viewport.util';
 import {Button} from 'primeng/button';
 import {NgClass, NgStyle} from '@angular/common';
-import {VirtualScrollerComponent, VirtualScrollerModule} from '@iharbeck/ngx-virtual-scroller';
 import {BookCardComponent} from './book-card/book-card.component';
 
 import {Menu} from 'primeng/menu';
@@ -36,7 +35,7 @@ import {Divider} from 'primeng/divider';
 import {MultiSelect} from 'primeng/multiselect';
 import {TableColumnPreferenceService} from './table-column-preference.service';
 import {TieredMenu} from 'primeng/tieredmenu';
-import {BadgeModule} from 'primeng/badge';
+import {Badge} from 'primeng/badge';
 import {BookMenuService} from '../../service/book-menu.service';
 import {SidebarFilterTogglePrefService} from './filters/sidebar-filter-toggle-pref.service';
 import {MetadataRefreshType} from '../../../metadata/model/request/metadata-refresh-type.enum';
@@ -56,8 +55,8 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {DeferredRenderState} from './deferred-render-state';
 
 import {SortService} from '../../service/sort.service';
-import {filterBooksBySearchTerm} from './filters/HeaderFilter';
-import {filterBooksByFilters} from './filters/sidebar-filter';
+import {AppBooksApiService} from '../../service/app-books-api.service';
+import {AppBookFilters} from '../../model/app-book.model';
 
 export enum EntityType {
   LIBRARY = 'Library',
@@ -72,24 +71,13 @@ export enum EntityType {
   standalone: true,
   templateUrl: './book-browser.component.html',
   styleUrls: ['./book-browser.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Button, VirtualScrollerModule, BookCardComponent, Menu, InputText, FormsModule,
+    Button, BookCardComponent, Menu, InputText, FormsModule,
     BookTableComponent, BookFilterComponent, Tooltip, NgClass, NgStyle, Popover,
-    Checkbox, Slider, Divider, MultiSelect, TieredMenu, BadgeModule, MultiSortPopoverComponent, TranslocoDirective
+    Checkbox, Slider, Divider, MultiSelect, TieredMenu, Badge, MultiSortPopoverComponent, TranslocoDirective,
   ],
   providers: [SeriesCollapseFilter],
-  animations: [
-    trigger('slideInOut', [
-      transition(':enter', [
-        style({transform: 'translateY(100%)'}),
-        animate('0.1s ease-in', style({transform: 'translateY(0)'}))
-      ]),
-      transition(':leave', [
-        style({transform: 'translateY(0)'}),
-        animate('0.1s ease-out', style({transform: 'translateY(100%)'}))
-      ])
-    ])
-  ]
 })
 export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
@@ -118,9 +106,11 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private queryParamsService = inject(BookBrowserQueryParamsService);
   private entityService = inject(BookBrowserEntityService);
   private sortService = inject(SortService);
+  private appBooksApi = inject(AppBooksApiService);
   private localStorageService = inject(LocalStorageService);
   private scrollService = inject(BookBrowserScrollService);
   private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly defaultSortCriteria: SortOption[] = [{
     field: 'addedOn',
@@ -184,28 +174,64 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
     return actions;
   });
-  // --- Layered pipeline: each computed only recomputes when its direct inputs change ---
-  private readonly entityBooks = computed(() => {
-    const {entityId, entityType} = this.entityInfo();
-    return this.entityService.getBooksByEntity(this.bookService.books(), entityId, entityType);
-  });
-  private readonly searchedBooks = computed(() =>
-    filterBooksBySearchTerm(this.entityBooks(), this.debouncedSearchTerm())
-  );
-  private readonly filteredBooks = computed(() =>
-    filterBooksByFilters(this.searchedBooks(), this.selectedFilter(), this.selectedFilterMode())
-  );
+  // --- Server-side data pipeline: delegates filtering, sorting, searching to the API ---
   private readonly forceExpandSeries = computed(() =>
     this.queryParamsService.shouldForceExpandSeries(this.queryParamMap())
   );
-  private readonly collapsedBooks = computed(() =>
-    this.seriesCollapseFilter.collapseBooks(
-      this.filteredBooks(), this.forceExpandSeries(), this.seriesCollapsed()
-    )
-  );
-  private readonly sortedBooks = computed(() =>
-    this.sortService.applyMultiSort(this.collapsedBooks(), this.sortCriteria())
-  );
+
+  /** Sync entity scope, filters, search, and sort to the API service. */
+  private readonly syncApiStateEffect = effect(() => {
+    const {entityId, entityType} = this.entityInfo();
+    const search = this.debouncedSearchTerm();
+    const sidebarFilters = this.selectedFilter();
+    const sortCriteria = this.sortCriteria();
+
+    const scopeFilters: AppBookFilters = {};
+    switch (entityType) {
+      case EntityType.LIBRARY:
+        if (!Number.isNaN(entityId)) scopeFilters.libraryId = entityId;
+        break;
+      case EntityType.SHELF:
+        if (!Number.isNaN(entityId)) scopeFilters.shelfId = entityId;
+        break;
+      case EntityType.MAGIC_SHELF:
+        if (!Number.isNaN(entityId)) scopeFilters.magicShelfId = entityId;
+        break;
+      case EntityType.UNSHELVED:
+        scopeFilters.unshelved = true;
+        break;
+    }
+
+    if (sidebarFilters) {
+      for (const [type, values] of Object.entries(sidebarFilters)) {
+        if (!values || values.length === 0) continue;
+        const strValues = values.map(String);
+        switch (type) {
+          case 'author': scopeFilters.authors = strValues; break;
+          case 'category': scopeFilters.category = strValues; break;
+          case 'series': scopeFilters.series = strValues; break;
+          case 'publisher': scopeFilters.publisher = strValues; break;
+          case 'tag': scopeFilters.tag = strValues; break;
+          case 'mood': scopeFilters.mood = strValues; break;
+          case 'narrator': scopeFilters.narrator = strValues; break;
+          case 'language': scopeFilters.language = strValues; break;
+          case 'readStatus': scopeFilters.status = strValues; break;
+          case 'bookType': scopeFilters.fileType = strValues; break;
+        }
+      }
+      const mode = this.selectedFilterMode();
+      scopeFilters.filterMode = mode === 'single' ? 'or' : mode;
+    }
+
+    this.appBooksApi.setFilters(scopeFilters);
+    this.appBooksApi.setSearch(search);
+
+    if (sortCriteria.length > 0) {
+      const primary = sortCriteria[0];
+      const dir = primary.direction === SortDirection.ASCENDING ? 'asc' as const : 'desc' as const;
+      this.appBooksApi.setSort({field: primary.field, dir});
+    }
+  });
 
   // --- Deferred render: lets skeleton/refresh indicator paint before committing ---
   private readonly booksRenderState = new DeferredRenderState<Book[]>();
@@ -219,39 +245,24 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     return Number.isNaN(entityId) ? entityType : `${entityType}:${entityId}`;
   });
 
-  private readonly pipelineInputs = computed(() => ({
-    books: this.bookService.books(),
-    entity: this.entityInfo(),
-    search: this.debouncedSearchTerm(),
-    filter: this.selectedFilter(),
-    filterMode: this.selectedFilterMode(),
-    collapsed: this.seriesCollapsed(),
-    forceExpand: this.forceExpandSeries(),
-    sort: this.sortCriteria(),
-  }));
+  private readonly pipelineInputs = computed(() => this.appBooksApi.books());
 
   private readonly renderBooksEffect = effect((onCleanup) => {
     const contextKey = this.booksContextKey();
-    this.pipelineInputs();
+    const books = this.pipelineInputs();
 
     const shouldRefreshInPlace = untracked(() => this.hasRenderedBooks()) && contextKey === this.lastBooksContextKey;
     this.lastBooksContextKey = contextKey;
 
     if (shouldRefreshInPlace) {
-      // Same context (sort/filter/search change within the same entity).
-      // Commit synchronously — the memoized computed chain is fast and
-      // skipping the setTimeout avoids a one-frame skeleton flash.
-      const requestId = this.booksRenderState.begin('refresh');
-      this.booksRenderState.commit(requestId, this.sortedBooks());
+      this.booksRenderState.update(books);
       return;
     }
 
-    // Context changed (navigation between entities or first load).
-    // Defer so the skeleton can paint before the pipeline evaluates.
     const requestId = this.booksRenderState.begin('reset');
 
     const timeout = globalThis.setTimeout(() => {
-      this.booksRenderState.commit(requestId, this.sortedBooks());
+      this.booksRenderState.commit(requestId, books);
     });
 
     onCleanup(() => {
@@ -259,8 +270,8 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
       this.booksRenderState.cancel(requestId);
     });
   });
-  readonly isBooksLoading = this.bookService.isBooksLoading;
-  readonly booksError = this.bookService.booksError;
+  readonly isBooksLoading = computed(() => this.appBooksApi.isLoading());
+  readonly booksError = this.appBooksApi.error;
   readonly bookIndexById = computed(() => {
     const books = this.books();
     if (!books) return new Map<number, number>();
@@ -270,6 +281,42 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     return map;
   });
+  readonly compareBookItems = (a: Book, b: Book): boolean => a?.id === b?.id;
+
+  private readonly GRID_GAP = 21;
+  private readonly containerWidth = signal(0);
+  private containerResizeObserver: ResizeObserver | undefined;
+
+  readonly gridColumns = computed(() => {
+    return computeGridColumns(this.containerWidth(), parseInt(this.gridColumnMinWidth, 10) || 180, this.GRID_GAP);
+  });
+
+  /**
+   * Estimated total content height based on totalElements from the first API page.
+   * Used as min-height so the scrollbar reflects the full collection from the start.
+   * Only grows, never shrinks — prevents scroll teleportation.
+   */
+  readonly estimatedTotalHeight = computed(() => {
+    const total = this.appBooksApi.totalElements();
+    if (total === 0) return 0;
+    const cols = this.gridColumns();
+    const rows = Math.ceil(total / cols);
+    const rowHeight = this.currentCardSize.height + this.GRID_GAP;
+    return rows * rowHeight;
+  });
+
+  /**
+   * Total height of currently loaded books in grid view.
+   */
+  readonly renderedHeight = computed(() => {
+    const books = this.books();
+    if (!books || books.length === 0) return 0;
+    const cols = this.gridColumns();
+    const rows = Math.ceil(books.length / cols);
+    const rowHeight = this.currentCardSize.height + this.GRID_GAP;
+    return rows * rowHeight;
+  });
+
   protected resetFilterSubject = new Subject<void>();
 
   readonly skeletonSlots = Array.from({length: 24}, (_, index) => index);
@@ -297,7 +344,6 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly MOBILE_COLUMNS_STORAGE_KEY = 'mobileColumnsPreference';
 
   private settingFiltersFromUrl = false;
-  private destroy$ = new Subject<void>();
   protected metadataMenuItems: MenuItem[] | undefined;
   protected moreActionsMenuItems: MenuItem[] | undefined;
   protected readonly onBookCardSelect = (book: Book, selected: boolean): void => {
@@ -365,12 +411,61 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     );
   });
 
+  /**
+   * Triggers sequential page loads if the current scroll position is beyond the loaded content.
+   * This is critical for scroll restoration on page reload.
+   */
+  private readonly fillScrollGapEffect = effect(() => {
+    const books = this.books();
+    if (books && books.length > 0) {
+      this.checkAndFetchIfNeeded();
+    }
+  });
+
   @ViewChild(BookTableComponent)
   bookTableComponent!: BookTableComponent;
   @ViewChild(BookFilterComponent, {static: false})
   bookFilterComponent!: BookFilterComponent;
-  @ViewChild('scroll')
-  virtualScroller: VirtualScrollerComponent | undefined;
+
+  private scrollContainer: HTMLElement | undefined;
+  private sentinelObserver: IntersectionObserver | undefined;
+
+  @ViewChild('scrollContainer')
+  set scrollContainerRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.containerResizeObserver?.disconnect();
+    if (this.scrollContainer) {
+      this.scrollContainer.removeEventListener('scroll', this.onScroll);
+    }
+    this.scrollContainer = ref?.nativeElement;
+    if (this.scrollContainer) {
+      const el = this.scrollContainer;
+      this.containerWidth.set(el.clientWidth);
+      this.containerResizeObserver = new ResizeObserver(entries => {
+        this.containerWidth.set(entries[0]?.contentRect.width ?? el.clientWidth);
+      });
+      this.containerResizeObserver.observe(el);
+      el.addEventListener('scroll', this.onScroll, {passive: true});
+      // Initial check in case we are already scrolled down
+      globalThis.requestAnimationFrame(() => this.checkAndFetchIfNeeded());
+    }
+  }
+
+  @ViewChild('scrollSentinel')
+  set scrollSentinelRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.sentinelObserver?.disconnect();
+    const el = ref?.nativeElement;
+    if (el) {
+      this.sentinelObserver = new IntersectionObserver(
+        entries => {
+          if (entries[0]?.isIntersecting) {
+            this.checkAndFetchNextPage();
+          }
+        },
+        {root: this.scrollContainer, rootMargin: '600px'}
+      );
+      this.sentinelObserver.observe(el);
+    }
+  }
 
   @HostListener('window:resize')
   onResize(): void {
@@ -509,8 +604,37 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
+    if (this.scrollContainer) {
+      this.scrollContainer.removeEventListener('scroll', this.onScroll);
+    }
+    this.containerResizeObserver?.disconnect();
+    this.sentinelObserver?.disconnect();
+  }
+
+  private onScroll = (): void => {
+    this.checkAndFetchIfNeeded();
+  };
+
+  /**
+   * Checks if the current scroll position plus viewport exceeds the rendered height (with a buffer)
+   * and fetches the next page if necessary.
+   */
+  private checkAndFetchIfNeeded(): void {
+    if (!this.scrollContainer || this.currentViewMode === VIEW_MODES.TABLE) return;
+
+    const {scrollTop, clientHeight} = this.scrollContainer;
+    const buffer = 1000; // Large buffer to facilitate scroll restoration
+    const renderedHeight = untracked(() => this.renderedHeight());
+
+    if (scrollTop + clientHeight >= renderedHeight - buffer) {
+      untracked(() => this.checkAndFetchNextPage());
+    }
+  }
+
+  private checkAndFetchNextPage(): void {
+    if (this.appBooksApi.hasNextPage() && !this.appBooksApi.isFetchingNextPage()) {
+      this.appBooksApi.fetchNextPage();
+    }
   }
 
   private getScrollPositionKey(): string {
@@ -521,27 +645,36 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   private setupScrollPositionTracking(): void {
     this.router.events.pipe(
       filter(event => event instanceof NavigationStart),
-      takeUntil(this.destroy$)
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe(() => {
       this.saveScrollPosition();
     });
   }
 
   private saveScrollPosition(): void {
-    if (this.virtualScroller?.viewPortInfo) {
+    if (this.scrollContainer) {
       const key = this.getScrollPositionKey();
-      const position = this.virtualScroller.viewPortInfo.scrollStartPosition ?? 0;
-      this.scrollService.savePosition(key, position);
+      this.scrollService.savePosition(key, this.scrollContainer.scrollTop);
     }
   }
 
   private setupRouteChangeHandlers(): void {
-    this.activatedRoute.paramMap.pipe(takeUntil(this.destroy$)).subscribe(() => {
+    this.activatedRoute.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.searchTerm.set('');
       this.bookTitle = '';
       this.bookSelectionService.deselectAll();
       this.clearFilter();
+      this.scrollToTop();
     });
+  }
+
+  private scrollToTop(): void {
+    if (this.scrollContainer) {
+      this.scrollContainer.scrollTop = 0;
+    }
+    if (this.bookTableComponent) {
+      this.bookTableComponent.scrollToTop();
+    }
   }
 
   private readonly syncMetadataMenuEffect = effect(() => {
@@ -565,7 +698,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
       this.activatedRoute.queryParamMap,
       this.currentUser$,
     ]).pipe(
-      takeUntil(this.destroy$)
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe(([entityInfo, queryParamMap, currentUser]) => {
       const parseResult = this.queryParamsService.parseQueryParams(
         queryParamMap,
@@ -910,8 +1043,8 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   openShelfAssigner(): void {
     this.dynamicDialogRef = this.dialogHelperService.openShelfAssignerDialog(null, this.selectedBooks());
     if (this.dynamicDialogRef) {
-      this.dynamicDialogRef.onClose.subscribe(result => {
-        if (result.assigned) {
+      this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(result => {
+        if (result?.assigned) {
           this.bookSelectionService.deselectAll();
         }
       });
@@ -921,7 +1054,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   lockUnlockMetadata(): void {
     this.dynamicDialogRef = this.dialogHelperService.openLockUnlockMetadataDialog(this.selectedBooks());
     if (this.dynamicDialogRef) {
-      this.dynamicDialogRef.onClose.subscribe(() => {
+      this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(() => {
         this.bookSelectionService.deselectAll();
       });
     }
@@ -943,7 +1076,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   bulkEditMetadata(): void {
     this.dynamicDialogRef = this.dialogHelperService.openBulkMetadataEditDialog(this.selectedBooks());
     if (this.dynamicDialogRef) {
-      this.dynamicDialogRef.onClose.subscribe(() => {
+      this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(() => {
         this.bookSelectionService.deselectAll();
       });
     }
@@ -952,7 +1085,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   multiBookEditMetadata(): void {
     this.dynamicDialogRef = this.dialogHelperService.openMultibookMetadataEditorDialog(this.selectedBooks());
     if (this.dynamicDialogRef) {
-      this.dynamicDialogRef.onClose.subscribe(() => {
+      this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(() => {
         this.bookSelectionService.deselectAll();
       });
     }
@@ -1046,7 +1179,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
   attachFilesToBook(): void {
     const selectedBookIds = Array.from(this.selectedBooks());
-    const sourceBooks = this.bookService.books().filter(book =>
+    const sourceBooks = (this.books() ?? []).filter(book =>
       selectedBookIds.includes(book.id)
     );
 
@@ -1072,7 +1205,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.dynamicDialogRef = this.dialogHelperService.openBulkBookFileAttacherDialog(sourceBooks);
     if (this.dynamicDialogRef) {
-      this.dynamicDialogRef.onClose.subscribe(result => {
+      this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(result => {
         if (result?.success) {
           this.bookSelectionService.deselectAll();
         }
@@ -1084,7 +1217,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     const selectedBookIds = Array.from(this.selectedBooks());
     if (selectedBookIds.length === 0) return false;
 
-    const selectedBooks = this.bookService.books().filter(book =>
+    const selectedBooks = (this.books() ?? []).filter(book =>
       selectedBookIds.includes(book.id)
     );
 
@@ -1105,5 +1238,4 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
       this.mobileColumnCount = saved;
     }
   }
-
 }

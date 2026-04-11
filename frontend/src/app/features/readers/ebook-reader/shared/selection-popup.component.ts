@@ -1,12 +1,11 @@
 import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {CommonModule} from '@angular/common';
 import {TranslocoDirective} from '@jsverse/transloco';
 import {ReaderIconComponent} from './icon.component';
 
 export type AnnotationStyle = 'highlight' | 'underline' | 'strikethrough' | 'squiggly';
 
 export interface TextSelectionAction {
-  type: 'select' | 'annotate' | 'delete' | 'dismiss' | 'preview' | 'search' | 'note';
+  type: 'select' | 'annotate' | 'delete' | 'dismiss' | 'preview' | 'search' | 'note' | 'go-to-link';
   color?: string;
   style?: AnnotationStyle;
   annotationId?: number;
@@ -16,7 +15,7 @@ export interface TextSelectionAction {
 @Component({
   selector: 'app-text-selection-popup',
   standalone: true,
-  imports: [CommonModule, TranslocoDirective, ReaderIconComponent],
+  imports: [TranslocoDirective, ReaderIconComponent],
   templateUrl: './selection-popup.component.html',
   styleUrls: ['./selection-popup.component.scss']
 })
@@ -37,6 +36,7 @@ export class TextSelectionPopupComponent {
   @Input() showBelow = false;
   @Input() overlappingAnnotationId: number | null = null;
   @Input() selectedText = '';
+  @Input() linkUrl?: string;
   @Output() action = new EventEmitter<TextSelectionAction>();
 
   showAnnotationOptions = false;
@@ -120,6 +120,12 @@ export class TextSelectionPopupComponent {
     this.action.emit({type: 'search', searchText: this.selectedText});
     this.showAnnotationOptions = false;
     this.hasPreview = false;
+  }
+
+  onGoToLink(): void {
+    if (this.linkUrl) {
+      this.action.emit({type: 'go-to-link'});
+    }
   }
 
   onNote(): void {
