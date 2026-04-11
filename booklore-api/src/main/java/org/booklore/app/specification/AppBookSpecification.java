@@ -556,7 +556,7 @@ public class AppBookSpecification {
                     case 16 -> cb.and(cb.greaterThanOrEqualTo(ageRating, 16), cb.lessThan(ageRating, 18));
                     case 18 -> cb.and(cb.greaterThanOrEqualTo(ageRating, 18), cb.lessThan(ageRating, 21));
                     case 21 -> cb.greaterThanOrEqualTo(ageRating, 21);
-                    default -> cb.disjunction();
+                    default -> throw new APIException("Invalid ageRating bucket ID: " + id, HttpStatus.BAD_REQUEST);
                 });
             }
             Predicate combined = cb.or(predicates.toArray(new Predicate[0]));
@@ -588,7 +588,7 @@ public class AppBookSpecification {
                     case 4 -> cb.and(cb.greaterThanOrEqualTo(score, 0.50f), cb.lessThan(score, 0.70f));
                     case 5 -> cb.and(cb.greaterThanOrEqualTo(score, 0.30f), cb.lessThan(score, 0.50f));
                     case 6 -> cb.and(cb.greaterThanOrEqualTo(score, 0.00f), cb.lessThan(score, 0.30f));
-                    default -> cb.disjunction();
+                    default -> throw new APIException("Invalid matchScore bucket ID: " + id, HttpStatus.BAD_REQUEST);
                 });
             }
             Predicate combined = cb.or(predicates.toArray(new Predicate[0]));
@@ -614,9 +614,16 @@ public class AppBookSpecification {
             if (ids.isEmpty()) return cb.conjunction();
             
             Subquery<Long> sub = query.subquery(Long.class);
-            Root<BookFileEntity> bfRoot = sub.from(BookFileEntity.class);
-            Expression<Long> size = bfRoot.get("fileSizeKb");
+            Root<BookEntity> subRoot = sub.correlate(root);
+            Join<BookEntity, BookFileEntity> bfJoin = subRoot.join("bookFiles", JoinType.INNER);
             
+            Subquery<Long> minIdSub = query.subquery(Long.class);
+            Root<BookEntity> minIdRoot = minIdSub.correlate(root);
+            Join<BookEntity, BookFileEntity> minIdJoin = minIdRoot.join("bookFiles", JoinType.INNER);
+            minIdSub.select(cb.min(minIdJoin.get("id")))
+                    .where(cb.equal(minIdJoin.get("isBookFormat"), true));
+
+            Expression<Long> size = bfJoin.get("fileSizeKb");
             List<Predicate> predicates = new ArrayList<>();
             for (Integer id : ids) {
                 predicates.add(switch (id) {
@@ -628,15 +635,15 @@ public class AppBookSpecification {
                     case 5 -> cb.and(cb.greaterThanOrEqualTo(size, 512000L), cb.lessThan(size, 1048576L));
                     case 6 -> cb.and(cb.greaterThanOrEqualTo(size, 1048576L), cb.lessThan(size, 2097152L));
                     case 7 -> cb.greaterThanOrEqualTo(size, 2097152L);
-                    default -> cb.disjunction();
+                    default -> throw new APIException("Invalid fileSize bucket ID: " + id, HttpStatus.BAD_REQUEST);
                 });
             }
             
-            sub.select(bfRoot.get("book").get("id"))
-               .where(cb.or(predicates.toArray(new Predicate[0])));
+            sub.select(cb.literal(1L))
+               .where(cb.equal(bfJoin.get("id"), minIdSub),
+                      cb.or(predicates.toArray(new Predicate[0])));
 
-            Predicate combined = root.get("id").in(sub);
-            return "not".equals(mode) ? cb.not(combined) : combined;
+            return "not".equals(mode) ? cb.not(cb.exists(sub)) : cb.exists(sub);
         };
     }
 
@@ -684,7 +691,7 @@ public class AppBookSpecification {
                     case 2 -> cb.and(cb.greaterThanOrEqualTo(rating, 2.0), cb.lessThan(rating, 3.0));
                     case 1 -> cb.and(cb.greaterThanOrEqualTo(rating, 1.0), cb.lessThan(rating, 2.0));
                     case 0 -> cb.lessThan(rating, 1.0);
-                    default -> cb.disjunction();
+                    default -> throw new APIException("Invalid " + fieldName + " bucket ID: " + id, HttpStatus.BAD_REQUEST);
                 });
             }
             Predicate combined = cb.or(predicates.toArray(new Predicate[0]));
@@ -708,7 +715,7 @@ public class AppBookSpecification {
                     case 4 -> cb.and(cb.greaterThanOrEqualTo(count, 400), cb.lessThan(count, 600));
                     case 5 -> cb.and(cb.greaterThanOrEqualTo(count, 600), cb.lessThan(count, 1000));
                     case 6 -> cb.greaterThanOrEqualTo(count, 1000);
-                    default -> cb.disjunction();
+                    default -> throw new APIException("Invalid pageCount bucket ID: " + id, HttpStatus.BAD_REQUEST);
                 });
             }
             Predicate combined = cb.or(predicates.toArray(new Predicate[0]));
@@ -778,9 +785,11 @@ public class AppBookSpecification {
                 return cb.and(predicates.toArray(new Predicate[0]));
             }
 
-            Join<BookEntity, ShelfEntity> shelfJoin = root.join("shelves", JoinType.INNER);
-            Predicate combined = shelfJoin.get("id").in(ids);
-            return "not".equals(mode) ? cb.not(combined) : combined;
+            Subquery<Long> sub = query.subquery(Long.class);
+            Root<BookEntity> subRoot = sub.correlate(root);
+            Join<BookEntity, ShelfEntity> subShelves = subRoot.join("shelves", JoinType.INNER);
+            sub.select(cb.literal(1L)).where(subShelves.get("id").in(ids));
+            return "not".equals(mode) ? cb.not(cb.exists(sub)) : cb.exists(sub);
         };
     }
 
@@ -822,9 +831,7 @@ public class AppBookSpecification {
 
                 if (roleName != null) {
                     ComicCreatorRole role = parseCreatorRole(roleName);
-                    if (role != null) {
-                        where.add(cb.equal(mappingRoot.get("role"), role));
-                    }
+                    where.add(cb.equal(mappingRoot.get("role"), role));
                 }
 
                 sub.select(cb.literal(1L)).where(where.toArray(new Predicate[0]));
@@ -846,7 +853,7 @@ public class AppBookSpecification {
             case "letterer" -> ComicCreatorRole.LETTERER;
             case "coverartist" -> ComicCreatorRole.COVER_ARTIST;
             case "editor" -> ComicCreatorRole.EDITOR;
-            default -> null;
+            default -> throw new APIException("Invalid comic creator role: " + roleName, HttpStatus.BAD_REQUEST);
         };
     }
 
