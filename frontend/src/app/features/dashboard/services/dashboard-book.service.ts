@@ -137,13 +137,13 @@ export class DashboardBookService {
       this.ruleEvaluatorService.evaluateGroup(book, group, books)
     );
 
-    if (config.maxItems) {
-      filteredBooks = filteredBooks.slice(0, config.maxItems);
-    }
-
     if (config.sortField && config.sortDirection) {
       const sortOption = this.createSortOption(config.sortField, config.sortDirection);
-      return this.sortService.applySort(filteredBooks, sortOption);
+      filteredBooks = this.sortService.applySort(filteredBooks, sortOption);
+    }
+
+    if (config.maxItems) {
+      filteredBooks = filteredBooks.slice(0, config.maxItems);
     }
 
     return filteredBooks;
