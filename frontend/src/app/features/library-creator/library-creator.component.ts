@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { MessageService } from 'primeng/api';
 import { Router } from '@angular/router';
@@ -13,14 +14,18 @@ import { IconPickerService, IconSelection } from '../../shared/service/icon-pick
 import { Button } from 'primeng/button';
 import { IconDisplayComponent } from '../../shared/components/icon-display/icon-display.component';
 import { DialogLauncherService } from '../../shared/services/dialog-launcher.service';
-import { switchMap } from 'rxjs/operators';
-import { map } from 'rxjs';
+import { switchMap, map } from 'rxjs';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Checkbox } from 'primeng/checkbox';
 import { Select } from 'primeng/select';
 import { TranslocoDirective, TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 
-type FormatEntry = { type: BookType; label: string };
+interface FormatEntry { type: BookType; label: string }
+
+interface LibraryCreatorDialogData {
+  mode: 'create' | 'edit';
+  libraryId?: number;
+}
 
 @Component({
   selector: 'app-library-creator',
@@ -40,6 +45,10 @@ export class LibraryCreatorComponent {
   private readonly router = inject(Router);
   private readonly iconPicker = inject(IconPickerService);
   private readonly t = inject(TranslocoService);
+
+  private readonly activeLang = toSignal(this.t.langChanges$, {
+    initialValue: this.t.getActiveLang(),
+  });
 
   readonly allBookFormats: FormatEntry[] = [
     { type: 'EPUB', label: 'EPUB' },
@@ -64,15 +73,19 @@ export class LibraryCreatorComponent {
   readonly metadataSource = signal<MetadataSource>('EMBEDDED');
   readonly organizationMode = signal<OrganizationMode>('BOOK_PER_FILE');
 
-  readonly metadataSourceOptions = computed(() => [
-    { label: this.t.translate('libraryCreator.creator.metadataSourceEmbedded'), value: 'EMBEDDED' },
-    { label: this.t.translate('libraryCreator.creator.metadataSourceSidecar'), value: 'SIDECAR' },
-    { label: this.t.translate('libraryCreator.creator.metadataSourcePreferSidecar'), value: 'PREFER_SIDECAR' },
-    { label: this.t.translate('libraryCreator.creator.metadataSourcePreferEmbedded'), value: 'PREFER_EMBEDDED' },
-    { label: this.t.translate('libraryCreator.creator.metadataSourceNone'), value: 'NONE' },
-  ]);
+  readonly metadataSourceOptions = computed(() => {
+    this.activeLang();
+    return [
+      { label: this.t.translate('libraryCreator.creator.metadataSourceEmbedded'), value: 'EMBEDDED' },
+      { label: this.t.translate('libraryCreator.creator.metadataSourceSidecar'), value: 'SIDECAR' },
+      { label: this.t.translate('libraryCreator.creator.metadataSourcePreferSidecar'), value: 'PREFER_SIDECAR' },
+      { label: this.t.translate('libraryCreator.creator.metadataSourcePreferEmbedded'), value: 'PREFER_EMBEDDED' },
+      { label: this.t.translate('libraryCreator.creator.metadataSourceNone'), value: 'NONE' },
+    ];
+  });
 
   readonly organizationModeOptions = computed(() => {
+    this.activeLang();
     const base = [
       { label: this.t.translate('libraryCreator.creator.organizationModeBookPerFile'), value: 'BOOK_PER_FILE' },
       { label: this.t.translate('libraryCreator.creator.organizationModeBookPerFolder'), value: 'BOOK_PER_FOLDER' },
@@ -97,10 +110,10 @@ export class LibraryCreatorComponent {
   }
 
   private initFromDialogData(): void {
-    const data = this.dynamicDialogConfig?.data;
+    const data = this.dynamicDialogConfig?.data as LibraryCreatorDialogData;
     if (data?.mode !== 'edit') return;
 
-    const library = this.libraryService.findLibraryById(data.libraryId);
+    const library = this.libraryService.findLibraryById(data.libraryId!);
     if (!library) return;
 
     const { name, icon, iconType, paths, watch, formatPriority, allowedFormats } = library;
@@ -160,7 +173,11 @@ export class LibraryCreatorComponent {
 
   onFormatCheckboxChange(formatType: BookType, checked: boolean): void {
     const next = new Set(this.selectedAllowedFormats());
-    checked ? next.add(formatType) : next.delete(formatType);
+    if (checked) {
+      next.add(formatType);
+    } else {
+      next.delete(formatType);
+    }
     this.selectedAllowedFormats.set(next);
     this.allowAllFormats.set(next.size === this.allBookFormats.length);
   }
@@ -244,15 +261,24 @@ export class LibraryCreatorComponent {
     };
 
     if (this.mode() === 'edit') {
-      const lib = this.libraryService.findLibraryById(this.dynamicDialogConfig.data?.libraryId);
-      this.libraryService.updateLibrary(library, lib?.id).pipe(
-        switchMap(() => this.libraryService.refreshLibrary(lib!.id!))
+      const libraryId = (this.dynamicDialogConfig.data as LibraryCreatorDialogData)?.libraryId;
+      if (libraryId == null) {
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('libraryCreator.creator.toast.updateFailedSummary'),
+          detail: this.t.translate('libraryCreator.creator.toast.updateFailedDetail'),
+        });
+        return;
+      }
+
+      this.libraryService.updateLibrary(library, libraryId).pipe(
+        switchMap(() => this.libraryService.refreshLibrary(libraryId))
       ).subscribe({
         next: () => {
           this.messageService.add({ severity: 'success', summary: this.t.translate('libraryCreator.creator.toast.updatedSummary'), detail: this.t.translate('libraryCreator.creator.toast.updatedDetail') });
           this.dynamicDialogRef.close();
         },
-        error: (e) => {
+        error: (e: Error) => {
           this.messageService.add({ severity: 'error', summary: this.t.translate('libraryCreator.creator.toast.updateFailedSummary'), detail: this.t.translate('libraryCreator.creator.toast.updateFailedDetail') });
           console.error(e);
         }
@@ -282,7 +308,7 @@ export class LibraryCreatorComponent {
             this.dynamicDialogRef.close();
           }
         },
-        error: (e) => {
+        error: (e: Error) => {
           this.libraryService.setLargeLibraryLoading(false, 0);
           this.messageService.add({ severity: 'error', summary: this.t.translate('libraryCreator.creator.toast.createFailedSummary'), detail: this.t.translate('libraryCreator.creator.toast.createFailedDetail') });
           console.error(e);
