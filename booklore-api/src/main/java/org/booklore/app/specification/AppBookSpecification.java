@@ -21,6 +21,46 @@ public class AppBookSpecification {
     private AppBookSpecification() {
     }
 
+    private static List<Integer> parseIntList(List<String> values, String paramName) {
+        List<String> invalid = new ArrayList<>();
+        List<Integer> result = values.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> {
+                    try {
+                        return Integer.parseInt(s.trim());
+                    } catch (NumberFormatException e) {
+                        invalid.add(s.trim());
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .toList();
+        if (!invalid.isEmpty()) {
+            throw new APIException("Invalid " + paramName + " values: " + invalid, HttpStatus.BAD_REQUEST);
+        }
+        return result;
+    }
+
+    private static List<Long> parseLongList(List<String> values, String paramName) {
+        List<String> invalid = new ArrayList<>();
+        List<Long> result = values.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> {
+                    try {
+                        return Long.parseLong(s.trim());
+                    } catch (NumberFormatException e) {
+                        invalid.add(s.trim());
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .toList();
+        if (!invalid.isEmpty()) {
+            throw new APIException("Invalid " + paramName + " values: " + invalid, HttpStatus.BAD_REQUEST);
+        }
+        return result;
+    }
+
     @SuppressWarnings("unchecked")
     private static <X, Y> Join<X, Y> getOrCreateJoin(From<?, X> from, String attribute, JoinType joinType) {
         for (Join<X, ?> join : from.getJoins()) {
@@ -499,7 +539,7 @@ public class AppBookSpecification {
 
     public static Specification<BookEntity> withAgeRatings(List<String> rangeIds, String mode) {
         return (root, query, cb) -> {
-            List<Integer> ids = rangeIds.stream().map(Integer::parseInt).toList();
+            List<Integer> ids = parseIntList(rangeIds, "ageRating");
             if (ids.isEmpty()) return cb.conjunction();
             Join<BookEntity, BookMetadataEntity> metadataJoin = getOrCreateJoin(root, "metadata", JoinType.INNER);
             Expression<Integer> ageRating = metadataJoin.get("ageRating");
@@ -534,7 +574,7 @@ public class AppBookSpecification {
 
     public static Specification<BookEntity> withMatchScores(List<String> rangeIds, String mode) {
         return (root, query, cb) -> {
-            List<Integer> ids = rangeIds.stream().map(Integer::parseInt).toList();
+            List<Integer> ids = parseIntList(rangeIds, "matchScore");
             if (ids.isEmpty()) return cb.conjunction();
             Expression<Float> score = root.get("metadataMatchScore");
             
@@ -559,9 +599,10 @@ public class AppBookSpecification {
     public static Specification<BookEntity> withPublishedYears(List<String> years, String mode) {
         return (root, query, cb) -> {
             if (years.isEmpty()) return cb.conjunction();
+            List<Integer> parsedYears = parseIntList(years, "publishedDate");
+            if (parsedYears.isEmpty()) return cb.conjunction();
             Join<BookEntity, BookMetadataEntity> metadataJoin = getOrCreateJoin(root, "metadata", JoinType.INNER);
             Expression<Integer> yearExpr = cb.function("YEAR", Integer.class, metadataJoin.get("publishedDate"));
-            List<Integer> parsedYears = years.stream().map(Integer::parseInt).toList();
             Predicate combined = yearExpr.in(parsedYears);
             return "not".equals(mode) ? cb.not(combined) : combined;
         };
@@ -569,7 +610,7 @@ public class AppBookSpecification {
 
     public static Specification<BookEntity> withFileSizes(List<String> rangeIds, String mode) {
         return (root, query, cb) -> {
-            List<Integer> ids = rangeIds.stream().map(Integer::parseInt).toList();
+            List<Integer> ids = parseIntList(rangeIds, "fileSize");
             if (ids.isEmpty()) return cb.conjunction();
             
             Subquery<Long> sub = query.subquery(Long.class);
@@ -602,7 +643,8 @@ public class AppBookSpecification {
     public static Specification<BookEntity> withPersonalRatings(List<String> values, Long userId, String mode) {
         return (root, query, cb) -> {
             if (userId == null || values.isEmpty()) return cb.conjunction();
-            List<Integer> parsed = values.stream().map(Integer::parseInt).toList();
+            List<Integer> parsed = parseIntList(values, "personalRating");
+            if (parsed.isEmpty()) return cb.conjunction();
             Subquery<Long> sub = query.subquery(Long.class);
             Root<UserBookProgressEntity> progressRoot = sub.from(UserBookProgressEntity.class);
             sub.select(progressRoot.get("book").get("id"))
@@ -629,7 +671,7 @@ public class AppBookSpecification {
     private static Specification<BookEntity> buildRatingRangeSpec(
             List<String> rangeIds, String mode, String fieldName) {
         return (root, query, cb) -> {
-            List<Integer> ids = rangeIds.stream().map(Integer::parseInt).toList();
+            List<Integer> ids = parseIntList(rangeIds, fieldName);
             if (ids.isEmpty()) return cb.conjunction();
             Join<BookEntity, BookMetadataEntity> metadataJoin = getOrCreateJoin(root, "metadata", JoinType.INNER);
             Expression<Double> rating = metadataJoin.get(fieldName);
@@ -652,7 +694,7 @@ public class AppBookSpecification {
 
     public static Specification<BookEntity> withPageCounts(List<String> rangeIds, String mode) {
         return (root, query, cb) -> {
-            List<Integer> ids = rangeIds.stream().map(Integer::parseInt).toList();
+            List<Integer> ids = parseIntList(rangeIds, "pageCount");
             if (ids.isEmpty()) return cb.conjunction();
             Join<BookEntity, BookMetadataEntity> metadataJoin = getOrCreateJoin(root, "metadata", JoinType.INNER);
             Expression<Integer> count = metadataJoin.get("pageCount");
@@ -721,7 +763,8 @@ public class AppBookSpecification {
     public static Specification<BookEntity> inShelves(List<String> shelfIds, String mode) {
         return (root, query, cb) -> {
             if (shelfIds.isEmpty()) return cb.conjunction();
-            List<Long> ids = shelfIds.stream().map(Long::parseLong).toList();
+            List<Long> ids = parseLongList(shelfIds, "shelf");
+            if (ids.isEmpty()) return cb.conjunction();
             
             if ("and".equals(mode)) {
                 List<Predicate> predicates = new ArrayList<>();
@@ -744,7 +787,8 @@ public class AppBookSpecification {
     public static Specification<BookEntity> inLibraries(List<String> libraryIds, String mode) {
         return (root, query, cb) -> {
             if (libraryIds.isEmpty()) return cb.conjunction();
-            List<Long> ids = libraryIds.stream().map(Long::parseLong).toList();
+            List<Long> ids = parseLongList(libraryIds, "library");
+            if (ids.isEmpty()) return cb.conjunction();
             
             if ("and".equals(mode)) {
                 if (ids.size() > 1) return cb.disjunction(); // A book can't be in multiple libraries

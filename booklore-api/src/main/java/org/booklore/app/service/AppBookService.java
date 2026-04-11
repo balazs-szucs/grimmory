@@ -545,6 +545,7 @@ public class AppBookService {
                 "FROM UserBookProgressEntity ubp " +
                 "WHERE ubp.user.id = :userId AND ubp.personalRating IS NOT NULL " +
                 "AND ubp.book.id IN (SELECT b.id FROM BookEntity b WHERE (b.deleted IS NULL OR b.deleted = false) " +
+                "AND b.bookFiles IS NOT EMPTY " +
                 scopeClause + ") " +
                 "GROUP BY 1 ORDER BY 1 DESC";
         var prQ = entityManager.createQuery(personalRatingQuery, Tuple.class);
@@ -965,6 +966,13 @@ public class AppBookService {
             }
         }
 
+        if (req.comicCreator() != null && !req.comicCreator().isEmpty()) {
+            List<String> cleaned = BookListRequest.cleanValues(req.comicCreator());
+            if (!cleaned.isEmpty()) {
+                specs.add(AppBookSpecification.withComicCreators(cleaned, req.effectiveFilterMode()));
+            }
+        }
+
         if (req.shelves() != null && !req.shelves().isEmpty()) {
             List<String> cleaned = BookListRequest.cleanValues(req.shelves());
             if (!cleaned.isEmpty()) {
@@ -1129,11 +1137,30 @@ public class AppBookService {
         var q = entityManager.createQuery(jpql, Tuple.class);
         q.setParameter("userId", userId);
         setFilterQueryParams(q, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
-        return q.getResultList().stream()
+        List<AppFilterOptions.CountedOption> options = q.getResultList().stream()
                 .map(t -> new AppFilterOptions.CountedOption(
                         t.get(0, ReadStatus.class).name(),
                         t.get(1, Long.class)))
                 .toList();
+
+        String baseQuery = "SELECT COUNT(DISTINCT b.id) FROM BookEntity b"
+                + " WHERE (b.deleted IS NULL OR b.deleted = false)"
+                + " AND b.bookFiles IS NOT EMPTY"
+                + " AND b.id NOT IN ("
+                + "   SELECT ubp.book.id FROM UserBookProgressEntity ubp WHERE ubp.user.id = :userId"
+                + " )"
+                + " " + scopeClause;
+        var baseQ = entityManager.createQuery(baseQuery, Long.class);
+        baseQ.setParameter("userId", userId);
+        setFilterQueryParams(baseQ, accessibleLibraryIds, libraryId, shelfId, magicBookIds);
+        long unsetCount = baseQ.getSingleResult();
+
+        if (unsetCount > 0) {
+            List<AppFilterOptions.CountedOption> mutable = new ArrayList<>(options);
+            mutable.addFirst(new AppFilterOptions.CountedOption("UNSET", unsetCount));
+            return List.copyOf(mutable);
+        }
+        return options;
     }
 
     private List<AppFilterOptions.CountedOption> queryRatingBuckets(
@@ -1157,7 +1184,8 @@ public class AppBookService {
             String scopeClause, Set<Long> accessibleLibraryIds,
             Long libraryId, Long shelfId, Set<Long> magicBookIds) {
         String jpql = "SELECT " + caseExpr + ", COUNT(DISTINCT b.id) FROM BookEntity b " + joins +
-                " WHERE (b.deleted IS NULL OR b.deleted = false) " + extraWhere + " " + scopeClause +
+                " WHERE (b.deleted IS NULL OR b.deleted = false) AND b.bookFiles IS NOT EMPTY "
+                + extraWhere + " " + scopeClause +
                 " GROUP BY 1";
         var q = entityManager.createQuery(jpql, Tuple.class);
         setFilterQueryParams(q, accessibleLibraryIds, libraryId, shelfId, magicBookIds);

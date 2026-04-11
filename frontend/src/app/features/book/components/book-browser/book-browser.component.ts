@@ -229,9 +229,6 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
           case 'pageCount': scopeFilters.pageCount = strValues; break;
           case 'shelfStatus':
             scopeFilters.shelfStatus = strValues;
-            if (strValues.includes('unshelved')) {
-              scopeFilters.unshelved = true;
-            }
             break;
           case 'comicCharacter': scopeFilters.comicCharacter = strValues; break;
           case 'comicTeam': scopeFilters.comicTeam = strValues; break;
