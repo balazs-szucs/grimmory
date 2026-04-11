@@ -7,17 +7,22 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.net.SocketTimeoutException;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 @Slf4j
 @Service
 public class FileStreamingService {
 
-    private static final int BUFFER_SIZE = 64 * 1024;
-
+    /**
+     * Streams a file with HTTP Range support for seeking.
+     * Uses Java NIO FileChannel for high performance and zero-copy transfer where possible.
+     */
     public void streamWithRangeSupport(
             Path filePath,
             String contentType,
@@ -33,37 +38,37 @@ public class FileStreamingService {
         long fileSize = Files.size(filePath);
         String rangeHeader = request.getHeader("Range");
 
+        // Set standard headers for media streaming
         response.setHeader("Accept-Ranges", "bytes");
-        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
         response.setHeader("Content-Disposition", "inline");
         response.setContentType(contentType);
 
         // -------------------------
-        // HEAD
+        // HEAD request support
         // -------------------------
         if ("HEAD".equalsIgnoreCase(request.getMethod())) {
             response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
-            response.setHeader(
-                    "Content-Range",
-                    "bytes 0-" + (fileSize - 1) + "/" + fileSize
-            );
+            response.setHeader("Content-Range", "bytes 0-" + (fileSize - 1) + "/" + fileSize);
             response.setContentLengthLong(fileSize);
             return;
         }
 
-        try {
+        try (FileChannel fileChannel = FileChannel.open(filePath, StandardOpenOption.READ)) {
             // -------------------------
-            // NO RANGE
+            // NO RANGE — Full file
             // -------------------------
             if (rangeHeader == null) {
                 response.setStatus(HttpServletResponse.SC_OK);
                 response.setContentLengthLong(fileSize);
-                streamBytes(filePath, 0, fileSize - 1, response.getOutputStream());
+                transferFile(fileChannel, 0, fileSize, response.getOutputStream());
                 return;
             }
 
             // -------------------------
-            // RANGE
+            // RANGE — Partial content
             // -------------------------
             Range range = parseRange(rangeHeader, fileSize);
             if (range == null) {
@@ -73,21 +78,39 @@ public class FileStreamingService {
             }
 
             long length = range.end - range.start + 1;
-
             response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
-            response.setHeader(
-                    "Content-Range",
-                    "bytes " + range.start + "-" + range.end + "/" + fileSize
-            );
+            response.setHeader("Content-Range", "bytes " + range.start + "-" + range.end + "/" + fileSize);
             response.setContentLengthLong(length);
 
-            streamBytes(filePath, range.start, range.end, response.getOutputStream());
+            transferFile(fileChannel, range.start, length, response.getOutputStream());
 
         } catch (IOException e) {
             if (isClientDisconnect(e)) {
                 log.debug("Client disconnected during streaming: {}", e.getMessage());
             } else {
-                throw e;
+                log.error("Error during file streaming: {}", filePath, e);
+                if (!response.isCommitted()) {
+                    response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Streaming error");
+                }
+            }
+        }
+    }
+
+    /**
+     * Efficiently transfers data from the file channel to the output stream.
+     * Uses zero-copy if supported by the operating system.
+     */
+    private void transferFile(FileChannel source, long position, long count, OutputStream out) throws IOException {
+        try (WritableByteChannel destination = Channels.newChannel(out)) {
+            long remaining = count;
+            long currentPos = position;
+            
+            while (remaining > 0) {
+                // transferTo can transfer up to 2GB at once on some platforms
+                long transferred = source.transferTo(currentPos, remaining, destination);
+                if (transferred <= 0) break;
+                currentPos += transferred;
+                remaining -= transferred;
             }
         }
     }
@@ -133,29 +156,6 @@ public class FileStreamingService {
 
         } catch (NumberFormatException e) {
             return null;
-        }
-    }
-
-    // ------------------------------------------------------------
-    // STREAM BYTES
-    // ------------------------------------------------------------
-    private void streamBytes(Path path, long start, long end, OutputStream out)
-            throws IOException {
-
-        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r")) {
-            raf.seek(start);
-
-            long remaining = end - start + 1;
-            byte[] buffer = new byte[BUFFER_SIZE];
-
-            while (remaining > 0) {
-                int read = raf.read(buffer, 0, (int) Math.min(buffer.length, remaining));
-                if (read == -1) break;
-                out.write(buffer, 0, read);
-                remaining -= read;
-            }
-
-            out.flush();
         }
     }
 

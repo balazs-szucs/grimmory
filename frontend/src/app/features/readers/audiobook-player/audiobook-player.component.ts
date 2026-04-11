@@ -1,4 +1,4 @@
-import {Component, ElementRef, inject, OnDestroy, OnInit, ViewChild} from '@angular/core';
+import {ChangeDetectorRef, Component, ElementRef, inject, OnDestroy, OnInit, ViewChild} from '@angular/core';
 import {Location} from '@angular/common';
 import {ActivatedRoute} from '@angular/router';
 import {FormsModule} from '@angular/forms';
@@ -1104,5 +1104,11 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
       return this.formatTime(bookmark.positionMs / 1000);
     }
     return '';
+  }
+}
+n '';
+  }
+}
+n '';
   }
 }
