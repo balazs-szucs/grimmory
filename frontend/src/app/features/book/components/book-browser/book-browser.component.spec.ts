@@ -324,6 +324,8 @@ function createHarness(options?: {
       {
         provide: TranslocoService,
         useValue: {
+          langChanges$: new Subject<string>().asObservable(),
+          getActiveLang: vi.fn(() => 'en'),
           translate: vi.fn((key: string) => {
             if (options?.translate) {
               return options.translate(key);
