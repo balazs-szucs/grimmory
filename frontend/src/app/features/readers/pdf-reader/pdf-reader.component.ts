@@ -494,21 +494,22 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
           this.embedPdfBook.setSpreadMode(this.spread);
           this.spreadMode.set(this.spread);
         }
-
-        // Load outline, bookmarks, and annotations
-        this.loadOutline();
-        this.loadBookmarks();
-        this.loadAnnotations();
       });
 
       // Use onLayoutReady for initial page scroll (fires when document layout is calculated)
       this.embedPdfBook.layoutReady$.pipe(
-        takeUntilDestroyed(this.destroyRef)
+        takeUntilDestroyed(this.destroyRef),
+        debounceTime(200) // Give the engine a moment to settle and start high-quality rendering
       ).subscribe(() => {
         const currentPage = this.page();
         if (currentPage > 1) {
           this.embedPdfBook.scrollToPage(currentPage, 'instant');
         }
+
+        // Load outline, bookmarks, and annotations after layout is ready and settled
+        this.loadOutline();
+        this.loadBookmarks();
+        this.loadAnnotations();
       });
 
     } catch (err) {
