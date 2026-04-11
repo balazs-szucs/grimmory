@@ -727,6 +727,13 @@ public class AppBookSpecification {
         return (root, query, cb) -> {
             List<String> cleaned = cleanLowerCase(values);
             if (cleaned.isEmpty()) return cb.conjunction();
+            List<String> invalid = cleaned.stream()
+                    .filter(v -> !v.equals("shelved") && !v.equals("unshelved"))
+                    .toList();
+            if (!invalid.isEmpty()) {
+                throw new APIException("Invalid shelfStatus values: " + invalid
+                        + ". Valid values: [shelved, unshelved]", HttpStatus.BAD_REQUEST);
+            }
             boolean wantShelved = cleaned.contains("shelved");
             boolean wantUnshelved = cleaned.contains("unshelved");
             if (wantShelved && wantUnshelved) return cb.conjunction();
