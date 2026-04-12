@@ -26,15 +26,16 @@ app:
 server:
   forward-headers-strategy: native
   port: ${BOOKLORE_PORT:6060}
+  http2:
+    enabled: true
+  undertow:
+    options:
+      server:
+        ENABLE_HTTP2: true
   compression:
     enabled: true
     mime-types: text/html,text/css,application/javascript,application/json,image/svg+xml,application/xml,application/atom+xml
     min-response-size: 1024
-  tomcat:
-    relaxed-query-chars: '[,],%,{,},|'
-    threads:
-      max: 10                      # Virtual threads handle concurrency; platform threads just overhead
-      min-spare: 2
   max-http-request-header-size: 64KB
 
 spring:

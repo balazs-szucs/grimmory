@@ -14,4 +14,5 @@ public class SidecarSettings {
     private boolean writeOnUpdate;
     private boolean writeOnScan;
     private boolean includeCoverFile;
+    private boolean overwrite;
 }

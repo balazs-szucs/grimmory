@@ -401,7 +401,34 @@ public class MetadataRefreshService {
     }
 
     public BookMetadata fetchTopMetadataFromAProvider(MetadataProvider provider, Book book) {
-        return getParser(provider).fetchTopMetadata(book, buildFetchMetadataRequestFromBook(book));
+        int maxRetries = 3;
+        int attempt = 0;
+        Random random = new Random();
+
+        while (attempt < maxRetries) {
+            try {
+                return getParser(provider).fetchTopMetadata(book, buildFetchMetadataRequestFromBook(book));
+            } catch (Exception e) {
+                attempt++;
+                if (attempt >= maxRetries) {
+                    log.error("Metadata fetch failed after {} attempts for provider {}: {}", maxRetries, provider, e.getMessage());
+                    // Future: Persist MetadataError entity here (Complaint 7)
+                    return null;
+                }
+                
+                // Exponential backoff: 1.5s, 3s, 4.5s... + random jitter
+                long sleepMs = (attempt * 1500L) + random.nextInt(500);
+                log.warn("Metadata fetch failed for provider {}, retrying in {}ms (attempt {}/{}): {}", 
+                        provider, sleepMs, attempt, maxRetries, e.getMessage());
+                try {
+                    Thread.sleep(sleepMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
+        }
+        return null;
     }
 
     private BookParser getParser(MetadataProvider provider) {

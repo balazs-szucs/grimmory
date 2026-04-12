@@ -147,7 +147,9 @@ public class LibraryService {
         }
 
         auditService.log(AuditAction.LIBRARY_UPDATED, "Library", libraryId, "Updated library: " + library.getName());
-        return libraryMapper.toLibrary(savedLibrary);
+        Library result = libraryMapper.toLibrary(savedLibrary);
+        notificationService.sendMessage(Topic.LIBRARY_UPDATE, result);
+        return result;
     }
 
     @Transactional
@@ -192,7 +194,9 @@ public class LibraryService {
         scheduleBackgroundScanAfterCommit(libraryId);
 
         auditService.log(AuditAction.LIBRARY_CREATED, "Library", libraryEntity.getId(), "Created library: " + libraryEntity.getName());
-        return libraryMapper.toLibrary(libraryEntity);
+        Library result = libraryMapper.toLibrary(libraryEntity);
+        notificationService.sendMessage(Topic.LIBRARY_UPDATE, result);
+        return result;
     }
 
     @Transactional
@@ -254,6 +258,7 @@ public class LibraryService {
         String libraryName = library.getName();
         libraryRepository.deleteById(id);
         auditService.log(AuditAction.LIBRARY_DELETED, "Library", id, "Deleted library: " + libraryName);
+        notificationService.sendMessage(Topic.LIBRARY_UPDATE, id);
         log.info("Library deleted successfully: {}", id);
     }
 

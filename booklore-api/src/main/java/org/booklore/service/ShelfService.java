@@ -17,6 +17,7 @@ import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserRepository;
 import lombok.AllArgsConstructor;
 import org.booklore.model.enums.AuditAction;
+import org.booklore.model.websocket.Topic;
 import org.booklore.service.audit.AuditService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -38,6 +39,7 @@ public class ShelfService {
     private final AuthenticationService authenticationService;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final NotificationService notificationService;
 
     @Transactional
     public Shelf createShelf(ShelfCreateRequest request) {
@@ -57,6 +59,7 @@ public class ShelfService {
                 .build();
         Shelf result = shelfMapper.toShelf(shelfRepository.save(shelfEntity));
         auditService.log(AuditAction.SHELF_CREATED, "Shelf", shelfEntity.getId(), "Created shelf: " + request.getName());
+        notificationService.sendMessage(Topic.SHELF_UPDATE, result);
         return result;
     }
 
@@ -72,6 +75,7 @@ public class ShelfService {
         shelfEntity.setPublic(request.isPublicShelf());
         Shelf result = shelfMapper.toShelf(shelfRepository.save(shelfEntity));
         auditService.log(AuditAction.SHELF_UPDATED, "Shelf", id, "Updated shelf: " + request.getName());
+        notificationService.sendMessage(Topic.SHELF_UPDATE, result);
         return result;
     }
 
@@ -90,6 +94,7 @@ public class ShelfService {
     public void deleteShelf(Long shelfId) {
         shelfRepository.deleteById(shelfId);
         auditService.log(AuditAction.SHELF_DELETED, "Shelf", shelfId, "Deleted shelf: " + shelfId);
+        notificationService.sendMessage(Topic.SHELF_UPDATE, shelfId);
     }
 
     public Shelf getUserKoboShelf() {

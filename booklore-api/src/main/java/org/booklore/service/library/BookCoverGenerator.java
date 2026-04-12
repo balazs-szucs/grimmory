@@ -35,6 +35,7 @@ public class BookCoverGenerator {
     /**
      * Generates a cover image from an additional file and attaches it to the book.
      */
+    @org.springframework.scheduling.annotation.Async
     public void generateCoverFromAdditionalFile(BookEntity bookEntity, LibraryFile additionalFile) {
         BookFileType additionalType = additionalFile.getBookFileType();
         boolean additionalIsAudiobook = additionalType == BookFileType.AUDIOBOOK;

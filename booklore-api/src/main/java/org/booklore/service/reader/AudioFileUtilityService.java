@@ -49,10 +49,21 @@ public class AudioFileUtilityService {
         return AUDIO_EXTENSIONS.stream().anyMatch(fileName::endsWith);
     }
 
+    private static final java.util.Map<String, String> AUDIO_MIME = java.util.Map.of(
+            ".mp3", "audio/mpeg", ".m4a", "audio/mp4",
+            ".m4b", "audio/mp4", ".opus", "audio/opus");
+
     /**
-     * Get the MIME content type for an audio file using content-based detection via Apache Tika.
+     * Get the MIME content type for an audio file using extension-based detection,
+     * falling back to Apache Tika for unknown extensions.
      */
     public String getContentType(Path audioPath) {
+        String name = audioPath.getFileName().toString().toLowerCase();
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0) {
+            String mime = AUDIO_MIME.get(name.substring(dot));
+            if (mime != null) return mime;
+        }
         return MimeDetector.detectSafe(audioPath);
     }
 

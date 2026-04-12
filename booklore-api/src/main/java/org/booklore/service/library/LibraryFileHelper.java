@@ -65,7 +65,10 @@ public class LibraryFileHelper {
         List<LibraryFile> libraryFiles = new ArrayList<>();
         Map<Path, List<Path>> dirAudioFiles = new HashMap<>();
 
-        Files.walkFileTree(libraryPath, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<>() {
+        // Use configured depth or default to 3 (Root -> Series -> Book)
+        int maxDepth = libraryEntity.getScanDepth() != null ? libraryEntity.getScanDepth() : 3;
+
+        Files.walkFileTree(libraryPath, EnumSet.of(FileVisitOption.FOLLOW_LINKS), maxDepth, new SimpleFileVisitor<>() {
             @Override
             @NonNull
             public FileVisitResult visitFile(@NonNull Path file, @NonNull BasicFileAttributes attrs) {
@@ -89,6 +92,7 @@ public class LibraryFileHelper {
                             .fileSubPath(FileUtils.getRelativeSubPath(pathEntity.getPath(), file))
                             .fileName(fileName)
                             .bookFileType(bookExtension.get().getType())
+                            .lastModified(attrs.lastModifiedTime().toInstant())
                             .build());
                 }
 
@@ -167,7 +171,10 @@ public class LibraryFileHelper {
         Map<Path, Boolean> dirHasNonAudioBooks = new HashMap<>();
         Set<Path> processedAsFolderAudiobook = new HashSet<>();
 
-        Files.walkFileTree(libraryPath, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<>() {
+        // Use configured depth or default to 3 (Root -> Series -> Book)
+        int maxDepth = libraryEntity.getScanDepth() != null ? libraryEntity.getScanDepth() : 3;
+
+        Files.walkFileTree(libraryPath, EnumSet.of(FileVisitOption.FOLLOW_LINKS), maxDepth, new SimpleFileVisitor<>() {
             @Override
             @NonNull
             public FileVisitResult visitFile(@NonNull Path file, @NonNull BasicFileAttributes attrs) {
@@ -199,6 +206,7 @@ public class LibraryFileHelper {
                             .fileSubPath(FileUtils.getRelativeSubPath(pathEntity.getPath(), file))
                             .fileName(fileName)
                             .bookFileType(fileType)
+                            .lastModified(attrs.lastModifiedTime().toInstant())
                             .build());
                 }
 

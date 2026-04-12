@@ -95,7 +95,7 @@ public class AdditionalFileService {
         }
     }
 
-    public ResponseEntity<Resource> downloadAdditionalFile(Long bookId, Long fileId) throws IOException {
+    public ResponseEntity<?> downloadAdditionalFile(Long bookId, Long fileId) throws IOException {
         Optional<BookFileEntity> fileOpt = additionalFileRepository.findByIdAndBookIdWithBookAndLibraryPath(fileId, bookId);
         if (fileOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -126,38 +126,34 @@ public class AdditionalFileService {
                 .body(resource);
     }
 
-    private ResponseEntity<Resource> downloadFolderAsZip(BookFileEntity file, Path folderPath) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-
-        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-            // Get all files in the folder, sorted by name
-            try (var files = Files.list(folderPath)) {
-                for (Path audioFile : files
-                        .filter(Files::isRegularFile)
-                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                        .toList()) {
-                    ZipEntry entry = new ZipEntry(audioFile.getFileName().toString());
-                    zos.putNextEntry(entry);
-                    Files.copy(audioFile, zos);
-                    zos.closeEntry();
-                }
-            }
-        }
-
-        byte[] zipBytes = baos.toByteArray();
-        Resource resource = new ByteArrayResource(zipBytes);
-
+    private ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> downloadFolderAsZip(BookFileEntity file, Path folderPath) throws IOException {
         String zipFileName = file.getFileName() + ".zip";
         String encodedFilename = URLEncoder.encode(zipFileName, StandardCharsets.UTF_8).replace("+", "%20");
         String fallbackFilename = NON_ASCII.matcher(zipFileName).replaceAll("_");
         String contentDisposition = String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
                 fallbackFilename, encodedFilename);
 
+        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody body = out -> {
+            try (ZipOutputStream zos = new ZipOutputStream(out)) {
+                // Get all files in the folder, sorted by name
+                try (var files = Files.list(folderPath)) {
+                    for (Path audioFile : files
+                            .filter(Files::isRegularFile)
+                            .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                            .toList()) {
+                        ZipEntry entry = new ZipEntry(audioFile.getFileName().toString());
+                        zos.putNextEntry(entry);
+                        Files.copy(audioFile, zos);
+                        zos.closeEntry();
+                    }
+                }
+            }
+        };
+
         return ResponseEntity.ok()
                 .contentType(MediaType.valueOf("application/zip"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(zipBytes.length))
-                .body(resource);
+                .body(body);
     }
 
     private void validateAdditionalFile(BookFileEntity file, BookEntity book) {

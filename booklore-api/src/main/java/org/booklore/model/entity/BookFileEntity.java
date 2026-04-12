@@ -73,6 +73,12 @@ public class BookFileEntity {
     @Column(name = "added_on")
     private Instant addedOn;
 
+    @Column(name = "last_modified")
+    private Instant lastModified;
+
+    @Column(name = "last_scanned_at")
+    private Instant lastScannedAt;
+
     @Column(name = "duration_seconds")
     private Long durationSeconds;
 

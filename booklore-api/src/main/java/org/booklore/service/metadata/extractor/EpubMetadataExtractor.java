@@ -560,9 +560,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
         }
 
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            res.writeTo(baos);
-            return baos.toByteArray();
+            return res.getData();
         } catch (IOException e) {
             log.warn("Failed to read data for resource", e);
             return null;
@@ -581,7 +579,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
         String combined = basePath + href;
 
         // Normalize path components to handle ".." and "."
-        java.util.LinkedList<String> parts = new java.util.LinkedList<>();
+        LinkedList<String> parts = new LinkedList<>();
         for (String part : combined.split("/")) {
             if ("..".equals(part)) {
                 if (!parts.isEmpty()) parts.removeLast();

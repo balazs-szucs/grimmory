@@ -17,7 +17,10 @@ public enum Topic {
     LOG("/queue/log"),
     TASK_PROGRESS("/queue/task-progress"),
     LIBRARY_HEALTH("/topic/library-health"),
-    SESSION_REVOKED("/queue/session-revoked");
+    SESSION_REVOKED("/queue/session-revoked"),
+    SHELF_UPDATE("/queue/shelf-update"),
+    LIBRARY_UPDATE("/queue/library-update"),
+    SCAN_COMPLETE("/queue/scan-complete");
 
     private final String path;
 

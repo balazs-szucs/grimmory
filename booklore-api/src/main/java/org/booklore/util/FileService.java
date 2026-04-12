@@ -48,6 +48,7 @@ public class FileService {
     private final RestTemplate restTemplate;
     private final AppSettingService appSettingService;
     private final RestTemplate noRedirectRestTemplate;
+    private final VipsImageService vipsImageService;
 
     private static final int MAX_REDIRECTS = 5;
 
@@ -209,15 +210,11 @@ public class FileService {
     // ========================================
 
     public static BufferedImage readImage(InputStream inputStream) throws IOException {
-        return readImage(inputStream.readAllBytes());
-    }
-
-    public static BufferedImage readImage(byte[] imageData) throws IOException {
-        if (imageData == null || imageData.length == 0) {
-            throw new IOException("Image data is null or empty");
+        if (inputStream == null) {
+            throw new IOException("InputStream is null");
         }
 
-        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(imageData))) {
+        try (ImageInputStream iis = ImageIO.createImageInputStream(inputStream)) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
             if (readers.hasNext()) {
                 ImageReader reader = readers.next();
@@ -246,12 +243,24 @@ public class FileService {
         throw new IOException("Unable to decode image, likely unsupported format");
     }
 
+    public static BufferedImage readImage(byte[] imageData) throws IOException {
+        if (imageData == null || imageData.length == 0) {
+            throw new IOException("Image data is null or empty");
+        }
+        return readImage(new ByteArrayInputStream(imageData));
+    }
+
     public static BufferedImage resizeImage(BufferedImage originalImage, int width, int height) {
-        Image tmp = originalImage.getScaledInstance(width, height, Image.SCALE_SMOOTH);
         BufferedImage resizedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = resizedImage.createGraphics();
-        g2d.drawImage(tmp, 0, 0, null);
-        g2d.dispose();
+        try {
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.drawImage(originalImage, 0, 0, width, height, null);
+        } finally {
+            g2d.dispose();
+        }
         return resizedImage;
     }
 
@@ -723,6 +732,42 @@ public class FileService {
     }
 
     public boolean saveCoverImages(BufferedImage coverImage, long bookId) throws IOException {
+        String folderPath = getImagesFolder(bookId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        File coverFile = new File(folder, COVER_FILENAME);
+        File thumbnailFile = new File(folder, THUMBNAIL_FILENAME);
+
+        // Convert BufferedImage to byte array for libvips processing
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        ImageIO.write(coverImage, IMAGE_FORMAT, baos);
+        byte[] imageBytes = baos.toByteArray();
+
+        try {
+            Path tempInput = Files.createTempFile("vips-input", ".jpg");
+            Files.write(tempInput, imageBytes);
+
+            try {
+                // Save original (potentially downscaled)
+                vipsImageService.resizeImage(tempInput, coverFile.toPath(), MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+                
+                // Save thumbnail
+                vipsImageService.generateThumbnail(tempInput, thumbnailFile.toPath(), THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+                
+                return true;
+            } finally {
+                Files.deleteIfExists(tempInput);
+            }
+        } catch (Exception e) {
+            log.error("Vips cover saving failed for book {}, falling back to ImageIO: {}", bookId, e.getMessage());
+            return saveCoverImagesLegacy(coverImage, bookId);
+        }
+    }
+
+    private boolean saveCoverImagesLegacy(BufferedImage coverImage, long bookId) throws IOException {
         BufferedImage rgbImage = null;
         BufferedImage cropped = null;
         BufferedImage resized = null;

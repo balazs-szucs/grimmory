@@ -61,6 +61,16 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
                 ? FileFingerprint.generateFolderHash(path)
                 : FileFingerprint.generateHash(path);
         Book book = createAndMapBook(libraryFile, hash);
+        
+        // Find the book entity we just created to update file timestamps
+        bookRepository.findById(book.getId()).ifPresent(entity -> {
+            if (entity.getPrimaryBookFile() != null) {
+                entity.getPrimaryBookFile().setLastModified(libraryFile.getLastModified());
+                entity.getPrimaryBookFile().setLastScannedAt(java.time.Instant.now());
+                bookRepository.save(entity);
+            }
+        });
+        
         return new FileProcessResult(book, FileProcessStatus.NEW);
     }
 

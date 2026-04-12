@@ -135,6 +135,8 @@ public class BookGroupProcessor {
                 .initialHash(hash)
                 .currentHash(hash)
                 .addedOn(Instant.now())
+                .lastModified(file.getLastModified())
+                .lastScannedAt(Instant.now())
                 .build();
 
         try {

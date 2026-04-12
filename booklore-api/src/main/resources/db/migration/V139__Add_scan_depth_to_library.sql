@@ -1,0 +1,1 @@
+ALTER TABLE library ADD COLUMN scan_depth INTEGER DEFAULT 3;

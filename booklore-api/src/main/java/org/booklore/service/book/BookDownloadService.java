@@ -50,7 +50,7 @@ public class BookDownloadService {
     private final CbxConversionService cbxConversionService;
     private final AppSettingService appSettingService;
 
-    public ResponseEntity<Resource> downloadBook(Long bookId) {
+    public ResponseEntity<?> downloadBook(Long bookId) {
         try {
             BookEntity bookEntity = bookRepository.findByIdForStreaming(bookId)
                     .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
@@ -90,7 +90,7 @@ public class BookDownloadService {
         }
     }
 
-    public ResponseEntity<Resource> downloadBookFile(Long bookId, Long fileId) {
+    public ResponseEntity<?> downloadBookFile(Long bookId, Long fileId) {
         try {
             BookFileEntity bookFileEntity = bookFileRepository.findByIdWithBookAndLibraryPath(fileId)
                     .orElseThrow(() -> ApiError.FILE_NOT_FOUND.createException(fileId));
@@ -332,36 +332,32 @@ public class BookDownloadService {
         }
     }
 
-    private ResponseEntity<Resource> downloadFolderAsZip(Path folderPath, String folderName) throws IOException {
-        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+    private ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> downloadFolderAsZip(Path folderPath, String folderName) throws IOException {
+        String zipFileName = folderName + ".zip";
 
-        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-            // Get all files in the folder, sorted by name
-            try (var files = Files.list(folderPath)) {
-                for (Path audioFile : files
-                        .filter(Files::isRegularFile)
-                        .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                        .toList()) {
-                    ZipEntry entry = new ZipEntry(audioFile.getFileName().toString());
-                    zos.putNextEntry(entry);
-                    Files.copy(audioFile, zos);
-                    zos.closeEntry();
+        org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody body = out -> {
+            try (ZipOutputStream zos = new ZipOutputStream(out)) {
+                // Get all files in the folder, sorted by name
+                try (var files = Files.list(folderPath)) {
+                    for (Path audioFile : files
+                            .filter(Files::isRegularFile)
+                            .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                            .toList()) {
+                        ZipEntry entry = new ZipEntry(audioFile.getFileName().toString());
+                        zos.putNextEntry(entry);
+                        Files.copy(audioFile, zos);
+                        zos.closeEntry();
+                    }
                 }
             }
-        }
-
-        byte[] zipBytes = baos.toByteArray();
-        Resource resource = new org.springframework.core.io.ByteArrayResource(zipBytes);
-
-        String zipFileName = folderName + ".zip";
+        };
 
         return ResponseEntity.ok()
                 .contentType(MediaType.valueOf("application/zip"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, getContentDisposition(zipFileName))
-                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(zipBytes.length))
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                 .header(HttpHeaders.PRAGMA, "no-cache")
                 .header(HttpHeaders.EXPIRES, "0")
-                .body(resource);
+                .body(body);
     }
 }

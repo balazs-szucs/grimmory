@@ -22,6 +22,9 @@ import org.booklore.repository.BookRepository;
 import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserBookFileProgressRepository;
 import org.booklore.repository.UserBookProgressRepository;
+import org.booklore.mapper.BookMapper;
+import org.booklore.model.websocket.Topic;
+import org.booklore.service.NotificationService;
 import org.booklore.service.opds.MagicShelfBookService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -57,6 +60,8 @@ public class AppBookService {
     private final AppBookMapper mobileBookMapper;
     private final MagicShelfBookService magicShelfBookService;
     private final EntityManager entityManager;
+    private final NotificationService notificationService;
+    private final BookMapper bookMapper;
 
     private final Cache<String, AppFilterOptions> filterOptionsCache = Caffeine.newBuilder()
             .expireAfterWrite(java.time.Duration.ofSeconds(30))
@@ -70,7 +75,9 @@ public class AppBookService {
                           AuthenticationService authenticationService,
                           AppBookMapper mobileBookMapper,
                           MagicShelfBookService magicShelfBookService,
-                          EntityManager entityManager) {
+                          EntityManager entityManager,
+                          NotificationService notificationService,
+                          BookMapper bookMapper) {
         this.bookRepository = bookRepository;
         this.userBookProgressRepository = userBookProgressRepository;
         this.userBookFileProgressRepository = userBookFileProgressRepository;
@@ -79,6 +86,8 @@ public class AppBookService {
         this.mobileBookMapper = mobileBookMapper;
         this.magicShelfBookService = magicShelfBookService;
         this.entityManager = entityManager;
+        this.notificationService = notificationService;
+        this.bookMapper = bookMapper;
     }
 
     public AppPageResponse<AppBookSummary> getBooks(BookListRequest req) {
@@ -557,6 +566,8 @@ public class AppBookService {
         }
 
         userBookProgressRepository.save(progress);
+        bookRepository.findByIdWithMetadata(bookId)
+                .ifPresent(book -> notificationService.sendMessage(Topic.BOOK_UPDATE, bookMapper.toBook(book)));
     }
 
     @Transactional
@@ -565,6 +576,8 @@ public class AppBookService {
 
         progress.setPersonalRating(rating);
         userBookProgressRepository.save(progress);
+        bookRepository.findByIdWithMetadata(bookId)
+                .ifPresent(book -> notificationService.sendMessage(Topic.BOOK_UPDATE, bookMapper.toBook(book)));
     }
 
     private UserBookProgressEntity validateAccessAndGetProgress(Long bookId) {

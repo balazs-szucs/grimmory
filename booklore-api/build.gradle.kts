@@ -88,12 +88,16 @@ configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
     }
+    all {
+        exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
+    }
 }
 
 dependencies {
     // --- Spring Boot ---
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-undertow")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -101,6 +105,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+
+    // --- XML Support (JAXB) & Fast Parsing ---
+    implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
+    runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.7")
+    implementation("com.fasterxml.woodstox:woodstox-core:7.1.0")
 
     // --- Reactive Streams ---
     implementation("io.projectreactor:reactor-core")
@@ -160,7 +169,13 @@ dependencies {
     // --- MIME Detection ---
     implementation("org.apache.tika:tika-core:3.3.0")
 
-    // --- XML Support (JAXB) ---
+    // --- libvips (vips-ffm) ---
+    implementation("app.photofox.vips-ffm:vips-ffm-core:1.9.6")
+
+    // --- BlurHash ---
+    implementation("io.trbl:blurhash:1.0.0")
+
+    // --- XML Support (JAXB) & Fast Parsing ---
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
     runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.7")
 

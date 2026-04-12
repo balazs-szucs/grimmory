@@ -73,6 +73,9 @@ public class LibraryEntity {
     @Builder.Default
     private MetadataSource metadataSource = MetadataSource.EMBEDDED;
 
+    @Column(name = "scan_depth")
+    private Integer scanDepth;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

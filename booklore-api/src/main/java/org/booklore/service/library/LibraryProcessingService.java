@@ -64,6 +64,10 @@ public class LibraryProcessingService {
             fileAsBookProcessor.processLibraryFilesGrouped(groups, libraryEntity);
 
             notificationService.sendMessage(Topic.LOG, LogNotification.info("Finished processing library: " + libraryEntity.getName()));
+            notificationService.sendMessage(Topic.SCAN_COMPLETE, Map.of(
+                    "libraryId", libraryId,
+                    "newFiles", newFiles.size()
+            ));
         } catch (IOException e) {
             log.error("Failed to process library {}: {}", libraryEntity.getName(), e.getMessage(), e);
             notificationService.sendMessage(Topic.LOG, LogNotification.error("Failed to process library: " + libraryEntity.getName() + " - " + e.getMessage()));
@@ -126,10 +130,27 @@ public class LibraryProcessingService {
             }
         }
 
+        // Update lastScannedAt for files that were NOT re-processed (incremental scan skip)
+        // This ensures they aren't considered "stale" or missing in future logic
+        Instant now = Instant.now();
+        for (BookEntity book : books) {
+            if (book.getBookFiles() != null) {
+                for (BookFileEntity file : book.getBookFiles()) {
+                    file.setLastScannedAt(now);
+                }
+            }
+        }
+        bookRepository.saveAll(books);
+
         // Process new book groups
         fileAsBookProcessor.processLibraryFilesGrouped(groupingResult.newBookGroups(), libraryEntity);
 
         notificationService.sendMessage(Topic.LOG, LogNotification.info("Finished refreshing library: " + libraryEntity.getName()));
+        notificationService.sendMessage(Topic.SCAN_COMPLETE, Map.of(
+                "libraryId", libraryId,
+                "booksRemoved", bookIds.size(),
+                "newFiles", newFiles.size()
+        ));
     }
 
     public void processLibraryFiles(List<LibraryFile> libraryFiles, LibraryEntity libraryEntity) {
@@ -165,19 +186,33 @@ public class LibraryProcessingService {
     }
 
     protected List<LibraryFile> detectNewBookPaths(List<LibraryFile> libraryFiles, List<BookEntity> books, Long libraryId) {
-        Set<String> existingKeys = books.stream()
-                .filter(book -> book.getBookFiles() != null && !book.getBookFiles().isEmpty())
-                .map(this::generateUniqueKey)
-                .collect(Collectors.toSet());
+        Map<String, Instant> existingFileModifiedMap = new HashMap<>();
+        
+        books.stream()
+                .filter(book -> book.getBookFiles() != null)
+                .flatMap(book -> book.getBookFiles().stream())
+                .forEach(file -> {
+                    String key = generateUniqueKey(file);
+                    existingFileModifiedMap.put(key, file.getLastModified());
+                });
 
-        Set<String> additionalFileKeys = bookAdditionalFileRepository.findByLibraryId(libraryId).stream()
-                .map(this::generateUniqueKey)
-                .collect(Collectors.toSet());
-
-        existingKeys.addAll(additionalFileKeys);
+        bookAdditionalFileRepository.findByLibraryId(libraryId).stream()
+                .forEach(file -> {
+                    String key = generateUniqueKey(file);
+                    existingFileModifiedMap.put(key, file.getLastModified());
+                });
 
         return libraryFiles.stream()
-                .filter(file -> !existingKeys.contains(generateUniqueKey(file)))
+                .filter(file -> {
+                    String key = generateUniqueKey(file);
+                    if (!existingFileModifiedMap.containsKey(key)) {
+                        return true; // New file
+                    }
+                    
+                    Instant lastModified = existingFileModifiedMap.get(key);
+                    // If file mtime has changed (or we didn't have it before), it's "new" (needs re-processing)
+                    return lastModified == null || !lastModified.equals(file.getLastModified());
+                })
                 .collect(Collectors.toList());
     }
 
@@ -217,6 +252,8 @@ public class LibraryProcessingService {
                 .initialHash(hash)
                 .currentHash(hash)
                 .addedOn(Instant.now())
+                .lastModified(file.getLastModified())
+                .lastScannedAt(Instant.now())
                 .build();
 
         try {

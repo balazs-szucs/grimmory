@@ -62,6 +62,8 @@ public class BookMetadataUpdater {
     private final BookReviewUpdateService bookReviewUpdateService;
     private final FileMoveService fileMoveService;
     private final SidecarMetadataWriter sidecarMetadataWriter;
+    private final NotificationService notificationService;
+    private final BookMapper bookMapper;
 
     @Transactional
     public void setBookMetadata(MetadataUpdateContext context) {
@@ -89,6 +91,8 @@ public class BookMetadataUpdater {
         boolean hasValueChanges = MetadataChangeDetector.hasValueChanges(newMetadata, metadata, clearFlags);
         if (!thumbnailRequiresUpdate && !hasMetadataChanges) {
             log.info("No changes in metadata for book ID {}. Skipping update.", bookId);
+            // Even if no DB changes, send notification just in case to refresh UI state
+            notificationService.sendMessage(Topic.BOOK_METADATA_UPDATE, bookMapper.toBook(bookEntity));
             return;
         }
 
@@ -97,6 +101,10 @@ public class BookMetadataUpdater {
             log.warn("All fields are locked for book ID {}. Skipping update.", bookId);
             return;
         }
+
+        // ... existing logic to update metadata ...
+        // I will need to find the end of the method to add the final notification
+    }
 
         MetadataPersistenceSettings settings = appSettingService.getAppSettings().getMetadataPersistenceSettings();
         MetadataPersistenceSettings.SaveToOriginalFile writeToFile = settings.getSaveToOriginalFile();
@@ -172,6 +180,8 @@ public class BookMetadataUpdater {
                 log.warn("Failed to move files for book ID {} after metadata update: {}", bookId, e.getMessage());
             }
         }
+
+        notificationService.sendMessage(Topic.BOOK_METADATA_UPDATE, bookMapper.toBook(bookEntity));
     }
 
     private void updateBasicFields(BookMetadata m, BookMetadataEntity e, MetadataClearFlags clear, MetadataReplaceMode replaceMode) {

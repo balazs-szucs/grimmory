@@ -23,6 +23,7 @@ public class LibraryFile {
     private BookFileType bookFileType;
     @Builder.Default
     private boolean folderBased = false;
+    private java.time.Instant lastModified;
 
     public Path getFullPath() {
         if (fileSubPath == null || fileSubPath.isEmpty()) {

@@ -81,7 +81,7 @@ public class AdditionalFileController {
     )
     @GetMapping("/{fileId}/download")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> downloadAdditionalFile(
+    public ResponseEntity<?> downloadAdditionalFile(
             @PathVariable Long bookId,
             @PathVariable Long fileId) throws IOException {
         return additionalFileService.downloadAdditionalFile(bookId, fileId);

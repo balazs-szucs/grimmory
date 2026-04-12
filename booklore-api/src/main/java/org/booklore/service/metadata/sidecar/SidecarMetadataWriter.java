@@ -68,15 +68,18 @@ public class SidecarMetadataWriter {
             String coverFileName = null;
             if (settings.isIncludeCoverFile()) {
                 coverFileName = mapper.getCoverFileName(bookPath);
-                writeCoverFile(book, bookPath.getParent().resolve(coverFileName));
+                writeCoverFile(book, bookPath.getParent().resolve(coverFileName), settings.isOverwrite());
             }
 
-            SidecarMetadata sidecarMetadata = mapper.toSidecarMetadata(metadata, coverFileName);
-            String json = objectMapper.writeValueAsString(sidecarMetadata);
-            json = json.replace(" : ", ": ").replace("[ ]", "[]");
-            Files.writeString(sidecarPath, json);
-
-            log.info("Wrote sidecar metadata to: {}", sidecarPath);
+            if (Files.exists(sidecarPath) && !settings.isOverwrite()) {
+                log.debug("Sidecar file already exists and overwrite is disabled: {}", sidecarPath);
+            } else {
+                SidecarMetadata sidecarMetadata = mapper.toSidecarMetadata(metadata, coverFileName);
+                String json = objectMapper.writeValueAsString(sidecarMetadata);
+                json = json.replace(" : ", ": ").replace("[ ]", "[]");
+                Files.writeString(sidecarPath, json);
+                log.info("Wrote sidecar metadata to: {}", sidecarPath);
+            }
         } catch (IOException e) {
             log.error("Failed to write sidecar metadata for book ID {}: {}", book.getId(), e.getMessage());
         }
@@ -143,8 +146,12 @@ public class SidecarMetadataWriter {
         return bookPath.getParent().resolve(baseName + ".cover.jpg");
     }
 
-    private void writeCoverFile(BookEntity book, Path coverPath) {
+    private void writeCoverFile(BookEntity book, Path coverPath, boolean overwrite) {
         try {
+            if (Files.exists(coverPath) && !overwrite) {
+                log.debug("Sidecar cover file already exists and overwrite is disabled: {}", coverPath);
+                return;
+            }
             String coverFile = fileService.getCoverFile(book.getId());
             Path sourceCoverPath = Path.of(coverFile);
             if (Files.exists(sourceCoverPath)) {

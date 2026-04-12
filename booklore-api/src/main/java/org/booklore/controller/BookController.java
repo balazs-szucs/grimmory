@@ -188,7 +188,7 @@ public class BookController {
     @GetMapping("/{bookId}/download")
     @PreAuthorize("@securityUtil.canDownload() or @securityUtil.isAdmin()")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> downloadBook(@Parameter(description = "ID of the book to download") @PathVariable("bookId") Long bookId) {
+    public ResponseEntity<?> downloadBook(@Parameter(description = "ID of the book to download") @PathVariable("bookId") Long bookId) {
         return bookService.downloadBook(bookId);
     }
 
