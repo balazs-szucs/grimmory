@@ -27,10 +27,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -49,7 +52,7 @@ public class BookDownloadService {
 
     public ResponseEntity<Resource> downloadBook(Long bookId) {
         try {
-            BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
+            BookEntity bookEntity = bookRepository.findByIdForStreaming(bookId)
                     .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
             BookFileEntity primaryFile = bookEntity.getPrimaryBookFile();
@@ -145,7 +148,7 @@ public class BookDownloadService {
     }
 
     public void downloadAllBookFiles(Long bookId, HttpServletResponse response) {
-        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
+        BookEntity bookEntity = bookRepository.findByIdForStreaming(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
         List<BookFileEntity> allFiles = bookEntity.getBookFiles();
@@ -240,7 +243,7 @@ public class BookDownloadService {
     }
 
     public void downloadKoboBook(Long bookId, HttpServletResponse response) {
-        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        BookEntity bookEntity = bookRepository.findByIdForStreaming(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
         var primaryFile = bookEntity.getPrimaryBookFile();
         if (primaryFile == null) {
@@ -302,8 +305,16 @@ public class BookDownloadService {
     }
 
     private void streamFileToResponse(File file, HttpServletResponse response) {
-        try (InputStream in = Files.newInputStream(file.toPath())) {
-            in.transferTo(response.getOutputStream());
+        try (var source = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
+            var destination = Channels.newChannel(response.getOutputStream());
+            long remaining = source.size();
+            long position = 0;
+            while (remaining > 0) {
+                long transferred = source.transferTo(position, remaining, destination);
+                if (transferred <= 0) break;
+                position += transferred;
+                remaining -= transferred;
+            }
             response.getOutputStream().flush();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to stream file to response", e);
