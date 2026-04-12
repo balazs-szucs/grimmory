@@ -410,6 +410,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
     this.t
   );
   private readonly syncBrowserStateEffect = effect(() => {
+    this.activeLang();
     const entityType = this.entityType();
     const entity = this.entity();
 
@@ -572,7 +573,7 @@ export class BookBrowserComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   readonly showBooksLoadingPlaceholder = computed(() =>
-    !this.booksError() && (this.isBooksLoading() || !this.hasRenderedBooks())
+    !this.booksError() && !this.hasRenderedBooks()
   );
 
   readonly showTableLoadingPlaceholder = computed(() =>
