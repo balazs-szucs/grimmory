@@ -99,6 +99,10 @@ export class BookService {
     });
   }
 
+  reloadBooks(): void {
+    void this.queryClient.invalidateQueries({queryKey: BOOKS_QUERY_KEY, exact: true});
+  }
+
   private getBooksQueryOptions() {
     return queryOptions({
       queryKey: BOOKS_QUERY_KEY,

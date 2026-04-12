@@ -15,6 +15,7 @@ import {BookdropFileNotification, BookdropFileService} from './features/bookdrop
 import {Subscription} from 'rxjs';
 import {TaskProgressPayload, TaskService} from './features/settings/task-management/task.service';
 import {LibraryService} from './features/book/service/library.service';
+import {ShelfService} from './features/book/service/shelf.service';
 import {LibraryHealthService} from './features/book/service/library-health.service';
 import {LibraryLoadingService} from './features/library-creator/library-loading.service';
 import {scan} from 'rxjs/operators';
@@ -43,6 +44,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private bookdropFileService = inject(BookdropFileService);
   private taskService = inject(TaskService);
   private libraryService = inject(LibraryService);
+  private shelfService = inject(ShelfService);
   private libraryHealthService = inject(LibraryHealthService);
   private libraryLoadingService = inject(LibraryLoadingService);
   private authService = inject(AuthService);
@@ -159,6 +161,22 @@ export class AppComponent implements OnInit, OnDestroy {
         const progress = JSON.parse(msg.body) as TaskProgressPayload;
         this.taskService.handleTaskProgress(progress);
       })
+    );
+    this.subscriptions.push(
+      this.rxStompService.watch('/user/queue/shelf-update').subscribe(() =>
+        this.shelfService.reloadShelves()
+      )
+    );
+    this.subscriptions.push(
+      this.rxStompService.watch('/user/queue/library-update').subscribe(() => {
+        this.libraryService.reloadLibraries();
+        this.bookService.reloadBooks();
+      })
+    );
+    this.subscriptions.push(
+      this.rxStompService.watch('/user/queue/scan-complete').subscribe(() =>
+        this.bookService.reloadBooks()
+      )
     );
     this.subscriptions.push(
       this.rxStompService.watch('/user/queue/session-revoked').subscribe(() => {

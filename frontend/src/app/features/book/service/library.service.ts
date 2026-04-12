@@ -69,6 +69,10 @@ export class LibraryService {
     });
   }
 
+  reloadLibraries(): void {
+    void this.queryClient.invalidateQueries({queryKey: LIBRARIES_QUERY_KEY, exact: true});
+  }
+
   scanLibraryPaths(lib: Library): Observable<number> {
     return this.http.post<number>(`${this.url}/scan`, lib);
   }

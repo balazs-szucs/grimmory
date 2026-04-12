@@ -81,7 +81,7 @@ ENV JAVA_TOOL_OPTIONS="-XX:+UseShenandoahGC \
     -XX:ShenandoahGuaranteedGCInterval=30000 \
     -XX:MaxDirectMemorySize=256m"
 
-RUN apk add --no-cache su-exec libstdc++ libgcc libarchive && \
+RUN apk add --no-cache su-exec libstdc++ libgcc libarchive vips-dev && \
     mkdir -p /bookdrop
 
 # Manually link `libarchive.so.13` so java and other libraries can see it

@@ -35,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Optional;
 import org.booklore.model.enums.AuditAction;
@@ -400,7 +401,7 @@ public class FileUploadService {
 
         // If the metadata title is the same as the temporary file's base name (which happens
         // when CBX files have no embedded metadata), use the original filename as the title instead
-        String tempFileBaseName = java.nio.file.Paths.get(file.getName()).getFileName().toString();
+        String tempFileBaseName = Paths.get(file.getName()).getFileName().toString();
         int lastDotIndex = tempFileBaseName.lastIndexOf('.');
         if (lastDotIndex > 0) {
             tempFileBaseName = tempFileBaseName.substring(0, lastDotIndex);

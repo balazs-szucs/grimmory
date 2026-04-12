@@ -66,7 +66,11 @@ class FileServiceTest {
 
         RestTemplate mockRestTemplate = mock(RestTemplate.class);
         RestTemplate mockNoRedirectRestTemplate = mock(RestTemplate.class);
-        fileService = new FileService(appProperties, mockRestTemplate, appSettingService, mockNoRedirectRestTemplate);
+        VipsImageService mockVips = mock(VipsImageService.class);
+        try {
+            lenient().doThrow(new RuntimeException("vips not available in test")).when(mockVips).resizeImage(any(), any(), anyInt(), anyInt());
+        } catch (Exception ignored) {}
+        fileService = new FileService(appProperties, mockRestTemplate, appSettingService, mockNoRedirectRestTemplate, mockVips);
     }
 
     @Nested
@@ -1203,7 +1207,11 @@ class FileServiceTest {
                     .build();
             lenient().when(appSettingServiceForNetwork.getAppSettings()).thenReturn(appSettings);
 
-            fileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork, restTemplate);
+            VipsImageService networkMockVips = mock(VipsImageService.class);
+            try {
+                lenient().doThrow(new RuntimeException("vips not available in test")).when(networkMockVips).resizeImage(any(), any(), anyInt(), anyInt());
+            } catch (Exception ignored) {}
+            fileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork, restTemplate, networkMockVips);
         }
 
         @Nested
@@ -1220,7 +1228,7 @@ class FileServiceTest {
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
                 AppSettingService mockAppSettingService = mock(AppSettingService.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, mockAppSettingService, mockRestTemplate);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, mockAppSettingService, mockRestTemplate, mock(VipsImageService.class));
 
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(imageBytes);
                 when(mockRestTemplate.exchange(
@@ -1300,7 +1308,7 @@ class FileServiceTest {
                 byte[] imageBytes = imageToBytes(testImage);
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate, mock(VipsImageService.class));
 
                 ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302)
                         .header("Location", cdnIpRedirect).build();
@@ -1328,7 +1336,7 @@ class FileServiceTest {
                 byte[] imageBytes = imageToBytes(testImage);
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate, mock(VipsImageService.class));
 
                 ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302)
                         .header("Location", cdnIpRedirect).build();
@@ -1354,7 +1362,7 @@ class FileServiceTest {
                 byte[] imageBytes = imageToBytes(testImage);
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate, mock(VipsImageService.class));
 
                 ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(301)
                         .header("Location", hostnameRedirect).build();
@@ -1381,7 +1389,7 @@ class FileServiceTest {
                 byte[] imageBytes = imageToBytes(testImage);
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate, mock(VipsImageService.class));
 
                 ResponseEntity<byte[]> redirect1 = ResponseEntity.status(301)
                         .header("Location", hostnameRedirect).build();
@@ -1408,7 +1416,7 @@ class FileServiceTest {
                 String imageUrl = "http://1.1.1.1/cover.jpg";
 
                 RestTemplate mockRestTemplate = mock(RestTemplate.class);
-                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate);
+                FileService testFileService = new FileService(appProperties, mockRestTemplate, appSettingServiceForNetwork, mockRestTemplate, mock(VipsImageService.class));
 
                 ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302)
                         .header("Location", "http://2.2.2.2/cover.jpg")

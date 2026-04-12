@@ -14,6 +14,7 @@ import { MetadataProgressService } from "./shared/service/metadata-progress.serv
 import { BookdropFileService } from "./features/bookdrop/service/bookdrop-file.service";
 import { TaskService } from "./features/settings/task-management/task.service";
 import { LibraryService } from "./features/book/service/library.service";
+import { ShelfService } from "./features/book/service/shelf.service";
 import { LibraryHealthService } from "./features/book/service/library-health.service";
 import { LibraryLoadingService } from "./features/library-creator/library-loading.service";
 import { AuthService } from "./shared/service/auth.service";
@@ -35,6 +36,7 @@ describe("AppComponent", () => {
     handleMultipleBookCoverPatches: ReturnType<typeof vi.fn>;
     handleRemovedBookIds: ReturnType<typeof vi.fn>;
     handleMultipleBookUpdates: ReturnType<typeof vi.fn>;
+    reloadBooks: ReturnType<typeof vi.fn>;
   };
   let notificationEventService: {
     handleNewNotification: ReturnType<typeof vi.fn>;
@@ -53,7 +55,9 @@ describe("AppComponent", () => {
   let libraryService: {
     largeLibraryLoading: ReturnType<typeof signal>;
     setLargeLibraryLoading: ReturnType<typeof vi.fn>;
+    reloadLibraries: ReturnType<typeof vi.fn>;
   };
+  let shelfService: { reloadShelves: ReturnType<typeof vi.fn> };
 
   function createTopicStream(topic: string): Subject<StompMessage> {
     const stream = new Subject<StompMessage>();
@@ -77,6 +81,7 @@ describe("AppComponent", () => {
       handleMultipleBookCoverPatches: vi.fn(),
       handleRemovedBookIds: vi.fn(),
       handleMultipleBookUpdates: vi.fn(),
+      reloadBooks: vi.fn(),
     };
     notificationEventService = { handleNewNotification: vi.fn() };
     metadataProgressService = { handleIncomingProgress: vi.fn() };
@@ -91,7 +96,9 @@ describe("AppComponent", () => {
     libraryService = {
       largeLibraryLoading: signal(largeLibraryLoading),
       setLargeLibraryLoading: vi.fn(),
+      reloadLibraries: vi.fn(),
     };
+    shelfService = { reloadShelves: vi.fn() };
 
     TestBed.configureTestingModule({
       imports: [TranslocoTestingModule.forRoot({ langs: {} })],
@@ -111,6 +118,7 @@ describe("AppComponent", () => {
         { provide: BookdropFileService, useValue: bookdropFileService },
         { provide: TaskService, useValue: taskService },
         { provide: LibraryService, useValue: libraryService },
+        { provide: ShelfService, useValue: shelfService },
         { provide: LibraryHealthService, useValue: libraryHealthService },
         { provide: LibraryLoadingService, useValue: libraryLoadingService },
         { provide: AuthService, useValue: authService },
