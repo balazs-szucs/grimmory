@@ -143,14 +143,18 @@ public class GoodReadsParser implements BookParser, DetailedMetadataProvider {
             try {
                 String isbn = ParserUtils.cleanIsbn(fetchMetadataRequest.getIsbn());
                 if (isbn != null && !isbn.isBlank()) {
-                    log.info("Goodreads Query URL (ISBN): {}{}", BASE_ISBN_URL, isbn);
-                    Document doc = fetchDoc(BASE_ISBN_URL + isbn);
-                    String goodreadsId = extractGoodreadsIdFromOgUrl(doc);
-                    if (goodreadsId != null) {
-                        BookMetadata metadata = parseBookDetails(doc, goodreadsId);
-                        if (metadata != null) {
-                            sink.next(metadata);
+                    try {
+                        log.info("Goodreads Query URL (ISBN): {}{}", BASE_ISBN_URL, isbn);
+                        Document doc = fetchDoc(BASE_ISBN_URL + isbn);
+                        String goodreadsId = extractGoodreadsIdFromOgUrl(doc);
+                        if (goodreadsId != null) {
+                            BookMetadata metadata = parseBookDetails(doc, goodreadsId);
+                            if (metadata != null) {
+                                sink.next(metadata);
+                            }
                         }
+                    } catch (Exception e) {
+                        log.warn("GoodReads: ISBN lookup failed: {}, falling back to title search", e.getMessage());
                     }
                 }
 

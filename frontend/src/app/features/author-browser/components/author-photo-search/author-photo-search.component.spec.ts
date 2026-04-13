@@ -3,7 +3,6 @@ import {of, throwError} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {TranslocoService} from '@jsverse/transloco';
-import type {AuthorPhotoResult} from '../../model/author.model';
 import {AuthorService} from '../../service/author.service';
 import {AuthorPhotoSearchComponent} from './author-photo-search.component';
 import {

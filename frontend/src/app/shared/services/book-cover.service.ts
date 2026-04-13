@@ -62,6 +62,23 @@ export class BookCoverService {
 
           const decoder = new TextDecoder();
           let buffer = '';
+          const emitLine = (line: string) => {
+            if (!line.startsWith('data:')) {
+              return;
+            }
+
+            const data = line.slice(5).trim();
+            if (!data) {
+              return;
+            }
+
+            try {
+              const image = JSON.parse(data) as CoverImage;
+              subscriber.next(image);
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          };
 
           try {
             while (true) {
@@ -73,18 +90,11 @@ export class BookCoverService {
               buffer = lines.pop() || '';
 
               for (const line of lines) {
-                if (line.startsWith('data:')) {
-                  const data = line.slice(5).trim();
-                  if (data) {
-                    try {
-                      const image = JSON.parse(data) as CoverImage;
-                      subscriber.next(image);
-                    } catch (e) {
-                      console.error('Error parsing SSE data:', e);
-                    }
-                  }
-                }
+                emitLine(line);
               }
+            }
+            if (buffer) {
+              emitLine(buffer);
             }
             subscriber.complete();
           } catch (error) {
