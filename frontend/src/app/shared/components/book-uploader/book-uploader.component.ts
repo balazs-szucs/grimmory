@@ -1,4 +1,4 @@
-import {Component, inject, ViewChild, effect} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, ViewChild, effect} from '@angular/core';
 import {FileSelectEvent, FileUpload, FileUploadHandlerEvent} from 'primeng/fileupload';
 import {Button} from 'primeng/button';
 import {FormsModule} from '@angular/forms';
@@ -41,7 +41,8 @@ type FileRemoveCallback = (event: Event, index: number) => void;
     TranslocoDirective
   ],
   templateUrl: './book-uploader.component.html',
-  styleUrl: './book-uploader.component.scss'
+  styleUrl: './book-uploader.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BookUploaderComponent {
   @ViewChild(FileUpload) fileUpload!: FileUpload;
@@ -52,6 +53,7 @@ export class BookUploaderComponent {
   _selectedLibrary: Library | null = null;
   selectedPath: LibraryPath | null = null;
 
+  private readonly cdr = inject(ChangeDetectorRef);
   private readonly libraryService = inject(LibraryService);
   private readonly messageService = inject(MessageService);
   private readonly appSettingsService = inject(AppSettingsService);
@@ -233,9 +235,11 @@ export class BookUploaderComponent {
         next: (event) => {
           if (event.type === HttpEventType.UploadProgress && event.total) {
             uploadFile.progress = Math.round((event.loaded / event.total) * 100);
+            this.cdr.markForCheck();
           } else if (event.type === HttpEventType.Response) {
             uploadFile.status = 'Uploaded';
             uploadFile.progress = 100;
+            this.cdr.markForCheck();
             if (--pending === 0) {
               setTimeout(() => {
                 this.uploadBatch(files, startIndex + batchSize, batchSize, destination, libraryId, pathId);
@@ -247,6 +251,7 @@ export class BookUploaderComponent {
           uploadFile.status = 'Failed';
           uploadFile.progress = 0;
           uploadFile.errorMessage = err?.error?.message || this.t.translate('shared.bookUploader.toast.uploadFailedDefault');
+          this.cdr.markForCheck();
           if (--pending === 0) {
             setTimeout(() => {
               this.uploadBatch(files, startIndex + batchSize, batchSize, destination, libraryId, pathId);

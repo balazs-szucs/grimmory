@@ -1,4 +1,4 @@
-import { Component, DestroyRef, effect, inject, OnDestroy, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, effect, inject, OnDestroy, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { LayoutService } from '../layout.service';
 import { Router, RouterLink } from '@angular/router';
@@ -45,6 +45,7 @@ import type { MenuItem } from 'primeng/api';
     Menu,
     TranslocoDirective,
   ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppTopBarComponent implements OnDestroy {
   public readonly layoutService = inject(LayoutService);
@@ -69,6 +70,7 @@ export class AppTopBarComponent implements OnDestroy {
   hasPendingBookdropFiles = false;
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly cdr = inject(ChangeDetectorRef);
   private eventTimer: number | undefined;
 
   private latestTasks: Record<string, MetadataBatchProgressNotification> = {};
@@ -93,6 +95,7 @@ export class AppTopBarComponent implements OnDestroy {
         this.hasAnyTasks = Object.keys(tasks).length > 0;
         this.updateCompletedTaskCount();
         this.updateTaskVisibility(tasks);
+        this.cdr.markForCheck();
       });
 
     this.bookdropFileService.hasPendingFiles$
@@ -102,6 +105,7 @@ export class AppTopBarComponent implements OnDestroy {
         this.hasPendingBookdropFiles = hasPending;
         this.updateCompletedTaskCount();
         this.updateTaskVisibilityWithBookdrop();
+        this.cdr.markForCheck();
       });
 
     effect(() => {
@@ -186,6 +190,7 @@ export class AppTopBarComponent implements OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((progress) => {
         this.progressHighlight = progress.status === 'IN_PROGRESS';
+        this.cdr.markForCheck();
       });
   }
 
@@ -195,6 +200,7 @@ export class AppTopBarComponent implements OnDestroy {
       .subscribe((notification: LogNotification) => {
         this.latestNotificationSeverity = notification.severity;
         this.triggerPulseEffect();
+        this.cdr.markForCheck();
       });
   }
 
@@ -203,6 +209,7 @@ export class AppTopBarComponent implements OnDestroy {
     clearTimeout(this.eventTimer);
     this.eventTimer = setTimeout(() => {
       this.showPulse = false;
+      this.cdr.markForCheck();
     }, 4000) as unknown as number;
   }
 

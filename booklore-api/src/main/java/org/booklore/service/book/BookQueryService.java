@@ -1,6 +1,7 @@
 package org.booklore.service.book;
 
 import lombok.RequiredArgsConstructor;
+import org.booklore.context.KomgaCleanContext;
 import org.booklore.mapper.v2.BookMapperV2;
 import org.booklore.model.dto.Book;
 import org.booklore.model.dto.BookMetadata;
@@ -9,13 +10,13 @@ import org.booklore.model.dto.ComicMetadata;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.restriction.ContentRestrictionService;
-import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -54,14 +55,7 @@ public class BookQueryService {
     }
 
     public List<BookEntity> getAllFullBookEntitiesBatch(Pageable pageable) {
-        List<BookEntity> books = bookRepository.findAllFullBooksBatch(pageable);
-        for (BookEntity book : books) {
-            if (book.getMetadata() != null) {
-                Hibernate.initialize(book.getMetadata().getAuthors());
-                Hibernate.initialize(book.getMetadata().getCategories());
-            }
-        }
-        return books;
+        return bookRepository.findAllFullBooksBatch(pageable);
     }
 
     public long countAllNonDeleted() {
@@ -93,7 +87,7 @@ public class BookQueryService {
             if (embeddingJson != null && book.getMetadata() != null) {
                 if (!Objects.equals(book.getMetadata().getEmbeddingVector(), embeddingJson)) {
                     book.getMetadata().setEmbeddingVector(embeddingJson);
-                    book.getMetadata().setEmbeddingUpdatedAt(java.time.Instant.now());
+                    book.getMetadata().setEmbeddingUpdatedAt(Instant.now());
                 }
             }
         }
@@ -118,7 +112,7 @@ public class BookQueryService {
     private List<Book> mapBooksToDto(List<BookEntity> books, boolean includeDescription, Long userId, boolean stripForListView) {
         return books.stream()
                 .map(book -> mapBookToDto(book, includeDescription, userId, stripForListView))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private Book mapBookToDto(BookEntity bookEntity, boolean includeDescription, Long userId, boolean stripForListView) {
@@ -146,58 +140,13 @@ public class BookQueryService {
 
         BookMetadata m = dto.getMetadata();
         if (m != null) {
-            // Compute allMetadataLocked before stripping lock flags
+            // Compute allMetadataLocked before potential stripping (though clean mode handles it now)
             m.setAllMetadataLocked(computeAllMetadataLocked(m));
+            
+            // Enable clean mode for this thread's serialization
+            KomgaCleanContext.setCleanMode(true);
 
-            // Strip lock flags
-            m.setTitleLocked(null);
-            m.setSubtitleLocked(null);
-            m.setPublisherLocked(null);
-            m.setPublishedDateLocked(null);
-            m.setDescriptionLocked(null);
-            m.setSeriesNameLocked(null);
-            m.setSeriesNumberLocked(null);
-            m.setSeriesTotalLocked(null);
-            m.setIsbn13Locked(null);
-            m.setIsbn10Locked(null);
-            m.setAsinLocked(null);
-            m.setGoodreadsIdLocked(null);
-            m.setComicvineIdLocked(null);
-            m.setHardcoverIdLocked(null);
-            m.setHardcoverBookIdLocked(null);
-            m.setDoubanIdLocked(null);
-            m.setGoogleIdLocked(null);
-            m.setPageCountLocked(null);
-            m.setLanguageLocked(null);
-            m.setAmazonRatingLocked(null);
-            m.setAmazonReviewCountLocked(null);
-            m.setGoodreadsRatingLocked(null);
-            m.setGoodreadsReviewCountLocked(null);
-            m.setHardcoverRatingLocked(null);
-            m.setHardcoverReviewCountLocked(null);
-            m.setDoubanRatingLocked(null);
-            m.setDoubanReviewCountLocked(null);
-            m.setLubimyczytacIdLocked(null);
-            m.setLubimyczytacRatingLocked(null);
-            m.setRanobedbIdLocked(null);
-            m.setRanobedbRatingLocked(null);
-            m.setAudibleIdLocked(null);
-            m.setAudibleRatingLocked(null);
-            m.setAudibleReviewCountLocked(null);
-            m.setExternalUrlLocked(null);
-            m.setCoverLocked(null);
-            m.setAudiobookCoverLocked(null);
-            m.setAuthorsLocked(null);
-            m.setCategoriesLocked(null);
-            m.setMoodsLocked(null);
-            m.setTagsLocked(null);
-            m.setReviewsLocked(null);
-            m.setNarratorLocked(null);
-            m.setAbridgedLocked(null);
-            m.setAgeRatingLocked(null);
-            m.setContentRatingLocked(null);
-
-            // Strip external IDs
+            // Strip external IDs that aren't needed in list view
             m.setAsin(null);
             m.setGoodreadsId(null);
             m.setComicvineId(null);
@@ -221,49 +170,8 @@ public class BookQueryService {
             }
             m.setBookReviews(null);
 
-            // Strip unused ratings
-            m.setDoubanRating(null);
-            m.setDoubanReviewCount(null);
-            m.setAudibleRating(null);
-            m.setAudibleReviewCount(null);
-            m.setLubimyczytacRating(null);
-
-            // Strip empty metadata collections
-            if (m.getMoods() != null && m.getMoods().isEmpty()) m.setMoods(null);
-            if (m.getTags() != null && m.getTags().isEmpty()) m.setTags(null);
-            if (m.getAuthors() != null && m.getAuthors().isEmpty()) m.setAuthors(null);
-            if (m.getCategories() != null && m.getCategories().isEmpty()) m.setCategories(null);
-
-            // Strip ComicMetadata fields
             ComicMetadata cm = m.getComicMetadata();
             if (cm != null) {
-                // Strip comic lock flags
-                cm.setIssueNumberLocked(null);
-                cm.setVolumeNameLocked(null);
-                cm.setVolumeNumberLocked(null);
-                cm.setStoryArcLocked(null);
-                cm.setStoryArcNumberLocked(null);
-                cm.setAlternateSeriesLocked(null);
-                cm.setAlternateIssueLocked(null);
-                cm.setImprintLocked(null);
-                cm.setFormatLocked(null);
-                cm.setBlackAndWhiteLocked(null);
-                cm.setMangaLocked(null);
-                cm.setReadingDirectionLocked(null);
-                cm.setWebLinkLocked(null);
-                cm.setNotesLocked(null);
-                cm.setCreatorsLocked(null);
-                cm.setPencillersLocked(null);
-                cm.setInkersLocked(null);
-                cm.setColoristsLocked(null);
-                cm.setLetterersLocked(null);
-                cm.setCoverArtistsLocked(null);
-                cm.setEditorsLocked(null);
-                cm.setCharactersLocked(null);
-                cm.setTeamsLocked(null);
-                cm.setLocationsLocked(null);
-
-                // Strip non-filter detail fields
                 cm.setIssueNumber(null);
                 cm.setVolumeName(null);
                 cm.setVolumeNumber(null);
