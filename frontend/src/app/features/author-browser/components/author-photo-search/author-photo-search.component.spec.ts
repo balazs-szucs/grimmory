@@ -51,11 +51,11 @@ describe('AuthorPhotoSearchComponent', () => {
   });
 
   it('hydrates the initial author query, performs the bootstrap search, and sorts the returned photos', () => {
-    searchAuthorPhotos.mockReturnValue(of<AuthorPhotoResult[]>([
+    searchAuthorPhotos.mockReturnValue(of(
       {index: 3, url: 'three', width: 300, height: 400},
       {index: 1, url: 'one', width: 100, height: 200},
       {index: 2, url: 'two', width: 200, height: 300},
-    ]));
+    ));
 
     const component = TestBed.runInInjectionContext(() => new AuthorPhotoSearchComponent());
     component.ngOnInit();

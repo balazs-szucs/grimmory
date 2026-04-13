@@ -145,9 +145,14 @@ public class BookCoverController {
 
     @Operation(summary = "Get cover images for a book", description = "Fetch cover images for a book.")
     @ApiResponse(responseCode = "200", description = "Cover images returned successfully")
-    @PostMapping("/{bookId}/metadata/covers")
+    @PostMapping(value = "/{bookId}/metadata/covers", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("@securityUtil.canEditMetadata() or @securityUtil.isAdmin()")
-    public ResponseEntity<List<CoverImage>> getImages(@Parameter(description = "Cover fetch request") @RequestBody CoverFetchRequest request) {
-        return ResponseEntity.ok(duckDuckGoCoverService.getCovers(request));
+    public reactor.core.publisher.Flux<org.springframework.http.codec.ServerSentEvent<CoverImage>> getImages(@Parameter(description = "Cover fetch request") @RequestBody CoverFetchRequest request) {
+        return duckDuckGoCoverService.getCovers(request)
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .map(image -> org.springframework.http.codec.ServerSentEvent.<CoverImage>builder()
+                        .data(image)
+                        .build())
+                .onErrorResume(e -> reactor.core.publisher.Flux.empty());
     }
 }

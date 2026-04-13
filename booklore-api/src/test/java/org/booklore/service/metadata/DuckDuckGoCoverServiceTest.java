@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import reactor.core.publisher.Flux;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -350,7 +352,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test Book").author("Author").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).isEmpty();
             }
@@ -386,7 +388,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test Book").author("Author").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).isNotEmpty();
                 assertThat(result).allSatisfy(img -> assertThat(img.getIndex()).isGreaterThan(0));
@@ -421,7 +423,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Audiobook Title").coverType("audiobook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).allSatisfy(img ->
                         assertThat((double) img.getWidth() / img.getHeight()).isBetween(0.85, 1.15));
@@ -458,7 +460,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test Book").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).allSatisfy(img -> {
                     assertThat(img.getWidth()).isGreaterThanOrEqualTo(350);
@@ -508,7 +510,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test Book").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 long sharedUrlCount = result.stream()
                         .filter(img -> img.getUrl().equals("https://amazon.com/shared.jpg"))
@@ -528,7 +530,7 @@ class DuckDuckGoCoverServiceTest {
                 Connection.Response htmlResp = buildHtmlResponse("<html>no token</html>", Map.of());
                 when(connection.execute()).thenReturn(htmlResp);
 
-                List<CoverImage> result = service.searchImages("test query");
+                List<CoverImage> result = service.searchImages("test query").collectList().block();
 
                 assertThat(result).isEmpty();
             }
@@ -555,7 +557,7 @@ class DuckDuckGoCoverServiceTest {
                 when(rootNode.path("results")).thenReturn(resultsNode);
                 when(mapper.readTree(jsonBody)).thenReturn(rootNode);
 
-                List<CoverImage> result = service.searchImages("test query");
+                List<CoverImage> result = service.searchImages("test query").collectList().block();
 
                 assertThat(result).hasSize(2);
                 assertThat(result.get(0).getIndex()).isEqualTo(1);
@@ -576,7 +578,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test").coverType("ebook").build();
 
-                assertThatThrownBy(() -> service.getCovers(request))
+                assertThatThrownBy(() -> service.getCovers(request).collectList().block())
                         .isInstanceOf(RuntimeException.class)
                         .hasCauseInstanceOf(IOException.class);
             }
@@ -597,7 +599,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test").coverType("ebook").build();
 
-                assertThatThrownBy(() -> service.getCovers(request))
+                assertThatThrownBy(() -> service.getCovers(request).collectList().block())
                         .isInstanceOf(RuntimeException.class)
                         .hasCauseInstanceOf(IOException.class);
             }
@@ -624,7 +626,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).isEmpty();
             }
@@ -655,7 +657,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).isEmpty();
             }
@@ -684,7 +686,7 @@ class DuckDuckGoCoverServiceTest {
                 CoverFetchRequest request = CoverFetchRequest.builder()
                         .title("Test").coverType("ebook").build();
 
-                List<CoverImage> result = service.getCovers(request);
+                List<CoverImage> result = service.getCovers(request).collectList().block();
 
                 assertThat(result).isEmpty();
             }
