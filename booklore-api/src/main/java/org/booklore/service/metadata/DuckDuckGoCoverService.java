@@ -2,6 +2,7 @@ package org.booklore.service.metadata;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.exception.ApiError;
 import org.booklore.model.dto.CoverImage;
 import org.booklore.model.dto.request.CoverFetchRequest;
 import org.jsoup.Connection;
@@ -226,7 +227,7 @@ public class DuckDuckGoCoverService implements BookCoverProvider {
             }
         } catch (Exception e) {
             log.error("Error fetching images from DuckDuckGo", e);
-            throw org.booklore.exception.ApiError.INTERNAL_SERVER_ERROR.createException("DuckDuckGo image fetch failed");
+            throw ApiError.INTERNAL_SERVER_ERROR.createException("DuckDuckGo image fetch failed");
         }
         List<CoverImage> all = new ArrayList<>(priority);
         all.addAll(others);
