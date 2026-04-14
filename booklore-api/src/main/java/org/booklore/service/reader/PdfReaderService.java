@@ -81,8 +81,8 @@ public class PdfReaderService {
         Files.setLastModifiedTime(cacheDir, Files.getLastModifiedTime(pdfPath));
     }
 
-    public List<Integer> getAvailablePages(Long bookId) {
-        return getAvailablePages(bookId, null);
+    public void getAvailablePages(Long bookId) {
+        getAvailablePages(bookId, null);
     }
 
     public List<Integer> getAvailablePages(Long bookId, String bookType) {
@@ -247,7 +247,7 @@ public class PdfReaderService {
             return doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
         } catch (Exception e) {
             log.error("Failed to render PDF page {} from {}", page, pdfPath, e);
-            throw e instanceof IOException io ? io : new IOException(e);
+            throw new IOException(e);
         }
     }
 

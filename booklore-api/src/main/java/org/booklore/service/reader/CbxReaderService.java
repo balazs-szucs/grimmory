@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.exception.ApiError;
 import org.booklore.model.dto.response.CbxPageDimension;
@@ -20,7 +21,6 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,14 +29,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.zip.ZipFile;
-
-import static org.springframework.http.MediaType.IMAGE_JPEG_VALUE;
 
 @Slf4j
 @Service
@@ -59,31 +55,23 @@ public class CbxReaderService {
     private final ChapterCacheService chapterCacheService;
 
     // L1 Cache: Open ZipFile handles for active reading sessions (TTL 30m)
+    @Setter
     private Cache<String, ZipFile> zipHandleCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
-            .removalListener((String key, ZipFile value, RemovalCause cause) -> {
-                if (value != null) {
-                    try { value.close(); } catch (IOException ignored) {}
+            .removalListener((String _, ZipFile value, RemovalCause _) -> {
+                try {
+                    value.close();
+                } catch (IOException _) {
                 }
             })
             .build();
-
-    public void setZipHandleCache(Cache<String, ZipFile> cache) {
-        this.zipHandleCache = cache;
-    }
 
     private record CachedArchiveMetadata(List<String> imageEntries, List<CbxPageDimension> pageDimensions, long lastModified) {
         CachedArchiveMetadata {
             imageEntries = List.copyOf(imageEntries);
             pageDimensions = pageDimensions != null ? List.copyOf(pageDimensions) : null;
         }
-    }
-
-    public boolean isValidPage(Long bookId, String bookType, int pageNumber) throws IOException {
-        Path cbxPath = getBookPath(bookId, bookType);
-        CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
-        return pageNumber >= 1 && pageNumber <= metadata.imageEntries().size();
     }
 
     public void initCache(Long bookId, String bookType) throws IOException {
@@ -125,36 +113,6 @@ public class CbxReaderService {
         return dimensions;
     }
 
-    public long getArchiveLastModified(Long bookId, String bookType) throws IOException {
-        Path cbxPath = getBookPath(bookId, bookType);
-        return getCachedMetadata(cbxPath).lastModified();
-    }
-
-    /**
-     * Returns the MIME content type for a given page based on the archive
-     * entry's file extension. Falls back to {@code image/jpeg} for unknown
-     * extensions.
-     */
-    public String getPageContentType(Long bookId, String bookType, int page) throws IOException {
-        Path cbxPath = getBookPath(bookId, bookType);
-        CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
-        if (page < 1 || page > metadata.imageEntries().size()) {
-            return IMAGE_JPEG_VALUE;
-        }
-        String entryName = metadata.imageEntries().get(page - 1).toLowerCase();
-        return extensionToMediaType(entryName);
-    }
-
-    private static String extensionToMediaType(String name) {
-        if (name.endsWith(".png")) return "image/png";
-        if (name.endsWith(".webp")) return "image/webp";
-        if (name.endsWith(".avif")) return "image/avif";
-        if (name.endsWith(".gif")) return "image/gif";
-        if (name.endsWith(".bmp")) return "image/bmp";
-        if (name.endsWith(".heic")) return "image/heic";
-        return IMAGE_JPEG_VALUE; // jpg, jpeg, or unknown
-    }
-
     public List<Integer> getAvailablePages(Long bookId) {
         return getAvailablePages(bookId, null);
     }
@@ -165,7 +123,7 @@ public class CbxReaderService {
             List<String> imageEntries = getImageEntriesFromArchiveCached(cbxPath);
             return IntStream.rangeClosed(1, imageEntries.size())
                     .boxed()
-                    .collect(Collectors.toList());
+                    .toList();
         } catch (IOException e) {
             log.error("Failed to read archive for book {}", bookId, e);
             throw ApiError.FILE_READ_ERROR.createException("Failed to read archive: " + e.getMessage());
@@ -194,10 +152,6 @@ public class CbxReaderService {
             log.error("Failed to read archive for book {}", bookId, e);
             throw ApiError.FILE_READ_ERROR.createException("Failed to read archive: " + e.getMessage());
         }
-    }
-
-    public List<CbxPageDimension> getPageDimensions(Long bookId) {
-        return getPageDimensions(bookId, null);
     }
 
     public List<CbxPageDimension> getPageDimensions(Long bookId, String bookType) {
@@ -310,7 +264,7 @@ public class CbxReaderService {
 
     private ZipFile getZipFile(Path cbxPath, long lastModified) {
         String cacheKey = cbxPath.toString() + ":" + lastModified;
-        return zipHandleCache.get(cacheKey, key -> {
+        return zipHandleCache.get(cacheKey, _ -> {
             try {
                 if (cbxPath.toString().toLowerCase().endsWith(".cbz") || cbxPath.toString().toLowerCase().endsWith(".zip")) {
                     return new java.util.zip.ZipFile(cbxPath.toFile());
@@ -421,13 +375,10 @@ public class CbxReaderService {
             }
         }
         String baseName = baseName(normalized).toLowerCase();
-        if (baseName.startsWith("._") || baseName.startsWith(".")) {
+        if (baseName.startsWith("._") || !baseName.isEmpty() && baseName.charAt(0) == '.') {
             return false;
         }
-        if (SYSTEM_FILES.contains(baseName)) {
-            return false;
-        }
-        return true;
+        return !SYSTEM_FILES.contains(baseName);
     }
 
     private String baseName(String path) {
