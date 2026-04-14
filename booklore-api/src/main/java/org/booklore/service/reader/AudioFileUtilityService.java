@@ -98,7 +98,22 @@ public class AudioFileUtilityService {
                 while (i2 < s2.length() && Character.isDigit(s2.charAt(i2))) {
                     num2.append(s2.charAt(i2++));
                 }
-                int cmp = Long.compare(Long.parseLong(num1.toString()), Long.parseLong(num2.toString()));
+                String n1 = num1.toString();
+                String n2 = num2.toString();
+
+                // Strip leading zeros for numeric comparison
+                int start1 = 0;
+                while (start1 < n1.length() - 1 && n1.charAt(start1) == '0') start1++;
+                int start2 = 0;
+                while (start2 < n2.length() - 1 && n2.charAt(start2) == '0') start2++;
+
+                String s1_norm = n1.substring(start1);
+                String s2_norm = n2.substring(start2);
+
+                if (s1_norm.length() != s2_norm.length()) {
+                    return s1_norm.length() - s2_norm.length();
+                }
+                int cmp = s1_norm.compareTo(s2_norm);
                 if (cmp != 0) return cmp;
             } else {
                 int cmp = Character.compare(Character.toLowerCase(c1), Character.toLowerCase(c2));

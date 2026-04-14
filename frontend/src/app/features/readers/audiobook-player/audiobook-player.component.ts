@@ -1,9 +1,19 @@
-import {Component, ElementRef, inject, OnDestroy, OnInit, ViewChild} from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  DestroyRef,
+  ElementRef,
+  inject,
+  OnDestroy,
+  OnInit,
+  ViewChild
+} from '@angular/core';
 import {Location} from '@angular/common';
 import {ActivatedRoute} from '@angular/router';
 import {FormsModule} from '@angular/forms';
 import {from, Observable, of, Subject} from 'rxjs';
 import {catchError, filter, map, switchMap, takeUntil, tap} from 'rxjs/operators';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 
 import {Button} from 'primeng/button';
 import {Slider, SliderChangeEvent} from 'primeng/slider';
@@ -43,7 +53,7 @@ import {API_CONFIG} from '../../../core/config/api-config';
 export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   @ViewChild('audioElement') audioElement!: ElementRef<HTMLAudioElement>;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private audiobookService = inject(AudiobookService);
   private bookService = inject(BookService);
   private bookMarkService = inject(BookMarkService);
@@ -54,7 +64,9 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   private audiobookSessionService = inject(AudiobookSessionService);
   private pageTitle = inject(PageTitleService);
   private readonly t = inject(TranslocoService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
+  private loadRequestId = 0;
   isLoading = true;
   audioLoading = false;
   audioInitialized = false;
@@ -76,6 +88,8 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   private savedPosition = 0;
 
   currentTrackIndex = 0;
+  currentChapter: AudiobookChapter | undefined;
+  currentChapterIdx = 0;
   audioSrc = '';
 
   showTrackList = false;
@@ -117,7 +131,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     ];
 
     this.route.paramMap.pipe(
-      takeUntil(this.destroy$),
+      takeUntilDestroyed(this.destroyRef),
       map(params => Number(params.get('bookId'))),
       filter(bookId => !Number.isNaN(bookId)),
       switchMap(bookId => this.loadAudiobook(bookId))
@@ -125,9 +139,6 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-
     if (this.progressSaveInterval) {
       clearInterval(this.progressSaveInterval);
     }
@@ -148,6 +159,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   }
 
   private loadAudiobook(bookId: number): Observable<void> {
+    const loadRequestId = ++this.loadRequestId;
     this.bookId = bookId;
     this.resetState();
     this.isLoading = true;
@@ -174,8 +186,14 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
         this.bookCoverUrl = `${API_CONFIG.BASE_URL}/api/v1/media/book/${bookId}/cover?token=${encodeURIComponent(token || '')}`;
         this.coverUrl = `${API_CONFIG.BASE_URL}/api/v1/media/book/${bookId}/audiobook-cover?token=${encodeURIComponent(token || '')}`;
 
-        this.isLoading = false;
-        this.loadBookmarks();
+        setTimeout(() => {
+          if (loadRequestId !== this.loadRequestId) {
+            return;
+          }
+          this.isLoading = false;
+          this.cdr.markForCheck();
+        });
+        this.loadBookmarks(bookId);
       }),
       switchMap(info =>
         from(this.bookService.fetchFreshBookDetail(bookId, false)).pipe(
@@ -295,10 +313,12 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   onTimeUpdate(): void {
     const audio = this.audioElement?.nativeElement;
     if (audio) {
-      const previousChapterIndex = this.getCurrentChapterIndex();
+      const previousChapterIndex = this.currentChapterIdx;
       if (!this.isSeeking) {
         this.currentTime = audio.currentTime;
       }
+
+      this.updateCurrentChapter();
 
       this.audiobookSessionService.updatePosition(
         Math.round(this.currentTime * 1000),
@@ -309,12 +329,37 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
         this.updateMediaSessionPositionState();
       }
 
-      if (!this.audiobookInfo.folderBased && this.getCurrentChapterIndex() !== previousChapterIndex) {
+      if (!this.audiobookInfo.folderBased && this.currentChapterIdx !== previousChapterIndex) {
         this.updateMediaSessionMetadata();
       }
 
       this.checkSleepTimerEndOfChapter();
     }
+  }
+
+  private updateCurrentChapter(): void {
+    if (!this.audiobookInfo?.chapters) {
+      this.currentChapter = undefined;
+      this.currentChapterIdx = 0;
+      return;
+    }
+    const chapters = this.audiobookInfo.chapters;
+    const currentMs = this.currentTime * 1000;
+    let chapterIdx = chapters.findIndex(
+      ch => currentMs >= ch.startTimeMs && currentMs < ch.endTimeMs
+    );
+
+    if (chapterIdx === -1) {
+      for (let i = chapters.length - 1; i >= 0; i--) {
+        if (currentMs >= chapters[i].startTimeMs) {
+          chapterIdx = i;
+          break;
+        }
+      }
+    }
+
+    this.currentChapterIdx = chapterIdx >= 0 ? chapterIdx : 0;
+    this.currentChapter = chapterIdx >= 0 ? chapters[chapterIdx] : undefined;
   }
 
   onProgress(): void {
@@ -395,7 +440,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     if (!('mediaSession' in navigator)) return;
 
     const chapters = this.audiobookInfo.chapters;
-    const chapterTitle = chapters && chapters.length > 1 ? this.getCurrentChapter()?.title : null;
+    const chapterTitle = chapters && chapters.length > 1 ? this.currentChapter?.title : null;
 
     const title = this.audiobookInfo.folderBased
       ? this.currentTrack?.title
@@ -504,6 +549,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
           audio.currentTime = seekTime;
         }
         this.isSeeking = false;
+        this.updateCurrentChapter();
       }, 150);
     }
   }
@@ -514,6 +560,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
       const newTime = Math.max(0, Math.min(this.duration, audio.currentTime + seconds));
       audio.currentTime = newTime;
       this.currentTime = newTime;
+      this.updateCurrentChapter();
     }
   }
 
@@ -560,6 +607,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
       this.loadTrack(this.currentTrackIndex - 1);
       this.currentTime = 0;
       this.savedPosition = 0;
+      this.updateCurrentChapter();
       if (this.isPlaying) {
         setTimeout(() => {
           this.audioElement?.nativeElement?.play();
@@ -574,6 +622,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
       this.loadTrack(this.currentTrackIndex + 1);
       this.currentTime = 0;
       this.savedPosition = 0;
+      this.updateCurrentChapter();
       if (this.isPlaying) {
         setTimeout(() => {
           this.audioElement?.nativeElement?.play();
@@ -589,6 +638,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     this.currentTime = 0;
     this.savedPosition = 0;
     this.buffered = 0;
+    this.updateCurrentChapter();
     const trackInfo = this.audiobookInfo.tracks?.[track.index];
     if (trackInfo?.durationMs) {
       this.duration = trackInfo.durationMs / 1000;
@@ -635,6 +685,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
         audio.removeEventListener('canplay', seekAndPlay);
         audio.currentTime = chapter.startTimeMs / 1000;
         this.currentTime = chapter.startTimeMs / 1000;
+        this.updateCurrentChapter();
         audio.play();
         this.isPlaying = true;
         this.startProgressSaveInterval();
@@ -656,6 +707,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
 
     audio.currentTime = chapter.startTimeMs / 1000;
     this.currentTime = chapter.startTimeMs / 1000;
+    this.updateCurrentChapter();
     this.showTrackList = false;
     this.updateMediaSessionMetadata();
     if (!this.isPlaying) {
@@ -675,16 +727,11 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   }
 
   getCurrentChapter(): AudiobookChapter | undefined {
-    if (!this.audiobookInfo?.chapters) return undefined;
-    const currentMs = this.currentTime * 1000;
-    return this.audiobookInfo.chapters.find(
-      ch => currentMs >= ch.startTimeMs && currentMs < ch.endTimeMs
-    );
+    return this.currentChapter;
   }
 
   getCurrentChapterIndex(): number {
-    const chapter = this.getCurrentChapter();
-    return chapter?.index ?? 0;
+    return this.currentChapterIdx;
   }
 
   hasMultipleChapters(): boolean {
@@ -692,20 +739,20 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   }
 
   canGoPreviousChapter(): boolean {
-    return this.getCurrentChapterIndex() > 0;
+    return this.currentChapterIdx > 0;
   }
 
   canGoNextChapter(): boolean {
     const chapters = this.audiobookInfo?.chapters;
     if (!chapters) return false;
-    return this.getCurrentChapterIndex() < chapters.length - 1;
+    return this.currentChapterIdx < chapters.length - 1;
   }
 
   previousChapter(): void {
     const chapters = this.audiobookInfo?.chapters;
     if (!chapters) return;
 
-    const currentIndex = this.getCurrentChapterIndex();
+    const currentIndex = this.currentChapterIdx;
     if (currentIndex > 0) {
       const prevChapter = chapters[currentIndex - 1];
       this.selectChapter(prevChapter);
@@ -716,7 +763,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     const chapters = this.audiobookInfo?.chapters;
     if (!chapters) return;
 
-    const currentIndex = this.getCurrentChapterIndex();
+    const currentIndex = this.currentChapterIdx;
     if (currentIndex < chapters.length - 1) {
       const nextChapter = chapters[currentIndex + 1];
       this.selectChapter(nextChapter);
@@ -954,11 +1001,15 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     }
   }
 
-  loadBookmarks(): void {
-    this.bookMarkService.getBookmarksForBook(this.bookId)
-      .pipe(takeUntil(this.destroy$))
+  loadBookmarks(bookId = this.bookId): void {
+    this.bookMarkService.getBookmarksForBook(bookId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(bookmarks => {
+        if (bookId !== this.bookId) {
+          return;
+        }
         this.bookmarks = bookmarks;
+        this.cdr.markForCheck();
       });
   }
 
@@ -990,7 +1041,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     };
 
     this.bookMarkService.createBookmark(request)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (bookmark) => {
           this.bookmarks = [...this.bookmarks, bookmark];
@@ -1033,6 +1084,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
         audio.removeEventListener('canplay', seekAndPlay);
         audio.currentTime = targetPosition;
         this.currentTime = targetPosition;
+        this.updateCurrentChapter();
         audio.play();
         this.isPlaying = true;
         this.startProgressSaveInterval();
@@ -1065,6 +1117,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
       this.currentTime = targetPosition;
     }
 
+    this.updateCurrentChapter();
     this.showBookmarkList = false;
 
     if (!this.isPlaying) {
@@ -1089,7 +1142,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   deleteBookmark(event: MouseEvent, bookmarkId: number): void {
     event.stopPropagation();
     this.bookMarkService.deleteBookmark(bookmarkId)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.bookmarks = this.bookmarks.filter(b => b.id !== bookmarkId);
         this.messageService.add({
