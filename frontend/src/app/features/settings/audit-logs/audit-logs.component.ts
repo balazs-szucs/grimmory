@@ -1,5 +1,5 @@
-import {Component, inject, OnInit, OnDestroy} from '@angular/core';
-import {CommonModule} from '@angular/common';
+import {Component, DestroyRef, inject, OnInit} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router} from '@angular/router';
 import {TableLazyLoadEvent, TableModule} from 'primeng/table';
 import {Select} from 'primeng/select';
@@ -9,6 +9,7 @@ import {TranslocoDirective} from '@jsverse/transloco';
 import {Subscription, interval} from 'rxjs';
 import {AuditLog, AuditLogService} from './audit-log.service';
 import {TagColor, TagComponent} from '../../../shared/components/tag/tag.component';
+import {DatePipe} from '@angular/common';
 
 const ACTION_COLOR_GROUPS: [TagColor, string[]][] = [
   ['red', ['USER_DELETED', 'LIBRARY_DELETED', 'BOOK_DELETED', 'SHELF_DELETED', 'MAGIC_SHELF_DELETED', 'EMAIL_PROVIDER_DELETED', 'OPDS_USER_DELETED', 'AUTHOR_DELETED']],
@@ -40,14 +41,16 @@ interface UsernameOption {
 @Component({
   selector: 'app-audit-logs',
   standalone: true,
-  imports: [CommonModule, TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
+  imports: [
+    DatePipe,TableModule, Select, DatePicker, FormsModule, TranslocoDirective, TagComponent],
   templateUrl: './audit-logs.component.html',
   styleUrl: './audit-logs.component.scss'
 })
-export class AuditLogsComponent implements OnInit, OnDestroy {
+export class AuditLogsComponent implements OnInit {
   private readonly auditLogService = inject(AuditLogService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   logs: AuditLog[] = [];
   totalRecords = 0;
@@ -111,12 +114,8 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     this.loadLogs();
   }
 
-  ngOnDestroy(): void {
-    this.autoRefreshSub?.unsubscribe();
-  }
-
   loadUsernames(): void {
-    this.auditLogService.getDistinctUsernames().subscribe({
+    this.auditLogService.getDistinctUsernames().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (usernames) => {
         this.usernameOptions = [
           {label: 'All Users', value: ''},
@@ -134,7 +133,9 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     const username = this.selectedUsername || undefined;
     const from = this.dateRange?.[0] ? this.formatDateTime(this.dateRange[0]) : undefined;
     const to = this.dateRange?.[1] ? this.formatDateTime(this.dateRange[1], true) : undefined;
-    this.auditLogService.getAuditLogs(this.currentPage, this.rows, action, username, from, to).subscribe({
+    this.auditLogService.getAuditLogs(this.currentPage, this.rows, action, username, from, to).pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
       next: (response) => {
         this.logs = response.content;
         this.totalRecords = response.page.totalElements;
@@ -168,7 +169,10 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   toggleAutoRefresh(): void {
     this.autoRefresh = !this.autoRefresh;
     if (this.autoRefresh) {
-      this.autoRefreshSub = interval(10000).subscribe(() => this.loadLogs(false));
+      this.autoRefreshSub?.unsubscribe();
+      this.autoRefreshSub = interval(10000)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadLogs(false));
     } else {
       this.autoRefreshSub?.unsubscribe();
     }

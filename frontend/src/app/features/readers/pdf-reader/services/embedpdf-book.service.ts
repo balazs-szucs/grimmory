@@ -16,6 +16,7 @@ import type {
   SpreadMode,
   RotateCapability,
   PanCapability,
+  I18nCapability,
 } from '@embedpdf/snippet';
 
 export interface PdfOutlineItem {
@@ -38,6 +39,7 @@ export class EmbedPdfBookService {
   private spread: SpreadCapability | null = null;
   private rotate: RotateCapability | null = null;
   private pan: PanCapability | null = null;
+  private i18n: I18nCapability | null = null;
 
   private currentDocumentId: string | null = null;
 
@@ -61,7 +63,7 @@ export class EmbedPdfBookService {
     return this.scroll?.getTotalPages() ?? 0;
   }
 
-  async init(target: HTMLElement, pdfUrl: string, theme: 'dark' | 'light'): Promise<void> {
+  async init(target: HTMLElement, pdfUrl: string, theme: 'dark' | 'light', localeCode: string): Promise<void> {
     // Recreate event streams so the service is reusable after destroy()
     this.pageChange$ = new Subject<PageChangeEvent>();
     this.annotationEvent$ = new Subject<AnnotationEvent>();
@@ -75,6 +77,7 @@ export class EmbedPdfBookService {
     const EmbedPDF = (await import('@embedpdf/snippet')).default;
 
     const wasmUrl = new URL('/assets/pdfium/pdfium.wasm', location.origin).href;
+    const requestedLocale = localeCode || 'en';
 
     this.container = EmbedPDF.init({
       type: 'container',
@@ -83,6 +86,10 @@ export class EmbedPdfBookService {
       wasmUrl,
       worker: true,
       log: false,
+      i18n: {
+        defaultLocale: requestedLocale,
+        fallbackLocale: 'en',
+      },
       theme: {preference: theme},
       disabledCategories: [
         'redaction',
@@ -100,7 +107,7 @@ export class EmbedPdfBookService {
         defaultZoomLevel: 'fit-page' as ZoomMode,
       },
       render: {
-        defaultImageQuality: 2,
+        defaultImageQuality: 4,
       },
       tiling: {
         tileSize: 1024,
@@ -143,6 +150,10 @@ export class EmbedPdfBookService {
 
     const panPlugin = this.registry.getPlugin('pan');
     this.pan = panPlugin?.provides?.() as PanCapability ?? null;
+
+    const i18nPlugin = this.registry.getPlugin('i18n');
+    this.i18n = i18nPlugin?.provides?.() as I18nCapability ?? null;
+    this.applyLocale(requestedLocale);
 
     // wire events
     if (this.scroll) {
@@ -194,6 +205,10 @@ export class EmbedPdfBookService {
 
   setTheme(theme: 'dark' | 'light'): void {
     this.container?.setTheme(theme);
+  }
+
+  setLocale(localeCode: string): void {
+    this.applyLocale(localeCode || 'en');
   }
 
   scrollToPage(pageNumber: number, behavior: 'instant' | 'smooth' = 'smooth'): void {
@@ -371,11 +386,23 @@ export class EmbedPdfBookService {
     this.spread = null;
     this.rotate = null;
     this.pan = null;
+    this.i18n = null;
     this.currentDocumentId = null;
 
     this.restoreWorkerShims();
     this.restoreReleasePointerCapture();
     this.restoreDevicePixelRatio();
+  }
+
+  private applyLocale(localeCode: string): void {
+    if (!this.i18n) return;
+
+    if (this.i18n.hasLocale(localeCode)) {
+      this.i18n.setLocale(localeCode);
+      return;
+    }
+
+    this.i18n.setLocale('en');
   }
 
   private convertBookmarks(items: unknown[]): PdfOutlineItem[] {
@@ -424,7 +451,7 @@ export class EmbedPdfBookService {
    * PDF pages appear noticeably pixelated.
    */
   private ensureHighDpiRendering(): void {
-    const MIN_DPR = 2;
+    const MIN_DPR = 2.5;
     if (window.devicePixelRatio < MIN_DPR) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any;
