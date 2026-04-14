@@ -39,6 +39,7 @@ public class OidcGroupMappingService {
         return mapper.toDtoList(repository.findAll());
     }
 
+    @Transactional
     public OidcGroupMapping create(OidcGroupMapping dto) {
         OidcGroupMappingEntity entity = mapper.toEntity(dto);
         entity.setId(null);
@@ -48,6 +49,7 @@ public class OidcGroupMappingService {
         return mapper.toDto(saved);
     }
 
+    @Transactional
     public OidcGroupMapping update(Long id, OidcGroupMapping dto) {
         OidcGroupMappingEntity existing = repository.findById(id)
                 .orElseThrow(() -> ApiError.GENERIC_NOT_FOUND.createException("OIDC group mapping not found"));
@@ -62,6 +64,7 @@ public class OidcGroupMappingService {
         return mapper.toDto(saved);
     }
 
+    @Transactional
     public void delete(Long id) {
         OidcGroupMappingEntity existing = repository.findById(id)
                 .orElseThrow(() -> ApiError.GENERIC_NOT_FOUND.createException("OIDC group mapping not found"));

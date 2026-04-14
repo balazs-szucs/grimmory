@@ -7,21 +7,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.repository.query.Param;
+
 import java.time.Instant;
 import java.util.List;
 
 @Repository
 public interface MetadataFetchJobRepository extends JpaRepository<MetadataFetchJobEntity, String> {
 
-    int deleteAllByCompletedAtBefore(Instant cutoff);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("DELETE FROM MetadataFetchJobEntity m WHERE m.completedAt < :cutoff")
+    int deleteAllByCompletedAtBefore(@Param("cutoff") Instant cutoff);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("DELETE FROM MetadataFetchJobEntity")
     int deleteAllRecords();
-
-    @Query("SELECT COUNT(m) FROM MetadataFetchJobEntity m")
-    long countAll();
 
     @Query("SELECT DISTINCT t FROM MetadataFetchJobEntity t LEFT JOIN FETCH t.proposals")
     List<MetadataFetchJobEntity> findAllWithProposals();

@@ -63,7 +63,7 @@ public interface UserBookFileProgressRepository extends JpaRepository<UserBookFi
             @Param("bookIds") Iterable<Long> bookIds
     );
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
         DELETE FROM UserBookFileProgressEntity ubfp

@@ -74,7 +74,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
             """)
     List<CompletionTimelineDto> findCompletionTimelineByUser(@Param("userId") Long userId, @Param("year") int year);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
         UPDATE UserBookProgressEntity ubp

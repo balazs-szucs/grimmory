@@ -11,7 +11,7 @@ public interface ComicTeamRepository extends JpaRepository<ComicTeamEntity, Long
 
     Optional<ComicTeamEntity> findByName(String name);
 
-    @Modifying(flushAutomatically = true)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM ComicTeamEntity t WHERE t.id NOT IN (SELECT t2.id FROM ComicMetadataEntity m JOIN m.teams t2)")
     void deleteOrphaned();
 }

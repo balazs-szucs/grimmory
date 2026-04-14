@@ -2,7 +2,11 @@ package org.booklore.repository;
 
 import org.booklore.model.entity.OidcSessionEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,7 +23,13 @@ public interface OidcSessionRepository extends JpaRepository<OidcSessionEntity, 
 
     List<OidcSessionEntity> findByUserIdAndRevokedFalse(Long userId);
 
-    void deleteByRevokedTrueAndCreatedAtBefore(Instant cutoff);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("DELETE FROM OidcSessionEntity s WHERE s.revoked = true AND s.createdAt < :cutoff")
+    void deleteByRevokedTrueAndCreatedAtBefore(@Param("cutoff") Instant cutoff);
 
-    void deleteByCreatedAtBefore(Instant cutoff);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("DELETE FROM OidcSessionEntity s WHERE s.createdAt < :cutoff")
+    void deleteByCreatedAtBefore(@Param("cutoff") Instant cutoff);
 }
