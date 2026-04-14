@@ -136,6 +136,10 @@ public class BookMediaController {
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
             WebRequest webRequest,
             HttpServletResponse response) throws IOException {
+        if (!cbxReaderService.isValidPage(bookId, bookType, pageNumber)) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
         long lastModified = cbxReaderService.getArchiveLastModified(bookId, bookType);
         String variant = (bookType == null || bookType.isBlank()) ? "default" : bookType;
         String etag = "W/\"" + bookId + "-" + variant + "-" + pageNumber + "-" + lastModified + "\"";

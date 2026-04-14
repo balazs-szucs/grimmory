@@ -80,6 +80,12 @@ public class CbxReaderService {
         }
     }
 
+    public boolean isValidPage(Long bookId, String bookType, int pageNumber) throws IOException {
+        Path cbxPath = getBookPath(bookId, bookType);
+        CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
+        return pageNumber >= 1 && pageNumber <= metadata.imageEntries().size();
+    }
+
     public void initCache(Long bookId, String bookType) throws IOException {
         Path cbxPath = getBookPath(bookId, bookType);
         CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);

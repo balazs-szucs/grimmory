@@ -3,6 +3,7 @@ package org.booklore.service;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.exception.ApiError;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -17,10 +18,18 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Locale;
 
 @Slf4j
 @Service
 public class FileStreamingService {
+
+    private static final DateTimeFormatter HTTP_DATE_FORMAT = DateTimeFormatter
+            .ofPattern("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
+            .withZone(ZoneId.of("GMT"));
 
     /**
      * Streams a file with HTTP Range support for seeking.
@@ -39,8 +48,7 @@ public class FileStreamingService {
         try {
             attrs = Files.readAttributes(filePath, BasicFileAttributes.class);
         } catch (NoSuchFileException e) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, "File not found");
-            return;
+            throw ApiError.FILE_NOT_FOUND.createException(filePath.toString());
         }
 
         long fileSize = attrs.size();
@@ -75,7 +83,8 @@ public class FileStreamingService {
         try (var fileChannel = FileChannel.open(filePath, StandardOpenOption.READ)) {
 
             String ifRange = request.getHeader("If-Range");
-            if (rangeHeader != null && ifRange != null && !etag.equals(ifRange)) {
+            if (rangeHeader != null && ifRange != null && !validateIfRange(ifRange, etag, lastModified)) {
+                // If-Range failed: return full file
                 response.setStatus(HttpServletResponse.SC_OK);
                 response.setContentLengthLong(fileSize);
                 transferFile(fileChannel, 0, fileSize, response.getOutputStream());
@@ -105,14 +114,37 @@ public class FileStreamingService {
 
             transferFile(fileChannel, range.start, length, response.getOutputStream());
 
+        } catch (NoSuchFileException e) {
+            throw ApiError.FILE_NOT_FOUND.createException(filePath.toString());
         } catch (IOException e) {
             if (isClientDisconnect(e)) {
                 log.debug("Client disconnected during streaming: {}", e.getMessage());
             } else {
                 log.error("Error during file streaming: {}", filePath, e);
                 if (!response.isCommitted()) {
-                    response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Streaming error");
+                    throw ApiError.INTERNAL_SERVER_ERROR.createException("Streaming error: " + e.getMessage());
                 }
+            }
+        }
+    }
+
+    /**
+     * Validates the If-Range header against current ETag and lastModified.
+     * RFC 7233: If-Range can be a strong ETag OR an HTTP-date.
+     */
+    private boolean validateIfRange(String ifRange, String etag, Instant lastModified) {
+        if (ifRange.startsWith("\"")) {
+            // ETag comparison (Strong match required)
+            return etag.equals(ifRange);
+        } else {
+            // HTTP-date comparison
+            try {
+                Instant ifRangeDate = Instant.from(HTTP_DATE_FORMAT.parse(ifRange));
+                // Exact match on seconds required by RFC
+                return lastModified.getEpochSecond() == ifRangeDate.getEpochSecond();
+            } catch (DateTimeParseException e) {
+                log.trace("Failed to parse If-Range date: {}", ifRange);
+                return false;
             }
         }
     }
@@ -132,7 +164,9 @@ public class FileStreamingService {
         while (remaining > 0) {
             long transferred = source.transferTo(currentPos, remaining, destination);
             if (transferred <= 0) {
-                if (++zeroTransferCount > 100) break; // Give up after repeated zeros
+                if (++zeroTransferCount > 100) {
+                    throw new IOException("File transfer stalled with " + remaining + " bytes remaining");
+                }
                 Thread.onSpinWait();
                 continue;
             }
@@ -143,11 +177,11 @@ public class FileStreamingService {
     }
 
     /**
-     * Weak ETag derived from file size and last-modified epoch millis.
+     * Strong ETag derived from file size and last-modified epoch millis.
      * Sufficient for static-file identity without content hashing overhead.
      */
     String generateETag(long fileSize, Instant lastModified) {
-        return "W/\"" + Long.toHexString(fileSize) + "-" + Long.toHexString(lastModified.toEpochMilli()) + "\"";
+        return "\"" + Long.toHexString(fileSize) + "-" + Long.toHexString(lastModified.toEpochMilli()) + "\"";
     }
 
     // RANGE PARSER (not) RFC 7233 compliant

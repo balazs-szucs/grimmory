@@ -3,6 +3,8 @@ package org.booklore.service;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.booklore.exception.APIException;
+import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,9 +74,10 @@ class FileStreamingServiceTest {
 
         Path nonexistent = tempDir.resolve("nonexistent.bin");
 
-        fileStreamingService.streamWithRangeSupport(nonexistent, "audio/mp4", request, response);
-
-        verify(response).sendError(HttpServletResponse.SC_NOT_FOUND, "File not found");
+        APIException exception = assertThrows(APIException.class, () -> 
+            fileStreamingService.streamWithRangeSupport(nonexistent, "audio/mp4", request, response)
+        );
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
     }
 
     // ==================== streamWithRangeSupport - Range request tests ====================
