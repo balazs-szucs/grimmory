@@ -224,6 +224,46 @@ class FileStreamingServiceTest {
     }
 
     @Test
+    void streamWithRangeSupport_ifNoneMatchWildcard_returns304() throws IOException {
+        var request = mock(HttpServletRequest.class);
+        var response = mock(HttpServletResponse.class);
+
+        when(request.getHeader("If-None-Match")).thenReturn("*");
+
+        fileStreamingService.streamWithRangeSupport(testFile, "audio/mp4", request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+        verify(response, never()).getOutputStream();
+    }
+
+    @Test
+    void streamWithRangeSupport_ifNoneMatchList_returns304() throws IOException {
+        var request = mock(HttpServletRequest.class);
+        var response = mock(HttpServletResponse.class);
+
+        String etag = computeExpectedETag(testFile);
+        when(request.getHeader("If-None-Match")).thenReturn("\"other\", " + etag);
+
+        fileStreamingService.streamWithRangeSupport(testFile, "audio/mp4", request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+    }
+
+    @Test
+    void streamWithRangeSupport_ifNoneMatchWeakTag_returns304() throws IOException {
+        var request = mock(HttpServletRequest.class);
+        var response = mock(HttpServletResponse.class);
+
+        String etag = computeExpectedETag(testFile);
+        String weakEtag = "W/" + etag;
+        when(request.getHeader("If-None-Match")).thenReturn(weakEtag);
+
+        fileStreamingService.streamWithRangeSupport(testFile, "audio/mp4", request, response);
+
+        verify(response).setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+    }
+
+    @Test
     void streamWithRangeSupport_headRequest_returns200WithContentLength() throws IOException {
         var request = mock(HttpServletRequest.class);
         var response = mock(HttpServletResponse.class);

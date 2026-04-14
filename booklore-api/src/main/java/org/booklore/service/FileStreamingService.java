@@ -69,7 +69,7 @@ public class FileStreamingService {
 
         // Conditional: If-None-Match, 304
         String ifNoneMatch = request.getHeader("If-None-Match");
-        if (etag.equals(ifNoneMatch)) {
+        if (evaluateIfNoneMatch(ifNoneMatch, etag)) {
             response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
             return;
         }
@@ -148,6 +148,45 @@ public class FileStreamingService {
                 return false;
             }
         }
+    }
+
+    /**
+     * Evaluates the If-None-Match header against the current ETag.
+     * RFC 7232: If-None-Match can be "*", a single entity-tag, or a list of them.
+     */
+    private boolean evaluateIfNoneMatch(String ifNoneMatch, String currentEtag) {
+        if (ifNoneMatch == null || ifNoneMatch.isBlank()) {
+            return false;
+        }
+
+        String trimmedValue = ifNoneMatch.trim();
+        if ("*".equals(trimmedValue)) {
+            return true;
+        }
+
+        // Split by comma. Entity-tags are [weak] opaque-tag.
+        String[] parts = trimmedValue.split(",");
+        for (String part : parts) {
+            String tag = part.trim();
+            if (tag.isEmpty()) {
+                continue;
+            }
+            if (isWeakMatch(tag, currentEtag)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Weak comparison of two ETags.
+     * RFC 7232 Section 2.3.2: Two entity-tags are a weak match if their opaque-tags are equal,
+     * regardless of whether either or both have a "W/" prefix.
+     */
+    private boolean isWeakMatch(String tag1, String tag2) {
+        String opaque1 = tag1.startsWith("W/") ? tag1.substring(2) : tag1;
+        String opaque2 = tag2.startsWith("W/") ? tag2.substring(2) : tag2;
+        return opaque1.equals(opaque2);
     }
 
     /**
