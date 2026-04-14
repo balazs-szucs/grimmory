@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +35,7 @@ public class PdfReaderService {
 
     private static final int MAX_CACHE_ENTRIES = 15;
     private static final float DEFAULT_DPI = 200f;
+    private static final long MTIME_TOLERANCE_MS = 2000;
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
@@ -60,18 +62,18 @@ public class PdfReaderService {
             cacheEmpty = stream.findAny().isEmpty();
         }
 
-        if (!cacheEmpty && cacheMtime == metadata.lastModified) {
+        if (!cacheEmpty && Math.abs(cacheMtime - metadata.lastModified) <= MTIME_TOLERANCE_MS) {
             return;
         }
 
         log.info("Populating PDF disk cache for {}: {} pages", cacheKey, metadata.pageCount);
-        // PdfDocument is not thread-safe render pages serially then cache
+        // PdfDocument is not thread-safe — render pages serially then cache
         try (PdfDocument doc = PdfDocument.open(pdfPath)) {
             for (int i = 1; i <= metadata.pageCount; i++) {
                 Path target = chapterCacheService.getCachedPage(cacheKey, i);
-                if (!Files.exists(target)) {
+                if (!Files.exists(target) || Files.size(target) == 0) {
                     byte[] jpeg = doc.renderPageToBytes(i - 1, (int) DEFAULT_DPI, "jpeg");
-                    Files.write(target, jpeg);
+                    writeAtomically(target, jpeg);
                 }
             }
         }
@@ -125,14 +127,13 @@ public class PdfReaderService {
         }
 
         validatePageRequest(bookId, page, metadata.pageCount);
-        
-        // Render and cache
+
+        // Render, cache atomically, then stream
         Path cached = chapterCacheService.getCachedPage(cacheKey, page);
         Files.createDirectories(cached.getParent());
-        try (var out = Files.newOutputStream(cached)) {
-            renderPageToStream(pdfPath, page, out);
-        }
-        Files.copy(cached, outputStream);
+        byte[] jpeg = renderPageToBytes(pdfPath, page);
+        writeAtomically(cached, jpeg);
+        outputStream.write(jpeg);
     }
 
     private String getCacheKey(Long bookId, String bookType, long lastModified) {
@@ -240,14 +241,28 @@ public class PdfReaderService {
         }
     }
 
-    private void renderPageToStream(Path pdfPath, int page, OutputStream outputStream) throws IOException {
+    private byte[] renderPageToBytes(Path pdfPath, int page) throws IOException {
         try (PdfDocument doc = PdfDocument.open(pdfPath)) {
             // page is 1-based from the API, renderPageToBytes expects 0-based
-            byte[] jpeg = doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
-            outputStream.write(jpeg);
-        } catch (IOException e) {
+            return doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
+        } catch (Exception e) {
             log.error("Failed to render PDF page {} from {}", page, pdfPath, e);
+            throw e instanceof IOException io ? io : new IOException(e);
+        }
+    }
+
+    /**
+     * Writes bytes to a temp file then atomically moves to the target path.
+     * If the write fails the partial temp file is cleaned up.
+     */
+    private void writeAtomically(Path target, byte[] data) throws IOException {
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        try {
+            Files.write(tmp, data);
+        } catch (IOException e) {
+            Files.deleteIfExists(tmp);
             throw e;
         }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 }

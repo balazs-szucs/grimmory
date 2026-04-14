@@ -166,9 +166,7 @@ public class KomgaController {
         try {
             boolean convertToPng = "png".equalsIgnoreCase(convert);
             StreamingResponseBody body = komgaService.getBookPageImage(bookId, pageNumber, convertToPng);
-            // Note: When not converting, we assume JPEG as most CBZ files contain JPEG images,
-            // but the actual format may vary (PNG, WebP, etc.)
-            String contentType = convertToPng ? "image/png" : "image/jpeg";
+            String contentType = convertToPng ? "image/png" : komgaService.getPageContentType(bookId, pageNumber);
             return ResponseEntity.ok()
                     .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, contentType)
                     .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "public, max-age=3600")

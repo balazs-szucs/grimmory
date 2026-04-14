@@ -7,9 +7,11 @@ import org.booklore.service.ArchiveService;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -48,10 +50,10 @@ public class ChapterCacheService {
 
                 for (int i = 0; i < entries.size(); i++) {
                     Path target = cacheDir.resolve("page_" + (i + 1) + ".jpg");
-                    if (!Files.exists(target)) {
-                        try (var out = Files.newOutputStream(target)) {
-                            archiveService.transferEntryTo(cbxPath, entries.get(i), out);
-                        }
+                    if (!Files.exists(target) || Files.size(target) == 0) {
+                        String entryName = entries.get(i);
+                        writeAtomically(target, out ->
+                                archiveService.transferEntryTo(cbxPath, entryName, out));
                     }
                 }
 
@@ -69,7 +71,32 @@ public class ChapterCacheService {
 
     public boolean hasPage(String cacheKey, int pageNumber) {
         Path pagePath = getCachedPage(cacheKey, pageNumber);
-        return Files.exists(pagePath);
+        try {
+            return Files.exists(pagePath) && Files.size(pagePath) > 0;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Writes data to a temp file in the same directory, then atomically moves
+     * it to the target path. If the write fails, the partial temp file is
+     * cleaned up and the target is never touched.
+     */
+    void writeAtomically(Path target, IOConsumer<OutputStream> writer) throws IOException {
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        try (OutputStream out = Files.newOutputStream(tmp)) {
+            writer.accept(out);
+        } catch (Exception e) {
+            Files.deleteIfExists(tmp);
+            throw e instanceof IOException io ? io : new IOException(e);
+        }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    @FunctionalInterface
+    interface IOConsumer<T> {
+        void accept(T t) throws IOException;
     }
 
     private Path getCacheDir(String cacheKey) {

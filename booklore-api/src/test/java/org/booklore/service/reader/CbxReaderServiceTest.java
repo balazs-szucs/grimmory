@@ -148,15 +148,19 @@ class CbxReaderServiceTest {
 
     @Test
     void testStreamPageImage_InvalidBookType_Throws() {
-        assertThrows(APIException.class, () ->
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        APIException ex = assertThrows(APIException.class, () ->
                 cbxReaderService.streamPageImage(1L, "../traversal", 1, new ByteArrayOutputStream())
         );
+        assertTrue(ex.getMessage().contains("Invalid book type"), "Expected INVALID_INPUT, got: " + ex.getMessage());
     }
 
     @Test
     void testInitCache_InvalidBookType_Throws() {
-        assertThrows(APIException.class, () ->
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        APIException ex = assertThrows(APIException.class, () ->
                 cbxReaderService.initCache(1L, "../traversal")
         );
+        assertTrue(ex.getMessage().contains("Invalid book type"), "Expected INVALID_INPUT, got: " + ex.getMessage());
     }
 }

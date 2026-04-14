@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,15 +49,19 @@ class PdfReaderServiceTest {
 
     @Test
     void testStreamPageImage_InvalidBookType_Throws() {
-        assertThrows(APIException.class, () ->
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
+        APIException ex = assertThrows(APIException.class, () ->
                 pdfReaderService.streamPageImage(1L, "../traversal", 1, new ByteArrayOutputStream())
         );
+        assertTrue(ex.getMessage().contains("Invalid book type"), "Expected INVALID_INPUT, got: " + ex.getMessage());
     }
 
     @Test
     void testInitCache_InvalidBookType_Throws() {
-        assertThrows(APIException.class, () ->
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
+        APIException ex = assertThrows(APIException.class, () ->
                 pdfReaderService.initCache(1L, "../traversal")
         );
+        assertTrue(ex.getMessage().contains("Invalid book type"), "Expected INVALID_INPUT, got: " + ex.getMessage());
     }
 }

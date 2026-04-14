@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.zip.ZipFile;
 
+import static org.springframework.http.MediaType.IMAGE_JPEG_VALUE;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -120,6 +122,31 @@ public class CbxReaderService {
     public long getArchiveLastModified(Long bookId, String bookType) throws IOException {
         Path cbxPath = getBookPath(bookId, bookType);
         return getCachedMetadata(cbxPath).lastModified();
+    }
+
+    /**
+     * Returns the MIME content type for a given page based on the archive
+     * entry's file extension. Falls back to {@code image/jpeg} for unknown
+     * extensions.
+     */
+    public String getPageContentType(Long bookId, String bookType, int page) throws IOException {
+        Path cbxPath = getBookPath(bookId, bookType);
+        CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
+        if (page < 1 || page > metadata.imageEntries().size()) {
+            return IMAGE_JPEG_VALUE;
+        }
+        String entryName = metadata.imageEntries().get(page - 1).toLowerCase();
+        return extensionToMediaType(entryName);
+    }
+
+    private static String extensionToMediaType(String name) {
+        if (name.endsWith(".png")) return "image/png";
+        if (name.endsWith(".webp")) return "image/webp";
+        if (name.endsWith(".avif")) return "image/avif";
+        if (name.endsWith(".gif")) return "image/gif";
+        if (name.endsWith(".bmp")) return "image/bmp";
+        if (name.endsWith(".heic")) return "image/heic";
+        return IMAGE_JPEG_VALUE; // jpg, jpeg, or unknown
     }
 
     public List<Integer> getAvailablePages(Long bookId) {

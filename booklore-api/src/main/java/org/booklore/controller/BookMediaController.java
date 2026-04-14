@@ -138,11 +138,13 @@ public class BookMediaController {
             WebRequest webRequest,
             HttpServletResponse response) throws IOException {
         long lastModified = cbxReaderService.getArchiveLastModified(bookId, bookType);
-        String etag = "W/\"" + bookId + "-" + pageNumber + "-" + lastModified + "\"";
+        String variant = (bookType == null || bookType.isBlank()) ? "default" : bookType;
+        String etag = "W/\"" + bookId + "-" + variant + "-" + pageNumber + "-" + lastModified + "\"";
         if (webRequest.checkNotModified(etag, lastModified)) {
             return;
         }
-        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
+        response.setContentType(cbxReaderService.getPageContentType(bookId, bookType, pageNumber));
+        response.setHeader("Cache-Control", "private, max-age=3600, stale-while-revalidate=3600");
         cbxReaderService.streamPageImage(bookId, bookType, pageNumber, response.getOutputStream());
     }
 

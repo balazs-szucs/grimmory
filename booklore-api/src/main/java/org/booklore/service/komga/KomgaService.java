@@ -369,11 +369,12 @@ public class KomgaService {
                     width = dim.getWidth() > 0 ? dim.getWidth() : null;
                     height = dim.getHeight() > 0 ? dim.getHeight() : null;
                 }
-                
+
+                String mediaType = isCBX ? getPageContentType(bookId, i) : "image/jpeg";
                 pages.add(KomgaPageDto.builder()
                         .number(i)
                         .fileName("page-" + i)
-                        .mediaType("image/jpeg")
+                        .mediaType(mediaType)
                         .width(width)
                         .height(height)
                         .build());
@@ -445,6 +446,20 @@ public class KomgaService {
                 .build();
     }
     
+    public String getPageContentType(Long bookId, int pageNumber) {
+        BookEntity book = bookRepository.findByIdForStreaming(bookId)
+                .orElseThrow(() -> new RuntimeException("Book not found: " + bookId));
+        if (book.getPrimaryBookFile() != null
+                && book.getPrimaryBookFile().getBookType() == BookFileType.CBX) {
+            try {
+                return cbxReaderService.getPageContentType(bookId, null, pageNumber);
+            } catch (IOException e) {
+                log.warn("Failed to detect content type for book {} page {}", bookId, pageNumber, e);
+            }
+        }
+        return "image/jpeg";
+    }
+
     public StreamingResponseBody getBookPageImage(Long bookId, Integer pageNumber, boolean convertToPng) throws IOException {
         log.debug("Getting page {} from book {} (convert to PNG: {})", pageNumber, bookId, convertToPng);
         
