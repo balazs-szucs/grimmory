@@ -1306,12 +1306,20 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       const items = this.filterAndDeduplicateAnnotations(allItems);
       const data = serializeAnnotations(items);
       this.lastAnnotationData = data;
-      this.annotationsDirty = false;
-      // Fire-and-forget the actual save call to keep the UI responsive
-      this.pdfAnnotationService.saveAnnotations(this.bookId, data).subscribe();
-      console.info('[PDF Annotations] Exported and background saving', items.length, 'annotations for book', this.bookId);
+
+      // Keep the request non-blocking, but only mark clean after success.
+      this.pdfAnnotationService.saveAnnotations(this.bookId, data).subscribe({
+        next: () => {
+          this.annotationsDirty = false;
+          console.info('[PDF Annotations] Exported and saved', items.length, 'annotations for book', this.bookId);
+        },
+        error: (err) => {
+          this.annotationsDirty = true;
+          console.error('[PDF Annotations] Failed to save annotations:', err);
+        }
+      });
     } catch (e) {
-      console.error('[PDF Annotations] Failed to save annotations:', e);
+      console.error('[PDF Annotations] Failed to export annotations:', e);
     }
   }
 

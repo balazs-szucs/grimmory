@@ -752,8 +752,9 @@ $transition-fast: 150ms ease;
 // Tablet (portrait) switches to mobile toolbar layout
 @media (width <= 1024px) {
   .pdf-header-toolbar {
-    height: $header-height;
+    height: calc(#{$header-height} + 4px + env(safe-area-inset-top));
     padding: 0 8px;
+    padding-top: env(safe-area-inset-top);
   }
 
   .desktop-actions {
@@ -797,7 +798,7 @@ $transition-fast: 150ms ease;
   }
 
   .search-bar {
-    top: $header-height;
+    top: calc(#{$header-height} + 4px + env(safe-area-inset-top));
 
     .search-input-wrapper {
       max-width: none;
@@ -807,7 +808,7 @@ $transition-fast: 150ms ease;
   .doc-viewer-info {
     right: 12px;
     left: 12px;
-    top: 48px;
+    top: calc(48px + env(safe-area-inset-top));
     justify-content: center;
   }
 
@@ -825,7 +826,7 @@ $transition-fast: 150ms ease;
   }
 
   .toolbar-overflow-menu {
-    top: $header-height;
+    top: calc(#{$header-height} + 4px + env(safe-area-inset-top));
     right: 4px;
     left: 4px;
     min-width: unset;
@@ -857,6 +858,7 @@ $transition-fast: 150ms ease;
 @media (width <= 480px) {
   .pdf-header-toolbar {
     padding: 0 6px;
+    padding-top: env(safe-area-inset-top);
   }
 
   .pdf-footer {
