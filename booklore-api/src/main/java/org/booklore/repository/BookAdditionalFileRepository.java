@@ -42,7 +42,7 @@ public interface BookAdditionalFileRepository extends JpaRepository<BookFileEnti
             @Param("bookId") Long bookId
     );
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
             UPDATE BookFileEntity bf SET

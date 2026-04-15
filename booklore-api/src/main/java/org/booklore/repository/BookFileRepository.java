@@ -28,12 +28,12 @@ public interface BookFileRepository extends JpaRepository<BookFileEntity, Long> 
     @Query("SELECT COUNT(bf) FROM BookFileEntity bf WHERE bf.book.id = :bookId")
     long countByBookId(@Param("bookId") Long bookId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("UPDATE BookFileEntity bf SET bf.book.id = :targetBookId WHERE bf.id IN :fileIds")
     void reassignFilesToBook(@Param("targetBookId") Long targetBookId, @Param("fileIds") List<Long> fileIds);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("UPDATE BookFileEntity bf SET bf.book.id = :targetBookId, bf.fileSubPath = :fileSubPath WHERE bf.id = :fileId")
     void reassignFileToBookWithPath(@Param("targetBookId") Long targetBookId, @Param("fileSubPath") String fileSubPath, @Param("fileId") Long fileId);

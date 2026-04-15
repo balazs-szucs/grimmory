@@ -1,0 +1,906 @@
+diff --git a/booklore-api/src/main/java/org/booklore/repository/AnnotationRepository.java b/booklore-api/src/main/java/org/booklore/repository/AnnotationRepository.java
+index 10442191..0eae49e7 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/AnnotationRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/AnnotationRepository.java
+@@ -2,8 +2,10 @@ package org.booklore.repository;
+ 
+ import org.booklore.model.entity.AnnotationEntity;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
+ import org.springframework.data.jpa.repository.Query;
+ import org.springframework.data.repository.query.Param;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.List;
+ import java.util.Optional;
+@@ -30,7 +32,10 @@ public interface AnnotationRepository extends JpaRepository<AnnotationEntity, Lo
+ 
+     long countByBookIdAndUserId(Long bookId, Long userId);
+ 
+-    void deleteByBookIdAndUserId(Long bookId, Long userId);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM AnnotationEntity a WHERE a.bookId = :bookId AND a.userId = :userId")
++    void deleteByBookIdAndUserId(@Param("bookId") Long bookId, @Param("userId") Long userId);
+ 
+     @Query("SELECT a FROM AnnotationEntity a JOIN FETCH a.book b JOIN FETCH b.metadata WHERE a.userId = :userId ORDER BY a.createdAt DESC")
+     List<AnnotationEntity> findByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookAdditionalFileRepository.java b/booklore-api/src/main/java/org/booklore/repository/BookAdditionalFileRepository.java
+index 621ce098..6333e5c0 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookAdditionalFileRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookAdditionalFileRepository.java
+@@ -42,7 +42,7 @@ public interface BookAdditionalFileRepository extends JpaRepository<BookFileEnti
+             @Param("bookId") Long bookId
+     );
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+             UPDATE BookFileEntity bf SET
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookFileRepository.java b/booklore-api/src/main/java/org/booklore/repository/BookFileRepository.java
+index 45268ede..9d1ae8f2 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookFileRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookFileRepository.java
+@@ -28,12 +28,12 @@ public interface BookFileRepository extends JpaRepository<BookFileEntity, Long>
+     @Query("SELECT COUNT(bf) FROM BookFileEntity bf WHERE bf.book.id = :bookId")
+     long countByBookId(@Param("bookId") Long bookId);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("UPDATE BookFileEntity bf SET bf.book.id = :targetBookId WHERE bf.id IN :fileIds")
+     void reassignFilesToBook(@Param("targetBookId") Long targetBookId, @Param("fileIds") List<Long> fileIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("UPDATE BookFileEntity bf SET bf.book.id = :targetBookId, bf.fileSubPath = :fileSubPath WHERE bf.id = :fileId")
+     void reassignFileToBookWithPath(@Param("targetBookId") Long targetBookId, @Param("fileSubPath") String fileSubPath, @Param("fileId") Long fileId);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookMetadataRepository.java b/booklore-api/src/main/java/org/booklore/repository/BookMetadataRepository.java
+index 5b372a50..3efcc829 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookMetadataRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookMetadataRepository.java
+@@ -15,12 +15,12 @@ public interface BookMetadataRepository extends JpaRepository<BookMetadataEntity
+     @Query("SELECT m FROM BookMetadataEntity m WHERE m.bookId IN :bookIds")
+     List<BookMetadataEntity> getMetadataForBookIds(@Param("bookIds") List<Long> bookIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("UPDATE BookMetadataEntity m SET m.coverUpdatedOn = :timestamp WHERE m.bookId = :bookId")
+     void updateCoverTimestamp(@Param("bookId") Long bookId, @Param("timestamp") Instant timestamp);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("UPDATE BookMetadataEntity m SET m.audiobookCoverUpdatedOn = :timestamp WHERE m.bookId = :bookId")
+     void updateAudiobookCoverTimestamp(@Param("bookId") Long bookId, @Param("timestamp") Instant timestamp);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookNoteV2Repository.java b/booklore-api/src/main/java/org/booklore/repository/BookNoteV2Repository.java
+index df58a0e7..feed5a52 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookNoteV2Repository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookNoteV2Repository.java
+@@ -2,8 +2,10 @@ package org.booklore.repository;
+ 
+ import org.booklore.model.entity.BookNoteV2Entity;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
+ import org.springframework.data.jpa.repository.Query;
+ import org.springframework.data.repository.query.Param;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.List;
+ import java.util.Optional;
+@@ -30,7 +32,10 @@ public interface BookNoteV2Repository extends JpaRepository<BookNoteV2Entity, Lo
+ 
+     long countByBookIdAndUserId(Long bookId, Long userId);
+ 
+-    void deleteByBookIdAndUserId(Long bookId, Long userId);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM BookNoteV2Entity n WHERE n.bookId = :bookId AND n.userId = :userId")
++    void deleteByBookIdAndUserId(@Param("bookId") Long bookId, @Param("userId") Long userId);
+ 
+     @Query("SELECT n FROM BookNoteV2Entity n JOIN FETCH n.book b JOIN FETCH b.metadata WHERE n.userId = :userId ORDER BY n.createdAt DESC")
+     List<BookNoteV2Entity> findByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookRepository.java b/booklore-api/src/main/java/org/booklore/repository/BookRepository.java
+index ba8defda..82276a7a 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookRepository.java
+@@ -7,6 +7,7 @@ import org.booklore.model.entity.BookEntity;
+ import org.booklore.model.entity.LibraryPathEntity;
+ import org.booklore.model.enums.BookFileType;
+ import org.booklore.repository.projection.BookCoverUpdateProjection;
++import org.booklore.repository.projection.BookEmbeddingProjection;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.data.jpa.repository.*;
+ import org.springframework.data.repository.query.Param;
+@@ -26,10 +27,11 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByIdForAudiobook(@Param("id") Long id);
+ 
+-    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "shelves", "libraryPath", "library", "bookFiles" })
++    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "libraryPath", "library", "bookFiles" })
+     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByIdWithBookFiles(@Param("id") Long id);
+ 
++    // Only ToOne paths in EntityGraph; collections (authors, categories, moods, tags) loaded via @BatchSize.
+     @EntityGraph(attributePaths = { "metadata", "bookFiles", "libraryPath", "library" })
+     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByIdForStreaming(@Param("id") Long id);
+@@ -38,11 +40,13 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByIdWithMetadata(@Param("id") Long id);
+ 
+-    @EntityGraph(attributePaths = { "metadata", "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags", "metadata.comicMetadata", "bookFiles" })
++    // Only ToOne paths in EntityGraph; collections (authors, categories, moods, tags, bookFiles) loaded via @BatchSize.
++    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata" })
+     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByIdFull(@Param("id") Long id);
+ 
+-    @EntityGraph(attributePaths = { "metadata", "metadata.authors", "metadata.categories", "metadata.tags", "metadata.comicMetadata", "libraryPath", "bookFiles" })
++    // Only ToOne paths in EntityGraph; collections (authors, categories, tags, bookFiles) loaded via @BatchSize.
++    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "libraryPath" })
+     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByIdForKoboDownload(@Param("id") Long id);
+ 
+@@ -53,7 +57,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     @Query("SELECT b FROM BookEntity b WHERE b.id IN :bookIds AND (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllForSummaryByIds(@Param("bookIds") Collection<Long> bookIds);
+ 
+-    @EntityGraph(attributePaths = {"bookFiles", "metadata", "library", "libraryPath"})
++    @EntityGraph(attributePaths = {"metadata", "library", "libraryPath"})
+     @Query("SELECT b FROM BookEntity b JOIN b.bookFiles bf WHERE bf.currentHash = :currentHash AND bf.isBookFormat = true AND (b.deleted IS NULL OR b.deleted = false)")
+     Optional<BookEntity> findByCurrentHash(@Param("currentHash") String currentHash);
+ 
+@@ -84,21 +88,13 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     @Query("SELECT b FROM BookEntity b WHERE (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllWithMetadata();
+ 
+-    @EntityGraph(attributePaths = {
+-        "metadata", "metadata.comicMetadata",
+-        "metadata.comicMetadata.characters", "metadata.comicMetadata.teams", "metadata.comicMetadata.locations", "metadata.comicMetadata.creatorMappings",
+-        "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags",
+-        "shelves", "libraryPath", "library", "bookFiles"
+-    })
++    // Only ToOne paths in EntityGraph; collections loaded via @BatchSize to avoid 11-way Cartesian product.
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath", "library"})
+     @Query("SELECT b FROM BookEntity b WHERE b.id IN :bookIds AND (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllWithMetadataByIds(@Param("bookIds") Set<Long> bookIds);
+ 
+-    @EntityGraph(attributePaths = {
+-        "metadata", "metadata.comicMetadata",
+-        "metadata.comicMetadata.characters", "metadata.comicMetadata.teams", "metadata.comicMetadata.locations", "metadata.comicMetadata.creatorMappings",
+-        "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags",
+-        "shelves", "libraryPath", "library", "bookFiles"
+-    })
++    // Only ToOne paths in EntityGraph; collections loaded via @BatchSize to avoid 11-way Cartesian product.
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath", "library"})
+     @Query("SELECT b FROM BookEntity b WHERE b.library.id = :libraryId AND (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllWithMetadataByLibraryId(@Param("libraryId") Long libraryId);
+ 
+@@ -124,16 +120,13 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     @Query("SELECT b FROM BookEntity b WHERE b.library.id IN :libraryIds AND (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllWithMetadataByLibraryIds(@Param("libraryIds") Collection<Long> libraryIds);
+ 
+-    @EntityGraph(attributePaths = {
+-        "metadata", "metadata.comicMetadata",
+-        "metadata.comicMetadata.characters", "metadata.comicMetadata.teams", "metadata.comicMetadata.locations", "metadata.comicMetadata.creatorMappings",
+-        "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags",
+-        "shelves", "libraryPath", "library", "bookFiles"
+-    })
++    // Only ToOne paths in EntityGraph; collections loaded via @BatchSize to avoid 11-way Cartesian product.
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath", "library"})
+     @Query("SELECT DISTINCT b FROM BookEntity b JOIN b.shelves s WHERE s.id = :shelfId AND (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllWithMetadataByShelfId(@Param("shelfId") Long shelfId);
+ 
+-    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "shelves", "libraryPath", "library", "bookFiles" })
++    // Only ToOne paths in EntityGraph; collections (shelves, bookFiles) loaded via @BatchSize.
++    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "libraryPath", "library" })
+     @Query("SELECT DISTINCT b FROM BookEntity b JOIN b.bookFiles bf WHERE bf.isBookFormat = true AND bf.fileSizeKb IS NULL AND (b.deleted IS NULL OR b.deleted = false)")
+     List<BookEntity> findAllWithMetadataByFileSizeKbIsNull();
+ 
+@@ -153,12 +146,12 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+             """)
+     List<BookEntity> findBooksWithMetadataAndAuthors(@Param("bookIds") List<Long> bookIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("DELETE FROM BookEntity b WHERE b.deleted IS TRUE")
+     int deleteAllSoftDeleted();
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("DELETE FROM BookEntity b WHERE b.deleted IS TRUE AND b.deletedAt < :cutoffDate")
+     int deleteSoftDeletedBefore(@Param("cutoffDate") Instant cutoffDate);
+@@ -241,7 +234,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     @Query("SELECT b.id as id, m.coverUpdatedOn as coverUpdatedOn FROM BookEntity b LEFT JOIN b.metadata m WHERE b.id IN :bookIds")
+     List<BookCoverUpdateProjection> findCoverUpdateInfoByIds(@Param("bookIds") Collection<Long> bookIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Query("""
+             UPDATE BookEntity b SET
+                 b.library.id = :libraryId,
+@@ -347,7 +340,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+      * Find books by series name for a library when groupUnknown=true.
+      * Uses the first bookFile.fileName as fallback when metadata.seriesName is null.
+      */
+-    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "shelves", "libraryPath", "bookFiles"})
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath"})
+     @Query("""
+             SELECT DISTINCT b FROM BookEntity b
+             LEFT JOIN b.metadata m
+@@ -368,7 +361,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+      * Find books by series name for a library when groupUnknown=false.
+      * Matches by series name, or by title/filename for books without series.
+      */
+-    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "shelves", "libraryPath", "bookFiles"})
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath"})
+     @Query("""
+             SELECT b FROM BookEntity b
+             LEFT JOIN b.metadata m
+@@ -397,7 +390,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     /**
+      * Find books by series name across all libraries when groupUnknown=true.
+      */
+-    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "shelves", "libraryPath", "bookFiles"})
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath"})
+     @Query("""
+             SELECT DISTINCT b FROM BookEntity b
+             LEFT JOIN b.metadata m
+@@ -418,7 +411,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+     /**
+      * Find books by series name across all libraries when groupUnknown=false.
+      */
+-    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "shelves", "libraryPath", "bookFiles"})
++    @EntityGraph(attributePaths = {"metadata", "metadata.comicMetadata", "libraryPath"})
+     @Query("""
+             SELECT b FROM BookEntity b
+             LEFT JOIN b.metadata m
+@@ -516,6 +509,6 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
+             AND b.id <> :excludeBookId
+             AND m.embeddingVector IS NOT NULL
+             """)
+-    List<org.booklore.repository.projection.BookEmbeddingProjection> findAllEmbeddingsForRecommendation(@Param("excludeBookId") Long excludeBookId);
++    List<BookEmbeddingProjection> findAllEmbeddingsForRecommendation(@Param("excludeBookId") Long excludeBookId);
+ 
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookReviewRepository.java b/booklore-api/src/main/java/org/booklore/repository/BookReviewRepository.java
+index 950f2f4a..bf3d2e19 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookReviewRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookReviewRepository.java
+@@ -12,7 +12,7 @@ import java.util.List;
+ public interface BookReviewRepository extends JpaRepository<BookReviewEntity, Long> {
+     List<BookReviewEntity> findByBookMetadataBookId(Long bookId);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("DELETE FROM BookReviewEntity r WHERE r.bookMetadata.book.id = :bookId")
+     void deleteByBookMetadataBookId(@Param("bookId") Long bookId);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/BookdropFileRepository.java b/booklore-api/src/main/java/org/booklore/repository/BookdropFileRepository.java
+index c09733ea..09c628cd 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/BookdropFileRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/BookdropFileRepository.java
+@@ -25,7 +25,7 @@ public interface BookdropFileRepository extends JpaRepository<BookdropFileEntity
+     long countByStatus(Status status);
+ 
+     @Transactional
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Query("DELETE FROM BookdropFileEntity f WHERE f.filePath LIKE CONCAT(:prefix, '%')")
+     int deleteAllByFilePathStartingWith(@Param("prefix") String prefix);
+ 
+diff --git a/booklore-api/src/main/java/org/booklore/repository/ComicCharacterRepository.java b/booklore-api/src/main/java/org/booklore/repository/ComicCharacterRepository.java
+index 0bd9edd4..934f3ece 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/ComicCharacterRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/ComicCharacterRepository.java
+@@ -11,7 +11,7 @@ public interface ComicCharacterRepository extends JpaRepository<ComicCharacterEn
+ 
+     Optional<ComicCharacterEntity> findByName(String name);
+ 
+-    @Modifying(flushAutomatically = true)
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Query("DELETE FROM ComicCharacterEntity c WHERE c.id NOT IN (SELECT cc.id FROM ComicMetadataEntity m JOIN m.characters cc)")
+     void deleteOrphaned();
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/ComicCreatorMappingRepository.java b/booklore-api/src/main/java/org/booklore/repository/ComicCreatorMappingRepository.java
+index c6d61086..be3c871b 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/ComicCreatorMappingRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/ComicCreatorMappingRepository.java
+@@ -3,6 +3,10 @@ package org.booklore.repository;
+ import org.booklore.model.entity.ComicCreatorMappingEntity;
+ import org.booklore.model.enums.ComicCreatorRole;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.List;
+ 
+@@ -12,5 +16,8 @@ public interface ComicCreatorMappingRepository extends JpaRepository<ComicCreato
+ 
+     List<ComicCreatorMappingEntity> findByComicMetadataBookIdAndRole(Long bookId, ComicCreatorRole role);
+ 
+-    void deleteByComicMetadataBookId(Long bookId);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM ComicCreatorMappingEntity m WHERE m.comicMetadata.bookId = :bookId")
++    void deleteByComicMetadataBookId(@Param("bookId") Long bookId);
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/ComicCreatorRepository.java b/booklore-api/src/main/java/org/booklore/repository/ComicCreatorRepository.java
+index 52b42331..512995ec 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/ComicCreatorRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/ComicCreatorRepository.java
+@@ -11,7 +11,7 @@ public interface ComicCreatorRepository extends JpaRepository<ComicCreatorEntity
+ 
+     Optional<ComicCreatorEntity> findByName(String name);
+ 
+-    @Modifying(flushAutomatically = true)
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Query("DELETE FROM ComicCreatorEntity c WHERE c.id NOT IN (SELECT cm.creator.id FROM ComicCreatorMappingEntity cm)")
+     void deleteOrphaned();
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/ComicLocationRepository.java b/booklore-api/src/main/java/org/booklore/repository/ComicLocationRepository.java
+index c4374b48..977a197b 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/ComicLocationRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/ComicLocationRepository.java
+@@ -11,7 +11,7 @@ public interface ComicLocationRepository extends JpaRepository<ComicLocationEnti
+ 
+     Optional<ComicLocationEntity> findByName(String name);
+ 
+-    @Modifying(flushAutomatically = true)
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Query("DELETE FROM ComicLocationEntity c WHERE c.id NOT IN (SELECT l.id FROM ComicMetadataEntity m JOIN m.locations l)")
+     void deleteOrphaned();
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/ComicTeamRepository.java b/booklore-api/src/main/java/org/booklore/repository/ComicTeamRepository.java
+index 4508e396..3cc91e1a 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/ComicTeamRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/ComicTeamRepository.java
+@@ -11,7 +11,7 @@ public interface ComicTeamRepository extends JpaRepository<ComicTeamEntity, Long
+ 
+     Optional<ComicTeamEntity> findByName(String name);
+ 
+-    @Modifying(flushAutomatically = true)
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Query("DELETE FROM ComicTeamEntity t WHERE t.id NOT IN (SELECT t2.id FROM ComicMetadataEntity m JOIN m.teams t2)")
+     void deleteOrphaned();
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/EmailRecipientV2Repository.java b/booklore-api/src/main/java/org/booklore/repository/EmailRecipientV2Repository.java
+index c7d7e053..922ecd18 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/EmailRecipientV2Repository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/EmailRecipientV2Repository.java
+@@ -17,7 +17,7 @@ public interface EmailRecipientV2Repository extends JpaRepository<EmailRecipient
+ 
+     List<EmailRecipientV2Entity> findAllByUserId(Long userId);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("UPDATE EmailRecipientV2Entity e SET e.defaultRecipient = false WHERE e.defaultRecipient = true AND e.userId = :userId")
+     void updateAllRecipientsToNonDefault(Long userId);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/KoboDeletedBookProgressRepository.java b/booklore-api/src/main/java/org/booklore/repository/KoboDeletedBookProgressRepository.java
+index fc4bc9be..33507d5c 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/KoboDeletedBookProgressRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/KoboDeletedBookProgressRepository.java
+@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
+ @Repository
+ public interface KoboDeletedBookProgressRepository extends JpaRepository<KoboDeletedBookProgressEntity, Long> {
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("DELETE FROM KoboDeletedBookProgressEntity p WHERE p.snapshotId = :snapshotId AND p.userId = :userId")
+     void deleteBySnapshotIdAndUserId(@Param("snapshotId") String snapshotId, @Param("userId") Long userId);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/KoboSnapshotBookRepository.java b/booklore-api/src/main/java/org/booklore/repository/KoboSnapshotBookRepository.java
+index 5f66aaec..8a8cdf1f 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/KoboSnapshotBookRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/KoboSnapshotBookRepository.java
+@@ -18,7 +18,7 @@ public interface KoboSnapshotBookRepository extends JpaRepository<KoboSnapshotBo
+ 
+     Page<KoboSnapshotBookEntity> findBySnapshot_IdAndSyncedFalse(String snapshotId, Pageable pageable);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("UPDATE KoboSnapshotBookEntity b SET b.synced = true WHERE b.snapshot.id = :snapshotId AND b.bookId IN :bookIds")
+     void markBooksSynced(@Param("snapshotId") String snapshotId, @Param("bookIds") List<Long> bookIds);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/MetadataFetchJobRepository.java b/booklore-api/src/main/java/org/booklore/repository/MetadataFetchJobRepository.java
+index f01079e0..1368a606 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/MetadataFetchJobRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/MetadataFetchJobRepository.java
+@@ -7,22 +7,24 @@ import org.springframework.data.jpa.repository.Query;
+ import org.springframework.stereotype.Repository;
+ import org.springframework.transaction.annotation.Transactional;
+ 
++import org.springframework.data.repository.query.Param;
++
+ import java.time.Instant;
+ import java.util.List;
+ 
+ @Repository
+ public interface MetadataFetchJobRepository extends JpaRepository<MetadataFetchJobEntity, String> {
+ 
+-    int deleteAllByCompletedAtBefore(Instant cutoff);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM MetadataFetchJobEntity m WHERE m.completedAt < :cutoff")
++    int deleteAllByCompletedAtBefore(@Param("cutoff") Instant cutoff);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("DELETE FROM MetadataFetchJobEntity")
+     int deleteAllRecords();
+ 
+-    @Query("SELECT COUNT(m) FROM MetadataFetchJobEntity m")
+-    long countAll();
+-
+     @Query("SELECT DISTINCT t FROM MetadataFetchJobEntity t LEFT JOIN FETCH t.proposals")
+     List<MetadataFetchJobEntity> findAllWithProposals();
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/OidcSessionRepository.java b/booklore-api/src/main/java/org/booklore/repository/OidcSessionRepository.java
+index c5c8f051..d3904031 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/OidcSessionRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/OidcSessionRepository.java
+@@ -2,7 +2,11 @@ package org.booklore.repository;
+ 
+ import org.booklore.model.entity.OidcSessionEntity;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
+ import org.springframework.stereotype.Repository;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.time.Instant;
+ import java.util.List;
+@@ -19,7 +23,13 @@ public interface OidcSessionRepository extends JpaRepository<OidcSessionEntity,
+ 
+     List<OidcSessionEntity> findByUserIdAndRevokedFalse(Long userId);
+ 
+-    void deleteByRevokedTrueAndCreatedAtBefore(Instant cutoff);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM OidcSessionEntity s WHERE s.revoked = true AND s.createdAt < :cutoff")
++    void deleteByRevokedTrueAndCreatedAtBefore(@Param("cutoff") Instant cutoff);
+ 
+-    void deleteByCreatedAtBefore(Instant cutoff);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM OidcSessionEntity s WHERE s.createdAt < :cutoff")
++    void deleteByCreatedAtBefore(@Param("cutoff") Instant cutoff);
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/PdfAnnotationRepository.java b/booklore-api/src/main/java/org/booklore/repository/PdfAnnotationRepository.java
+index 2d145dd9..3ba5dd47 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/PdfAnnotationRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/PdfAnnotationRepository.java
+@@ -2,6 +2,10 @@ package org.booklore.repository;
+ 
+ import org.booklore.model.entity.PdfAnnotationEntity;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.Optional;
+ 
+@@ -9,5 +13,8 @@ public interface PdfAnnotationRepository extends JpaRepository<PdfAnnotationEnti
+ 
+     Optional<PdfAnnotationEntity> findByBookIdAndUserId(Long bookId, Long userId);
+ 
+-    void deleteByBookIdAndUserId(Long bookId, Long userId);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM PdfAnnotationEntity a WHERE a.bookId = :bookId AND a.userId = :userId")
++    void deleteByBookIdAndUserId(@Param("bookId") Long bookId, @Param("userId") Long userId);
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/RefreshTokenRepository.java b/booklore-api/src/main/java/org/booklore/repository/RefreshTokenRepository.java
+index 78fb7d43..0c8c1b4a 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/RefreshTokenRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/RefreshTokenRepository.java
+@@ -3,6 +3,10 @@ package org.booklore.repository;
+ import org.booklore.model.entity.BookLoreUserEntity;
+ import org.booklore.model.entity.RefreshTokenEntity;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.List;
+ import java.util.Optional;
+@@ -10,5 +14,9 @@ import java.util.Optional;
+ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity, Long> {
+     Optional<RefreshTokenEntity> findByToken(String token);
+     List<RefreshTokenEntity> findAllByUserAndRevokedFalse(BookLoreUserEntity user);
+-    void deleteByUser(BookLoreUserEntity user);
++
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM RefreshTokenEntity t WHERE t.user = :user")
++    void deleteByUser(@Param("user") BookLoreUserEntity user);
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/ShelfRepository.java b/booklore-api/src/main/java/org/booklore/repository/ShelfRepository.java
+index 1c4727fa..146fbf86 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/ShelfRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/ShelfRepository.java
+@@ -23,8 +23,8 @@ public interface ShelfRepository extends JpaRepository<ShelfEntity, Long> {
+     @Query("SELECT s FROM ShelfEntity s WHERE s.id = :id")
+     Optional<ShelfEntity> findByIdWithUser(@Param("id") Long id);
+ 
+-    @org.springframework.data.jpa.repository.Query("SELECT s FROM ShelfEntity s WHERE s.user.id = :userId OR s.isPublic = true")
+-    List<ShelfEntity> findByUserIdOrPublicShelfTrue(@org.springframework.data.repository.query.Param("userId") Long userId);
++    @Query("SELECT s FROM ShelfEntity s WHERE s.user.id = :userId OR s.isPublic = true")
++    List<ShelfEntity> findByUserIdOrPublicShelfTrue(@Param("userId") Long userId);
+ 
+     List<ShelfEntity> findByUserIdInAndName(List<Long> userIds, String name);
+ }
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserBookFileProgressRepository.java b/booklore-api/src/main/java/org/booklore/repository/UserBookFileProgressRepository.java
+index ca039bea..bab3e1dc 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/UserBookFileProgressRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/UserBookFileProgressRepository.java
+@@ -63,7 +63,7 @@ public interface UserBookFileProgressRepository extends JpaRepository<UserBookFi
+             @Param("bookIds") Iterable<Long> bookIds
+     );
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+         DELETE FROM UserBookFileProgressEntity ubfp
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserBookProgressRepository.java b/booklore-api/src/main/java/org/booklore/repository/UserBookProgressRepository.java
+index e0dc4712..047c5665 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/UserBookProgressRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/UserBookProgressRepository.java
+@@ -74,7 +74,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
+             """)
+     List<CompletionTimelineDto> findCompletionTimelineByUser(@Param("userId") Long userId, @Param("year") int year);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+         UPDATE UserBookProgressEntity ubp
+@@ -99,7 +99,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
+     """)
+     Set<Long> findExistingProgressBookIds(@Param("userId") Long userId, @Param("bookIds") Set<Long> bookIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+         UPDATE UserBookProgressEntity ubp
+@@ -118,7 +118,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
+     """)
+     int bulkResetBookloreProgress(@Param("userId") Long userId, @Param("bookIds") List<Long> bookIds, @Param("modifiedTime") java.time.Instant modifiedTime);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+         UPDATE UserBookProgressEntity ubp
+@@ -132,7 +132,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
+     """)
+     int bulkResetKoreaderProgress(@Param("userId") Long userId, @Param("bookIds") List<Long> bookIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+         UPDATE UserBookProgressEntity ubp
+@@ -146,7 +146,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
+     """)
+     int bulkResetKoboProgress(@Param("userId") Long userId, @Param("bookIds") List<Long> bookIds);
+ 
+-    @Modifying
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
+     @Transactional
+     @Query("""
+         UPDATE UserBookProgressEntity ubp
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserContentRestrictionRepository.java b/booklore-api/src/main/java/org/booklore/repository/UserContentRestrictionRepository.java
+index 595ea2ff..1ce7f48e 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/UserContentRestrictionRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/UserContentRestrictionRepository.java
+@@ -4,8 +4,10 @@ import org.booklore.model.entity.UserContentRestrictionEntity;
+ import org.booklore.model.enums.ContentRestrictionMode;
+ import org.booklore.model.enums.ContentRestrictionType;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
+ import org.springframework.data.jpa.repository.Query;
+ import org.springframework.data.repository.query.Param;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.List;
+ import java.util.Optional;
+@@ -21,9 +23,15 @@ public interface UserContentRestrictionRepository extends JpaRepository<UserCont
+     Optional<UserContentRestrictionEntity> findByUserIdAndRestrictionTypeAndValue(
+             Long userId, ContentRestrictionType restrictionType, String value);
+ 
+-    void deleteByUserId(Long userId);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM UserContentRestrictionEntity r WHERE r.user.id = :userId")
++    void deleteByUserId(@Param("userId") Long userId);
+ 
+-    void deleteByUserIdAndRestrictionType(Long userId, ContentRestrictionType type);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM UserContentRestrictionEntity r WHERE r.user.id = :userId AND r.restrictionType = :type")
++    void deleteByUserIdAndRestrictionType(@Param("userId") Long userId, @Param("type") ContentRestrictionType type);
+ 
+     @Query("SELECT r FROM UserContentRestrictionEntity r WHERE r.user.id = :userId AND r.restrictionType = :type AND r.mode = :mode")
+     List<UserContentRestrictionEntity> findByUserIdAndTypeAndMode(
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserEmailProviderPreferenceRepository.java b/booklore-api/src/main/java/org/booklore/repository/UserEmailProviderPreferenceRepository.java
+index e6785537..d45acfa9 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/UserEmailProviderPreferenceRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/UserEmailProviderPreferenceRepository.java
+@@ -2,7 +2,11 @@ package org.booklore.repository;
+ 
+ import org.booklore.model.entity.UserEmailProviderPreferenceEntity;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Modifying;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
+ import org.springframework.stereotype.Repository;
++import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.Optional;
+ 
+@@ -11,6 +15,9 @@ public interface UserEmailProviderPreferenceRepository extends JpaRepository<Use
+ 
+     Optional<UserEmailProviderPreferenceEntity> findByUserId(Long userId);
+ 
+-    void deleteByUserId(Long userId);
++    @Modifying(clearAutomatically = true, flushAutomatically = true)
++    @Transactional
++    @Query("DELETE FROM UserEmailProviderPreferenceEntity p WHERE p.userId = :userId")
++    void deleteByUserId(@Param("userId") Long userId);
+ }
+ 
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserRepository.java b/booklore-api/src/main/java/org/booklore/repository/UserRepository.java
+index e15226fe..7420d5a6 100644
+--- a/booklore-api/src/main/java/org/booklore/repository/UserRepository.java
++++ b/booklore-api/src/main/java/org/booklore/repository/UserRepository.java
+@@ -2,8 +2,6 @@ package org.booklore.repository;
+ 
+ import org.booklore.model.entity.BookLoreUserEntity;
+ import org.booklore.model.enums.ProvisioningMethod;
+-import org.jspecify.annotations.NonNull;
+-import org.springframework.data.jpa.repository.EntityGraph;
+ import org.springframework.data.jpa.repository.JpaRepository;
+ import org.springframework.data.jpa.repository.Query;
+ import org.springframework.data.repository.query.Param;
+@@ -13,58 +11,30 @@ import java.util.List;
+ import java.util.Optional;
+ 
+ @Repository
+-public interface UserRepository extends JpaRepository<BookLoreUserEntity, Long> {
++public interface UserRepository extends JpaRepository<BookLoreUserEntity, Long>, UserRepositoryCustom {
+ 
+     Optional<BookLoreUserEntity> findByUsername(String username);
+ 
+     Optional<BookLoreUserEntity> findByEmail(String email);
+ 
+-    Optional<BookLoreUserEntity> findById(@NonNull Long id);
+-
+-    /**
+-     * Fetch a user with all eagerly-needed associations (settings, libraries, permissions)
+-     * in a single query to prevent N+1 problems after OSIV is disabled.
+-     */
+-    @EntityGraph(attributePaths = {"settings", "libraries", "libraries.libraryPaths", "permissions"})
+-    @Query("SELECT u FROM BookLoreUserEntity u WHERE u.id = :id")
+-    Optional<BookLoreUserEntity> findByIdWithDetails(@Param("id") Long id);
+-
+     /**
+      * Fetch a user with settings and permissions (without libraries) for settings-related operations.
+      */
+-    @EntityGraph(attributePaths = {"settings", "permissions"})
+-    @Query("SELECT u FROM BookLoreUserEntity u WHERE u.id = :id")
++    @Query("SELECT DISTINCT u FROM BookLoreUserEntity u LEFT JOIN FETCH u.settings LEFT JOIN FETCH u.permissions WHERE u.id = :id")
+     Optional<BookLoreUserEntity> findByIdWithSettings(@Param("id") Long id);
+ 
+     /**
+      * Fetch a user with libraries and permissions for authorization/library-access operations.
+      */
+-    @EntityGraph(attributePaths = {"libraries", "libraries.libraryPaths", "permissions"})
+-    @Query("SELECT u FROM BookLoreUserEntity u WHERE u.id = :id")
++    @Query("SELECT DISTINCT u FROM BookLoreUserEntity u LEFT JOIN FETCH u.libraries l LEFT JOIN FETCH l.libraryPaths LEFT JOIN FETCH u.permissions WHERE u.id = :id")
+     Optional<BookLoreUserEntity> findByIdWithLibraries(@Param("id") Long id);
+ 
+     /**
+      * Fetch a user with just permissions for security checks or simple profile updates.
+      */
+-    @EntityGraph(attributePaths = {"permissions"})
+-    @Query("SELECT u FROM BookLoreUserEntity u WHERE u.id = :id")
++    @Query("SELECT DISTINCT u FROM BookLoreUserEntity u LEFT JOIN FETCH u.permissions WHERE u.id = :id")
+     Optional<BookLoreUserEntity> findByIdWithPermissions(@Param("id") Long id);
+ 
+-    /**
+-     * Fetch all users with their settings, libraries, and permissions in a single query.
+-     * Prevents N+1 when listing all users (admin panel).
+-     */
+-    @EntityGraph(attributePaths = {"settings", "libraries", "libraries.libraryPaths", "permissions"})
+-    @Query("SELECT DISTINCT u FROM BookLoreUserEntity u")
+-    List<BookLoreUserEntity> findAllWithDetails();
+-
+-    /**
+-     * Fetch a user by username with all associations needed for authentication/DTO mapping.
+-     */
+-    @EntityGraph(attributePaths = {"settings", "libraries", "libraries.libraryPaths", "permissions"})
+-    @Query("SELECT u FROM BookLoreUserEntity u WHERE u.username = :username")
+-    Optional<BookLoreUserEntity> findByUsernameWithDetails(@Param("username") String username);
+-
+     long countByProvisioningMethod(ProvisioningMethod provisioningMethod);
+ 
+     Optional<BookLoreUserEntity> findByOidcIssuerAndOidcSubject(String oidcIssuer, String oidcSubject);
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserRepositoryCustom.java b/booklore-api/src/main/java/org/booklore/repository/UserRepositoryCustom.java
+new file mode 100644
+index 00000000..519ba791
+--- /dev/null
++++ b/booklore-api/src/main/java/org/booklore/repository/UserRepositoryCustom.java
+@@ -0,0 +1,13 @@
++package org.booklore.repository;
++
++import org.booklore.model.entity.BookLoreUserEntity;
++
++import java.util.List;
++import java.util.Optional;
++
++public interface UserRepositoryCustom {
++
++    Optional<BookLoreUserEntity> findByIdWithDetails(Long id);
++
++    List<BookLoreUserEntity> findAllWithDetails();
++}
+diff --git a/booklore-api/src/main/java/org/booklore/repository/UserRepositoryImpl.java b/booklore-api/src/main/java/org/booklore/repository/UserRepositoryImpl.java
+new file mode 100644
+index 00000000..36c851f4
+--- /dev/null
++++ b/booklore-api/src/main/java/org/booklore/repository/UserRepositoryImpl.java
+@@ -0,0 +1,65 @@
++package org.booklore.repository;
++
++import jakarta.persistence.EntityManager;
++import jakarta.persistence.PersistenceContext;
++import org.booklore.model.entity.BookLoreUserEntity;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.util.List;
++import java.util.Optional;
++
++public class UserRepositoryImpl implements UserRepositoryCustom {
++
++    @PersistenceContext
++    private EntityManager em;
++
++    @Override
++    @Transactional(readOnly = true)
++    public Optional<BookLoreUserEntity> findByIdWithDetails(Long id) {
++        // Query 1: user + settings + permissions (1 ToMany + 1 ToOne — no Cartesian)
++        List<BookLoreUserEntity> users = em.createQuery(
++                        "SELECT DISTINCT u FROM BookLoreUserEntity u " +
++                                "LEFT JOIN FETCH u.settings " +
++                                "LEFT JOIN FETCH u.permissions " +
++                                "WHERE u.id = :id",
++                        BookLoreUserEntity.class)
++                .setParameter("id", id)
++                .getResultList();
++        if (users.isEmpty()) return Optional.empty();
++
++        // Query 2: libraries + libraryPaths on same managed entity (hierarchical — no Cartesian)
++        em.createQuery(
++                        "SELECT DISTINCT u FROM BookLoreUserEntity u " +
++                                "LEFT JOIN FETCH u.libraries l " +
++                                "LEFT JOIN FETCH l.libraryPaths " +
++                                "WHERE u.id = :id",
++                        BookLoreUserEntity.class)
++                .setParameter("id", id)
++                .getResultList();
++
++        return Optional.of(users.get(0));
++    }
++
++    @Override
++    @Transactional(readOnly = true)
++    public List<BookLoreUserEntity> findAllWithDetails() {
++        // Query 1: all users + settings + permissions
++        List<BookLoreUserEntity> users = em.createQuery(
++                        "SELECT DISTINCT u FROM BookLoreUserEntity u " +
++                                "LEFT JOIN FETCH u.settings " +
++                                "LEFT JOIN FETCH u.permissions",
++                        BookLoreUserEntity.class)
++                .getResultList();
++        if (users.isEmpty()) return users;
++
++        // Query 2: all users + libraries + libraryPaths (fills in same persistence context)
++        em.createQuery(
++                        "SELECT DISTINCT u FROM BookLoreUserEntity u " +
++                                "LEFT JOIN FETCH u.libraries l " +
++                                "LEFT JOIN FETCH l.libraryPaths",
++                        BookLoreUserEntity.class)
++                .getResultList();
++
++        return users;
++    }
++}
+diff --git a/booklore-api/src/main/java/org/booklore/service/oidc/OidcGroupMappingService.java b/booklore-api/src/main/java/org/booklore/service/oidc/OidcGroupMappingService.java
+index b4722ae6..1bd74c2a 100644
+--- a/booklore-api/src/main/java/org/booklore/service/oidc/OidcGroupMappingService.java
++++ b/booklore-api/src/main/java/org/booklore/service/oidc/OidcGroupMappingService.java
+@@ -39,6 +39,7 @@ public class OidcGroupMappingService {
+         return mapper.toDtoList(repository.findAll());
+     }
+ 
++    @Transactional
+     public OidcGroupMapping create(OidcGroupMapping dto) {
+         OidcGroupMappingEntity entity = mapper.toEntity(dto);
+         entity.setId(null);
+@@ -48,6 +49,7 @@ public class OidcGroupMappingService {
+         return mapper.toDto(saved);
+     }
+ 
++    @Transactional
+     public OidcGroupMapping update(Long id, OidcGroupMapping dto) {
+         OidcGroupMappingEntity existing = repository.findById(id)
+                 .orElseThrow(() -> ApiError.GENERIC_NOT_FOUND.createException("OIDC group mapping not found"));
+@@ -62,6 +64,7 @@ public class OidcGroupMappingService {
+         return mapper.toDto(saved);
+     }
+ 
++    @Transactional
+     public void delete(Long id) {
+         OidcGroupMappingEntity existing = repository.findById(id)
+                 .orElseThrow(() -> ApiError.GENERIC_NOT_FOUND.createException("OIDC group mapping not found"));
+diff --git a/booklore-api/src/main/java/org/booklore/task/tasks/TempFetchedMetadataCleanupTask.java b/booklore-api/src/main/java/org/booklore/task/tasks/TempFetchedMetadataCleanupTask.java
+index c6627bdb..4585a9f1 100644
+--- a/booklore-api/src/main/java/org/booklore/task/tasks/TempFetchedMetadataCleanupTask.java
++++ b/booklore-api/src/main/java/org/booklore/task/tasks/TempFetchedMetadataCleanupTask.java
+@@ -71,7 +71,7 @@ public class TempFetchedMetadataCleanupTask implements Task {
+ 
+     @Override
+     public String getMetadata() {
+-        long count = metadataFetchJobRepository.countAll();
++        long count = metadataFetchJobRepository.count();
+         return "Metadata " + (count != 1 ? "rows" : "row") + " pending cleanup: " + count;
+     }
+ }
+\ No newline at end of file
+diff --git a/booklore-api/src/main/resources/db/migration/V139__Add_missing_query_indexes.sql b/booklore-api/src/main/resources/db/migration/V139__Add_missing_query_indexes.sql
+new file mode 100644
+index 00000000..ecf407b3
+--- /dev/null
++++ b/booklore-api/src/main/resources/db/migration/V139__Add_missing_query_indexes.sql
+@@ -0,0 +1,26 @@
++-- Missing indexes for frequently-queried columns without index support.
++-- Prevents full table scans on FK lookups and WHERE-clause columns.
++
++-- book_file.book_id: FK used in repository methods (count, filter, join by book)
++CREATE INDEX IF NOT EXISTS idx_book_file_book_id ON book_file (book_id);
++
++-- book_file.current_hash: used in deduplication lookups (findByCurrentHash*)
++CREATE INDEX IF NOT EXISTS idx_book_file_current_hash ON book_file (current_hash);
++
++-- book_file.is_book: frequently filtered in WHERE clauses
++CREATE INDEX IF NOT EXISTS idx_book_file_is_book ON book_file (is_book);
++
++-- book.library_path_id: FK used in path-scoped queries and library rescans
++CREATE INDEX IF NOT EXISTS idx_book_library_path_id ON book (library_path_id);
++
++-- refresh_token.user_id: FK used in findAllByUserAndRevokedFalse, deleteByUser
++CREATE INDEX IF NOT EXISTS idx_refresh_token_user_id ON refresh_token (user_id);
++
++-- oidc_session: composite for cleanup queries (deleteByRevokedTrueAndCreatedAtBefore)
++CREATE INDEX IF NOT EXISTS idx_oidc_session_revoked_created ON oidc_session (revoked, created_at);
++
++-- metadata_fetch_jobs.completed_at: used in job cleanup (deleteAllByCompletedAtBefore)
++CREATE INDEX IF NOT EXISTS idx_metadata_fetch_jobs_completed ON metadata_fetch_jobs (completed_at);
++
++-- bookdrop_file.status: used in paginated queries (findAllByStatus)
++CREATE INDEX IF NOT EXISTS idx_bookdrop_file_status ON bookdrop_file (status);
