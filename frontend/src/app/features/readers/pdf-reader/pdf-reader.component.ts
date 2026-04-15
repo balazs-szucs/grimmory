@@ -521,8 +521,26 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         const currentPage = this.page();
         if (currentPage > 1) {
           this.embedPdfBook.scrollToPage(currentPage, 'instant');
+
+          // Wait for the scroll to be processed before revealing the viewer.
+          // EmbedPDF processes scrollToPage asynchronously, so revealing
+          // immediately would flash page 1 before jumping to the target.
+          const scrollSub = this.embedPdfBook.pageChange$.pipe(
+            filter(ev => ev.pageNumber >= currentPage - 1),
+            take(1)
+          ).subscribe(() => {
+            this.ngZone.run(() => this.isInitialScrollDone.set(true));
+          });
+          // Fallback in case pageChange$ doesn't fire (e.g. single-page PDF)
+          setTimeout(() => {
+            if (!this.isInitialScrollDone()) {
+              scrollSub.unsubscribe();
+              this.ngZone.run(() => this.isInitialScrollDone.set(true));
+            }
+          }, 800);
+        } else {
+          this.isInitialScrollDone.set(true);
         }
-        this.isInitialScrollDone.set(true);
 
         // Load outline, bookmarks, and annotations after layout is ready and settled
         this.loadOutline();
@@ -1350,17 +1368,29 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       this.lastAnnotationData = data;
       this.annotationsDirty = false; // Speculatively clear to avoid double-save
 
-      // Fire-and-forget: keep annotations save non-blocking so a 401 can never
-      // stall or abort the viewer-mode switch (the interceptor's forceLogout
-      // would navigate to /login if we awaited and the refresh also failed).
-      this.pdfAnnotationService.saveAnnotations(this.bookId, data).subscribe({
-        next: () => {
+      // Use raw fetch() instead of HttpClient so the auth interceptor cannot
+      // trigger forceLogout() on an expired token during viewer-mode switches.
+      const saveUrl = `${API_CONFIG.BASE_URL}/api/v1/pdf-annotations/book/${this.bookId}`;
+      const saveHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      const saveToken = this.authService.getInternalAccessToken();
+      if (saveToken) {
+        saveHeaders['Authorization'] = `Bearer ${saveToken}`;
+      }
+      fetch(saveUrl, {
+        method: 'PUT',
+        headers: saveHeaders,
+        credentials: 'include',
+        body: JSON.stringify({ data }),
+      }).then(res => {
+        if (res.ok) {
           console.info('[PDF Annotations] Saved', items.length, 'annotations for book', this.bookId);
-        },
-        error: (err) => {
-          this.annotationsDirty = true; // Restore on failure
-          console.error('[PDF Annotations] Failed to save annotations:', err);
+        } else {
+          this.annotationsDirty = true;
+          console.error('[PDF Annotations] Save failed:', res.status);
         }
+      }).catch(err => {
+        this.annotationsDirty = true;
+        console.error('[PDF Annotations] Failed to save annotations:', err);
       });
     } catch (e) {
       console.error('[PDF Annotations] Failed to export annotations:', e);
