@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   DestroyRef,
@@ -765,19 +766,6 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
     }
   }
 
-  private updateCurrentChapter(): void {
-    if (!this.audiobookInfo?.chapters) {
-      this.currentChapter = undefined;
-      this.currentChapterIdx = 0;
-      return;
-    }
-    const currentMs = this.currentTime * 1000;
-    this.currentChapter = this.audiobookInfo.chapters.find(
-      ch => currentMs >= ch.startTimeMs && currentMs < ch.endTimeMs
-    );
-    this.currentChapterIdx = this.currentChapter?.index ?? 0;
-  }
-
   getCurrentChapter(): AudiobookChapter | undefined {
     return this.currentChapter;
   }
@@ -1075,7 +1063,6 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   addBookmark(): void {
     const requestBookId = this.bookId;
     const requestId = this.loadRequestId;
-    const currentChapter = this.getCurrentChapter();
     const currentTrack = this.currentTrack;
 
     let title: string;
