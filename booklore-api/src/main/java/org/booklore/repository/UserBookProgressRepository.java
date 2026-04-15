@@ -99,7 +99,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
     """)
     Set<Long> findExistingProgressBookIds(@Param("userId") Long userId, @Param("bookIds") Set<Long> bookIds);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
         UPDATE UserBookProgressEntity ubp
@@ -118,7 +118,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
     """)
     int bulkResetBookloreProgress(@Param("userId") Long userId, @Param("bookIds") List<Long> bookIds, @Param("modifiedTime") java.time.Instant modifiedTime);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
         UPDATE UserBookProgressEntity ubp
@@ -132,7 +132,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
     """)
     int bulkResetKoreaderProgress(@Param("userId") Long userId, @Param("bookIds") List<Long> bookIds);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
         UPDATE UserBookProgressEntity ubp
@@ -146,7 +146,7 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
     """)
     int bulkResetKoboProgress(@Param("userId") Long userId, @Param("bookIds") List<Long> bookIds);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("""
         UPDATE UserBookProgressEntity ubp
