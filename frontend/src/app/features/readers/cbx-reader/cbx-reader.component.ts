@@ -1,4 +1,4 @@
-import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { forkJoin, from, Subject } from 'rxjs';
@@ -63,7 +63,8 @@ import {
     CbxQuickSettingsService
   ],
   templateUrl: './cbx-reader.component.html',
-  styleUrl: './cbx-reader.component.scss'
+  styleUrl: './cbx-reader.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CbxReaderComponent implements OnInit, OnDestroy {
   private static readonly PRELOAD_PAGE_WINDOW = 5;
@@ -231,6 +232,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   protected readonly cbxQuickSettingsState = this.quickSettingsService.state;
   private pageDimensionService = inject(CbxPageDimensionService);
   private wakeLockService = inject(WakeLockService);
+  private cdr = inject(ChangeDetectorRef);
   private readerPreferencesService = inject(ReaderPreferencesService);
 
   protected readonly CbxScrollMode = CbxScrollMode;
@@ -279,7 +281,10 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   /** Run after the browser has applied layout (two frames — common Angular/DOM pattern). */
   private afterNextPaint(fn: () => void): void {
-    requestAnimationFrame(() => requestAnimationFrame(fn));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fn();
+      this.cdr.markForCheck();
+    }));
   }
 
   constructor() {
@@ -459,13 +464,15 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         this.updateCurrentImageUrls();
         this.preloadAdjacentPages();
 
-        const percentage = this.pages().length > 0 ? Math.round(((this.currentPage() + 1) / this.pages().length) * 1000) / 10 : 0;
-        this.readingSessionService.startSession(this.bookId()!, "CBX", (this.currentPage() + 1).toString(), percentage);
+const percentage = this.pages.length > 0 ? Math.round(((this.currentPage + 1) / this.pages.length) * 1000) / 10 : 0;
+this.readingSessionService.startSession(this.bookId, "CBX", (this.currentPage + 1).toString(), percentage);
+this.cdr.markForCheck();
       },
       error: (err) => {
         const errorMessage = err?.error?.message || this.t.translate('shared.reader.failedToLoadBook');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: errorMessage });
         this.isLoading.set(false);
+        this.cdr.markForCheck();
       }
     });
   }
@@ -515,6 +522,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.showShortcutsHelp.set(true);
+        this.cdr.markForCheck();
       });
   }
 
@@ -609,6 +617,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         this.brightness.set(value);
         this.quickSettingsService.setBrightness(value);
         this.updateViewerSetting();
+        this.cdr.markForCheck();
       });
 
     this.quickSettingsService.emulateBookChange$
@@ -617,6 +626,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         this.emulateBook.set(value);
         this.quickSettingsService.setEmulateBook(value);
         this.updateViewerSetting();
+        this.cdr.markForCheck();
       });
 
     this.quickSettingsService.clickToPaginateChange$
@@ -625,6 +635,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         this.clickToPaginate.set(value);
         this.quickSettingsService.setClickToPaginate(value);
         this.updateViewerSetting();
+        this.cdr.markForCheck();
       });
 
     this.quickSettingsService.autoCloseMenuChange$
@@ -633,6 +644,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
         this.autoCloseMenu.set(value);
         this.quickSettingsService.setAutoCloseMenu(value);
         this.updateViewerSetting();
+        this.cdr.markForCheck();
       });
 
     this.quickSettingsService.stripMaxWidthChange$
@@ -893,7 +905,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
           setTimeout(() => {
             this.isPageTransitioning.set(false);
             this.previousImageUrls.set([]);
+            this.cdr.markForCheck();
           }, 150);
+          this.cdr.markForCheck();
         }
       };
       img.onerror = () => {
@@ -903,6 +917,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
           this.imagesLoaded.set(true);
           this.isPageTransitioning.set(false);
           this.previousImageUrls.set([]);
+          this.cdr.markForCheck();
         }
       };
       img.src = url;
@@ -910,7 +925,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   }
 
   onImageLoad(): void {
-    this.imagesLoaded.set(true);
+this.imagesLoaded = true;
+this.cdr.markForCheck();
   }
 
   nextPage() {
@@ -1042,6 +1058,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     if (this.isSlideshowActive() && this.currentPage() >= this.pages().length - 1) {
       this.stopSlideshow();
     }
+    this.cdr.markForCheck();
   }
 
   private getPageStep(): number {
@@ -1072,6 +1089,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     this.fitMode.set(mode);
     this.quickSettingsService.setFitMode(mode);
     this.updateViewerSetting();
+    this.cdr.markForCheck();
   }
 
   onScrollModeChange(mode: CbxScrollMode): void {
@@ -1106,6 +1124,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       this.updateCurrentImageUrls();
       this.preloadAdjacentPages();
     }
+    this.cdr.markForCheck();
   }
 
   onPageViewModeChange(mode: CbxPageViewMode): void {
@@ -1117,6 +1136,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     this.preloadAdjacentPages();
     this.footerService.setTwoPageView(this.isTwoPageView());
     this.updateViewerSetting();
+    this.cdr.markForCheck();
   }
 
   onPageSpreadChange(spread: CbxPageSpread): void {
@@ -1126,12 +1146,14 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     this.updateCurrentImageUrls();
     this.preloadAdjacentPages();
     this.updateViewerSetting();
+    this.cdr.markForCheck();
   }
 
   onBackgroundColorChange(color: CbxBackgroundColor): void {
     this.backgroundColor.set(color);
     this.quickSettingsService.setBackgroundColor(color);
     this.updateViewerSetting();
+    this.cdr.markForCheck();
   }
 
   private initializeInfiniteScroll(): void {
@@ -1368,6 +1390,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     if (this.longStripIntersectionObserver) {
       this.longStripIntersectionObserver.observe(img);
     }
+    this.cdr.markForCheck();
   }
 
   /**
@@ -1402,6 +1425,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       this.longStripAllImagesLoaded = true;
       this.longStripDoScroll(this.currentPage(), 'instant', layoutGen);
       this.longStripInitFinished = true;
+      this.cdr.markForCheck();
     };
 
     if (img.complete) {
@@ -1464,6 +1488,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   private longStripHandleIntersection(entries: IntersectionObserverEntry[]): void {
     if (!this.longStripAllImagesLoaded || this.longStripIsScrolling) return;
 
+    let changed = false;
     for (const entry of entries) {
       if (entry.isIntersecting) {
         const pageAttr = entry.target.getAttribute('data-page');
@@ -1471,8 +1496,12 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
           const page = parseInt(pageAttr, 10);
           // Prefetch more images when a page enters the viewport
           this.longStripPrefetchAround(page);
+          changed = true;
         }
       }
+    }
+    if (changed) {
+      this.cdr.markForCheck();
     }
   }
 
@@ -1484,6 +1513,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       if (this.longStripScrollDebounceTimer) clearTimeout(this.longStripScrollDebounceTimer);
       this.longStripScrollDebounceTimer = setTimeout(() => {
         this.longStripOnScroll(container);
+        this.cdr.markForCheck();
       }, 20);
     };
 
@@ -1492,6 +1522,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       if (this.longStripScrollEndDebounceTimer) clearTimeout(this.longStripScrollEndDebounceTimer);
       this.longStripScrollEndDebounceTimer = setTimeout(() => {
         this.longStripOnScrollEnd(container);
+        this.cdr.markForCheck();
       }, supportsScrollEnd ? 20 : 100);
     };
 
@@ -1656,6 +1687,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       this.updateSessionProgress();
       this.updateFooterPage();
     }
+    this.cdr.markForCheck();
   }
 
   firstPage(): void {
@@ -1971,6 +2003,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
         this.footerService.setSeriesBooks(this.previousBookInSeries, this.nextBookInSeries);
         this.footerService.setHasSeries(true);
+        this.cdr.markForCheck();
       },
       error: (err) => {
         console.error('[SeriesNav] Failed to load series information:', err);

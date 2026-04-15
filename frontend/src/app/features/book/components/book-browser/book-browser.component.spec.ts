@@ -368,6 +368,8 @@ function createHarness(options?: {
       {
         provide: TranslocoService,
         useValue: {
+          langChanges$: new Subject<string>().asObservable(),
+          getActiveLang: vi.fn(() => 'en'),
           translate: vi.fn((key: string) => {
             if (options?.translate) {
               return options.translate(key);
@@ -422,7 +424,7 @@ describe('BookBrowserComponent', () => {
   it('switches view mode through the display settings control', () => {
     const {component, queryParamsService} = createHarness();
 
-    (component as unknown as {currentViewMode: WritableSignal<string>}).currentViewMode.set(VIEW_MODES.GRID);
+    component.currentViewMode.set(VIEW_MODES.GRID);
 
     component.onViewModeChange(VIEW_MODES.TABLE);
 
@@ -509,7 +511,6 @@ describe('BookBrowserComponent', () => {
       removeEventListener: vi.fn(),
     } as unknown as HTMLElement;
 
-    (component as unknown as {currentViewMode: WritableSignal<string>}).currentViewMode.set(VIEW_MODES.GRID);
     component.scrollContainerRef = {nativeElement: mockElement} as ElementRef<HTMLElement>;
 
     // Trigger initial check

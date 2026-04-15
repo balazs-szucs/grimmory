@@ -6,7 +6,7 @@ import {PageTitleService} from '../../../../shared/service/page-title.service';
 import {BookService} from '../../service/book.service';
 import {BookMetadataManageService} from '../../service/book-metadata-manage.service';
 import {debounceTime, distinctUntilChanged, filter, map, take} from 'rxjs/operators';
-import {combineLatest, finalize, Subject} from 'rxjs';
+import {combineLatest, finalize} from 'rxjs';
 import {DynamicDialogRef} from 'primeng/dynamicdialog';
 import {Library} from '../../model/library.model';
 import {SortDirection, SortOption} from '../../model/sort.model';
@@ -117,7 +117,7 @@ export class BookBrowserComponent implements AfterViewInit {
     this.setupRouteChangeHandlers();
     this.setupQueryParamSubscription();
     this.setupScrollPositionTracking();
-    
+
     this.destroyRef.onDestroy(() => {
       if (this.scrollContainer) {
         this.scrollContainer.removeEventListener('scroll', this.onScroll);
@@ -241,6 +241,25 @@ export class BookBrowserComponent implements AfterViewInit {
           case 'language': scopeFilters.language = strValues; break;
           case 'readStatus': scopeFilters.status = strValues; break;
           case 'bookType': scopeFilters.fileType = strValues; break;
+          case 'ageRating': scopeFilters.ageRating = strValues; break;
+          case 'contentRating': scopeFilters.contentRating = strValues; break;
+          case 'matchScore': scopeFilters.matchScore = strValues; break;
+          case 'publishedDate': scopeFilters.publishedDate = strValues; break;
+          case 'fileSize': scopeFilters.fileSize = strValues; break;
+          case 'personalRating': scopeFilters.personalRating = strValues; break;
+          case 'amazonRating': scopeFilters.amazonRating = strValues; break;
+          case 'goodreadsRating': scopeFilters.goodreadsRating = strValues; break;
+          case 'hardcoverRating': scopeFilters.hardcoverRating = strValues; break;
+          case 'pageCount': scopeFilters.pageCount = strValues; break;
+          case 'shelfStatus':
+            scopeFilters.shelfStatus = strValues;
+            break;
+          case 'comicCharacter': scopeFilters.comicCharacter = strValues; break;
+          case 'comicTeam': scopeFilters.comicTeam = strValues; break;
+          case 'comicLocation': scopeFilters.comicLocation = strValues; break;
+          case 'comicCreator': scopeFilters.comicCreator = strValues; break;
+          case 'shelf': scopeFilters.shelves = strValues; break;
+          case 'library': scopeFilters.libraries = strValues; break;
         }
       }
       const mode = this.selectedFilterMode();
@@ -341,15 +360,58 @@ export class BookBrowserComponent implements AfterViewInit {
     return rows * rowHeight;
   });
 
-  protected resetFilterSubject = new Subject<void>();
 
-  readonly skeletonSlots = Array.from({length: 24}, (_, index) => index);
+  skeletonSlots = Array.from({length: 24}, (_, index) => index);
   readonly tableSkeletonRows = Array.from({length: 8}, (_, index) => index);
   readonly tableSkeletonColumns = Array.from({length: 5}, (_, index) => index);
   parsedFilters: Record<string, string[]> = {};
   dynamicDialogRef: DynamicDialogRef | undefined | null;
   EntityType = EntityType;
+  private readonly activeLang = toSignal(this.t.langChanges$, {
+    initialValue: this.t.getActiveLang()
+  });
+
+  readonly computedFilterLabel = computed(() => {
+    this.activeLang();
+    const filters = this.selectedFilter();
+
+    if (!filters || Object.keys(filters).length === 0) {
+      return this.t.translate('book.browser.labels.allBooks');
+    }
+
+    const filterEntries = Object.entries(filters);
+
+    if (filterEntries.length === 1) {
+      const [filterType, values] = filterEntries[0];
+      const filterName = FilterLabelHelper.getFilterTypeName(filterType);
+
+      if (values.length === 1) {
+        const displayValue = FilterLabelHelper.getFilterDisplayValue(filterType, values[0]);
+        return `${filterName}: ${displayValue}`;
+      }
+
+      return `${filterName} (${values.length})`;
+    }
+
+    const filterSummary = filterEntries
+      .map(([type, values]) => `${FilterLabelHelper.getFilterTypeName(type)} (${values.length})`)
+      .join(', ');
+
+    return filterSummary.length > 50
+      ? this.t.translate('book.browser.labels.activeFilters', {count: filterEntries.length})
+      : filterSummary;
+  });
+
+  readonly currentFilterLabel = computed(() => this.computedFilterLabel());
+
+  rawFilterParamFromUrl: string | null = null;
+  visibleColumns: { field: string; header: string }[] = [];
   entityViewPreferences: EntityViewPreferences | undefined;
+  currentViewMode = signal<string | undefined>(undefined);
+  lastAppliedSortCriteria: SortOption[] = [];
+  visibleSortOptions: SortOption[] = [];
+  screenWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  mobileColumnCount = signal(3);
 
   private readonly MOBILE_BREAKPOINT = 768;
   private readonly CARD_ASPECT_RATIO = 7 / 5;
@@ -370,6 +432,7 @@ export class BookBrowserComponent implements AfterViewInit {
     this.t
   );
   private readonly syncBrowserStateEffect = effect(() => {
+    this.activeLang();
     const entityType = this.entityType();
     const entity = this.entity();
 
@@ -439,7 +502,7 @@ export class BookBrowserComponent implements AfterViewInit {
 
   @ViewChild(BookTableComponent)
   bookTableComponent!: BookTableComponent;
-  @ViewChild(BookFilterComponent, {static: false})
+  @ViewChild(BookFilterComponent, {static: true})
   bookFilterComponent!: BookFilterComponent;
 
   private scrollContainer: HTMLElement | undefined;
@@ -531,19 +594,25 @@ export class BookBrowserComponent implements AfterViewInit {
     return this.coverScalePreferenceService.getCardHeight(_book);
   }
 
-  readonly showBooksLoadingPlaceholder = computed(() => !this.booksError() && (this.isBooksLoading() || !this.hasRenderedBooks()));
+  readonly showBooksLoadingPlaceholder = computed(() =>
+    !this.booksError() && (this.isBooksLoading() || !this.hasRenderedBooks())
+  );
 
-  readonly showTableLoadingPlaceholder = computed(() => this.showBooksLoadingPlaceholder() && this.currentViewMode() === VIEW_MODES.TABLE);
+  readonly showTableLoadingPlaceholder = computed(() =>
+    this.showBooksLoadingPlaceholder() && this.currentViewMode() === VIEW_MODES.TABLE
+  );
 
-  readonly showGridLoadingPlaceholder = computed(() => this.showBooksLoadingPlaceholder() && this.currentViewMode() !== VIEW_MODES.TABLE);
+  readonly showGridLoadingPlaceholder = computed(() =>
+    this.showBooksLoadingPlaceholder() && this.currentViewMode() === VIEW_MODES.GRID
+  );
 
-  readonly viewIcon = computed(() => this.currentViewMode() === VIEW_MODES.TABLE ? 'pi pi-table' : 'pi pi-objects-column');
+  readonly viewIcon = computed(() =>
+    this.currentViewMode() === VIEW_MODES.TABLE ? 'pi pi-table' : 'pi pi-objects-column'
+  );
 
   readonly isFilterActive = computed(() => {
     const selectedFilter = this.selectedFilter();
     return !!selectedFilter && Object.keys(selectedFilter).length > 0;
-  });
-
   readonly computedFilterLabel = computed(() => {
     const filters = this.selectedFilter();
 
@@ -580,7 +649,10 @@ export class BookBrowserComponent implements AfterViewInit {
     const library = entity as Library;
     return !!library.allowedFormats && library.allowedFormats.length === 1 && library.allowedFormats[0] === 'AUDIOBOOK';
   });
-
+    const entity = this.entity();
+    if (!entity || this.entityType() !== EntityType.LIBRARY) return false;
+    const library = entity as Library;
+    return !!library.allowedFormats && library.allowedFormats.length === 1 && library.allowedFormats[0] === 'AUDIOBOOK';
   readonly seriesViewEnabled = computed(() => Boolean(this.userService.getCurrentUser()?.userSettings?.enableSeriesView));
 
   readonly hasMetadataMenuItems = computed(() => (this.metadataMenuItems?.length ?? 0) > 0);
@@ -602,9 +674,8 @@ export class BookBrowserComponent implements AfterViewInit {
 
   ngAfterViewInit(): void {
     if (this.bookFilterComponent) {
-      this.bookFilterComponent.setFilters?.(this.parsedFilters);
-      this.bookFilterComponent.onFiltersChanged?.();
-      this.bookFilterComponent.selectedFilterMode = this.selectedFilterMode();
+      this.bookFilterComponent.setFilters(this.parsedFilters);
+      this.bookFilterComponent.onFilterModeChange(this.selectedFilterMode());
     }
   }
 
@@ -617,7 +688,7 @@ export class BookBrowserComponent implements AfterViewInit {
    * and fetches the next page if necessary.
    */
   private checkAndFetchIfNeeded(): void {
-    if (!this.scrollContainer || this.currentViewMode() === VIEW_MODES.TABLE) return;
+    if (!this.scrollContainer || this.currentViewMode() !== VIEW_MODES.GRID) return;
 
     const {scrollTop, clientHeight} = this.scrollContainer;
     const buffer = 1000; // Large buffer to facilitate scroll restoration
@@ -710,11 +781,10 @@ export class BookBrowserComponent implements AfterViewInit {
       if (parseResult.filterMode !== this.selectedFilterMode()) {
         this.selectedFilterMode.set(parseResult.filterMode);
         if (this.bookFilterComponent) {
-          this.bookFilterComponent.selectedFilterMode = parseResult.filterMode;
+          this.bookFilterComponent.onFilterModeChange(parseResult.filterMode);
         }
       }
 
-      this.currentFilterLabel.set(this.t.translate('book.browser.labels.allBooks'));
       const filterParams = queryParamMap.get('filter');
 
       if (filterParams) {
@@ -782,7 +852,6 @@ export class BookBrowserComponent implements AfterViewInit {
 
     const hasSidebarFilters = !!normalizedFilters && Object.keys(normalizedFilters).length > 0;
     this.currentFilterLabel.set(hasSidebarFilters ? this.computedFilterLabel() : this.t.translate('book.browser.labels.allBooks'));
-
     this.queryParamsService.updateFilters(normalizedFilters);
   }
 
@@ -890,6 +959,16 @@ export class BookBrowserComponent implements AfterViewInit {
     this.onMultiSortChange(criteria);
   }
 
+  readonly canSaveSort = computed(() => {
+    const entityType = this.entityType();
+    return entityType === EntityType.LIBRARY ||
+           entityType === EntityType.SHELF ||
+           entityType === EntityType.MAGIC_SHELF ||
+           entityType === EntityType.ALL_BOOKS ||
+           entityType === EntityType.UNSHELVED;
+  });
+
+  readonly hasSearchTerm = computed(() => this.searchTerm().trim().length > 0);
   onSaveSortConfig(criteria: SortOption[]): void {
     const entityType = this.entityType();
     if (!entityType) return;
@@ -975,7 +1054,7 @@ export class BookBrowserComponent implements AfterViewInit {
   }
 
   resetFilters(): void {
-    this.resetFilterSubject.next();
+    this.bookFilterComponent?.clearActiveFilter();
   }
 
   clearFilter(): void {

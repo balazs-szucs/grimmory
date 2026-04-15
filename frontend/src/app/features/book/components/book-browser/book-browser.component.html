@@ -481,17 +481,15 @@
       (click)="toggleSidebar()"
       (keydown.enter)="toggleSidebar()">
     </div>
-    <app-book-filter
-      [showFilter]="showFilter()"
-      class="filter-overlay-container"
-      [ngClass]="{ 'active': showFilter() }"
-      [entity]="entity()"
-      [entityType]="entityType()"
-      [resetFilter$]="resetFilterSubject"
-      (filterSelected)="onFilterSelected($event)"
-      (filterModeChanged)="onFilterModeChanged($event)">
-    </app-book-filter>
   }
+  <app-book-filter
+    [showFilter]="showFilter()"
+    class="filter-overlay-container"
+    [ngClass]="{ 'active': showFilter() }"
+    [style.display]="showFilter() ? '' : 'none'"
+    (filterSelected)="onFilterSelected($event)"
+    (filterModeChanged)="onFilterModeChanged($event)">
+  </app-book-filter>
 
 </div>
 </ng-container>
