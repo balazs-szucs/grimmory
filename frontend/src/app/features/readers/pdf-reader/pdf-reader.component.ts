@@ -585,6 +585,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       next: async (response) => {
         console.info('[PDF Annotations] GET response:', response);
         if (response?.data) {
+          this.lastAnnotationData = response.data;
           const allItems = parseStoredAnnotations(response.data);
           this.dbAnnotationIds = new Set(allItems.map(i => i.annotation.id));
 
@@ -641,6 +642,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     try {
       const allItems = await this.embedPdfBook.exportAnnotations();
       const items = this.filterAndDeduplicateAnnotations(allItems);
+      console.info(`[PDF Annotations] refresh list: exported ${allItems.length}, kept ${items.length}`);
       this.annotationListItems.set(items.map(item => {
         const ann = item.annotation as unknown as Record<string, unknown>;
         return {
@@ -1333,12 +1335,17 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   }
 
   private async persistAnnotations(): Promise<void> {
-    if (!this.annotationsLoaded || !this.bookId || this.viewerMode() === 'document' || !this.annotationsDirty) return;
+    if (!this.annotationsLoaded || !this.bookId || this.viewerMode() === 'document' || !this.annotationsDirty) {
+      console.info('[PDF Annotations] Skip save: loaded=', this.annotationsLoaded, 'dirty=', this.annotationsDirty);
+      return;
+    }
 
     try {
       const allItems = await this.embedPdfBook.exportAnnotations();
       const items = this.filterAndDeduplicateAnnotations(allItems);
       const data = serializeAnnotations(items);
+
+      console.info(`[PDF Annotations] Initiating save: exported ${allItems.length}, kept ${items.length}`);
 
       this.lastAnnotationData = data;
       this.annotationsDirty = false; // Speculatively clear to avoid double-save
@@ -1361,7 +1368,10 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   }
 
   private persistAnnotationsSync(): void {
-    if (!this.bookId || this.lastAnnotationData === null || !this.annotationsDirty) return;
+    if (!this.bookId || this.lastAnnotationData === null || !this.annotationsDirty) {
+      console.info('[PDF Annotations Sync] Skip sync save: dirty=', this.annotationsDirty);
+      return;
+    }
     this.annotationsDirty = false;
 
     const url = `${API_CONFIG.BASE_URL}/api/v1/pdf-annotations/book/${this.bookId}`;
@@ -1370,19 +1380,21 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     if (syncToken) {
       headers['Authorization'] = `Bearer ${syncToken}`;
     }
+    console.info('[PDF Annotations Sync] Sending sync save request');
     fetch(url, {
       method: 'PUT',
       headers,
       credentials: 'include',
       body: JSON.stringify({ data: this.lastAnnotationData }),
       keepalive: true,
-    }).catch(() => { /* fire-and-forget */ });
+    }).catch((err) => { console.error('[PDF Annotations Sync] Sync save failed:', err); });
   }
 
   private cacheAnnotationData(): void {
     this.embedPdfBook.exportAnnotations().then(allItems => {
       const items = this.filterAndDeduplicateAnnotations(allItems);
       this.lastAnnotationData = serializeAnnotations(items);
+      console.info(`[PDF Annotations] Cache updated: ${items.length} items`);
     }).catch(() => { /* fire-and-forget */ });
   }
 
@@ -1408,6 +1420,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     if (progressToken) {
       headers['Authorization'] = `Bearer ${progressToken}`;
     }
+    console.info('[PDF Progress Sync] Sending progress sync request');
     fetch(url, {
       method: 'POST',
       headers,
@@ -1421,7 +1434,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     const seenIds = new Set<string>();
     const allowedSubtypes = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]);
 
-    return allItems.filter(item => {
+    const filtered = allItems.filter(item => {
       const ann = item.annotation;
       const id = ann?.id;
       if (!id || seenIds.has(id)) return false;
@@ -1431,11 +1444,16 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       if (!allowedSubtypes.has(type)) return false;
 
       // Only allow if it's in our DB-tracked set (for sync)
-      if (!this.dbAnnotationIds.has(id)) return false;
+      if (!this.dbAnnotationIds.has(id)) {
+        // console.warn(`[PDF Annotations] Filtered out unknown ID: ${id} (type: ${type})`);
+        return false;
+      }
 
       seenIds.add(id);
       return true;
     });
+
+    return filtered;
   }
 
   private normalizeZoom(zoom: string): string {
