@@ -11,7 +11,7 @@ public interface ComicCreatorRepository extends JpaRepository<ComicCreatorEntity
 
     Optional<ComicCreatorEntity> findByName(String name);
 
-    @Modifying(flushAutomatically = true)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM ComicCreatorEntity c WHERE c.id NOT IN (SELECT cm.creator.id FROM ComicCreatorMappingEntity cm)")
     void deleteOrphaned();
 }
