@@ -13,6 +13,7 @@ const CUSTOM_FONTS_QUERY_KEY = ['customFonts'] as const;
 })
 export class CustomFontService {
   private apiUrl = `${API_CONFIG.BASE_URL}/api/v1/custom-fonts`;
+  private loadAllFontsRunId = 0;
   private loadedFonts = new Set<string>();
   private http = inject(HttpClient);
   private authService = inject(AuthService);
@@ -35,6 +36,7 @@ export class CustomFontService {
       const token = this.token();
       if (token === null) {
         this.queryClient.removeQueries({queryKey: CUSTOM_FONTS_QUERY_KEY});
+        this.isFontsReadyInternal.set(false);
       }
     });
   }
@@ -127,14 +129,24 @@ export class CustomFontService {
     }
   }
 
-      async loadAllFonts(fonts: CustomFont[]): Promise<void> {
+  async loadAllFonts(fonts: CustomFont[]): Promise<void> {
+    const runId = ++this.loadAllFontsRunId;
     this.isFontsReadyInternal.set(false);
+
     if (fonts.length === 0) {
-      this.isFontsReadyInternal.set(true);
+      if (runId === this.loadAllFontsRunId) {
+        this.isFontsReadyInternal.set(true);
+      }
       return;
     }
+
     const loadPromises = fonts.map(font => this.loadFontFace(font));
     const results = await Promise.allSettled(loadPromises);
+
+    if (runId !== this.loadAllFontsRunId) {
+      return;
+    }
+
     const hasFailures = results.some(r => r.status === 'rejected');
     if (hasFailures) {
       const failures = results.filter(r => r.status === 'rejected');
