@@ -332,9 +332,8 @@ public class AudiobookMetadataWriter implements MetadataWriter {
             if (pathOrUrl.startsWith("http")) {
                 return fileService.downloadImageBytesFromUrl(pathOrUrl);
             }
-            try (InputStream stream = new FileInputStream(pathOrUrl)) {
-                return stream.readAllBytes();
-            }
+            log.warn("Rejected non-HTTP image URL: {}", pathOrUrl);
+            return null;
         } catch (IOException e) {
             log.warn("Failed to load image from {}: {}", pathOrUrl, e.getMessage());
             return null;

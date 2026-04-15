@@ -30,9 +30,7 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -477,6 +475,10 @@ public class EpubMetadataWriter implements MetadataWriter {
         Path opfDir = opfPath.getParent();
         Path coverFilePath = opfDir.resolve(decodedCoverHref).normalize();
 
+        if (!coverFilePath.startsWith(tempDir)) {
+            throw new IOException("Cover href escapes EPUB directory: " + decodedCoverHref);
+        }
+
         Files.createDirectories(coverFilePath.getParent());
         Files.write(coverFilePath, coverData);
     }
@@ -519,9 +521,8 @@ public class EpubMetadataWriter implements MetadataWriter {
             if (pathOrUrl.startsWith("http")) {
                 return fileService.downloadImageBytesFromUrl(pathOrUrl);
             }
-            try (InputStream stream = new FileInputStream(pathOrUrl)) {
-                return stream.readAllBytes();
-            }
+            log.warn("Rejected non-HTTP image URL: {}", pathOrUrl);
+            return null;
         } catch (IOException e) {
             log.warn("Failed to load image from {}: {}", pathOrUrl, e.getMessage());
             return null;
