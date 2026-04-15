@@ -38,7 +38,7 @@ class CbxConversionServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        cbxConversionService = new CbxConversionService(new ArchiveService());
+        cbxConversionService = new CbxConversionService(new ArchiveService(), new org.booklore.util.VipsImageService());
         testCbzFile = createTestCbzFile();
         testBookEntity = createTestBookEntity();
     }

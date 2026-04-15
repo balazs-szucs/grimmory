@@ -131,12 +131,6 @@ dependencies {
     implementation("org.grimmory:pdfium4j:$pdfium4jVersion")
     runtimeOnly("org.grimmory:pdfium4j:$pdfium4jVersion:${pdfiumNativesClassifier()}")
 
-    // --- TwelveMonkeys ImageIO ---
-    implementation("com.twelvemonkeys.imageio:imageio-jpeg:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-tiff:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-webp:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-bmp:3.13.1")
-
     // epub4j-grimmory fork publishes as org.grimmory:epub4j-core
     val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.1.0"
     implementation(epub4jCoords)
@@ -169,9 +163,6 @@ dependencies {
 
     // --- libvips (vips-ffm) ---
     implementation("app.photofox.vips-ffm:vips-ffm-core:1.9.6")
-
-    // --- BlurHash ---
-    implementation("io.trbl:blurhash:1.0.0")
 
     // --- Template Engine ---
     implementation("org.freemarker:freemarker:2.3.34")

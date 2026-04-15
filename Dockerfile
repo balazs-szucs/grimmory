@@ -85,7 +85,7 @@ RUN apk add --no-cache su-exec libstdc++ libgcc libarchive vips-dev && \
     mkdir -p /bookdrop
 
 # Manually link `libarchive.so.13` so java and other libraries can see it
-RUN ln -s /usr/lib/libarchive.so.13 /usr/lib/libarchive.so
+RUN ln -sf /usr/lib/libarchive.so.13 /usr/lib/libarchive.so
 
 COPY packaging/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

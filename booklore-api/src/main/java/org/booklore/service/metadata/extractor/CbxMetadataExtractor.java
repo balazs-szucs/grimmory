@@ -5,14 +5,12 @@ import org.apache.commons.io.FilenameUtils;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.ComicMetadata;
 import org.booklore.service.ArchiveService;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Component;
 import org.booklore.util.SecureXmlUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
-import javax.imageio.ImageIO;
-import java.awt.*;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -39,9 +37,11 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     private static final Pattern HARDCOVER_URL_PATTERN = Pattern.compile("hardcover\\.app/books/([\\w-]+)");
 
     private final ArchiveService archiveService;
+    private final VipsImageService vipsImageService;
 
-    public CbxMetadataExtractor(ArchiveService archiveService) {
+    public CbxMetadataExtractor(ArchiveService archiveService, VipsImageService vipsImageService) {
         this.archiveService = archiveService;
+        this.vipsImageService = vipsImageService;
     }
 
     @Override
@@ -488,12 +488,7 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
 
     private boolean canDecode(byte[] bytes) {
         if (bytes == null || bytes.length == 0) return false;
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes)) {
-            BufferedImage img = ImageIO.read(bais);
-            return img != null;
-        } catch (IOException e) {
-            return false;
-        }
+        return vipsImageService.canDecode(bytes);
     }
 
     private Stream<String> extractCoverEntryNameFromComicInfo(Path cbxPath) {

@@ -35,7 +35,7 @@ class CbxConversionIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        conversionService = new CbxConversionService(new ArchiveService());
+        conversionService = new CbxConversionService(new ArchiveService(), new org.booklore.util.VipsImageService());
     }
 
     @Test

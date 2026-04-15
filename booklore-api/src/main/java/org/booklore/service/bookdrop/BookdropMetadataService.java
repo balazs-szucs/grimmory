@@ -180,7 +180,7 @@ public class BookdropMetadataService {
         byte[] coverBytes = metadataExtractorFactory.extractCover(fileExt, file);
         if (coverBytes != null) {
             try {
-                FileService.saveImage(coverBytes, fileService.getTempBookdropCoverImagePath(entity.getId()));
+                fileService.saveImage(coverBytes, fileService.getTempBookdropCoverImagePath(entity.getId()));
             } catch (IOException e) {
                 log.warn("Failed to save extracted cover for file: {}", entity.getFilePath(), e);
             }

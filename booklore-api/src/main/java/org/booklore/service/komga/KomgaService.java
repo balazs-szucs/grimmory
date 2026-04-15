@@ -15,6 +15,7 @@ import org.booklore.service.MagicShelfService;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.reader.CbxReaderService;
 import org.booklore.service.reader.PdfReaderService;
+import org.booklore.util.VipsImageService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -23,9 +24,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.*;
@@ -46,6 +44,7 @@ public class KomgaService {
     private final CbxReaderService cbxReaderService;
     private final PdfReaderService pdfReaderService;
     private final AppSettingService appSettingService;
+    private final VipsImageService vipsImageService;
 
     public List<KomgaLibraryDto> getAllLibraries() {
         return libraryRepository.findAll().stream()
@@ -436,15 +435,6 @@ public class KomgaService {
     }
     
     private byte[] convertImageToPng(byte[] imageData) throws IOException {
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(imageData);
-             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            BufferedImage image = ImageIO.read(inputStream);
-            if (image == null) {
-                throw new IOException("Failed to read image data");
-            }
-            
-            ImageIO.write(image, "png", outputStream);
-            return outputStream.toByteArray();
-        }
+        return vipsImageService.encodeAsPng(imageData);
     }
 }

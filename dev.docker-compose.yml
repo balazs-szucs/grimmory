@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile_inline: |
         FROM gradle:9.4.1-jdk25-alpine
-        RUN apk add --no-cache libstdc++ libgcc libarchive
-        RUN ln -s /usr/lib/libarchive.so.13 /usr/lib/libarchive.so
+        RUN apk add --no-cache libstdc++ libgcc libarchive vips-dev
+        RUN ln -sf /usr/lib/libarchive.so.13 /usr/lib/libarchive.so
     command: sh -c "cd /booklore-api && ./gradlew bootRun"
     ports:
       - "${BACKEND_PORT:-6060}:6060"

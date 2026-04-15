@@ -13,8 +13,6 @@ import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Component;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -84,25 +82,17 @@ public class BookCoverGenerator {
                 return;
             }
 
-            try (ByteArrayInputStream bais = new ByteArrayInputStream(coverData)) {
-                BufferedImage originalImage = FileService.readImage(bais);
-                if (originalImage == null) {
-                    log.warn("Failed to decode cover image for audiobook '{}'", audioFile.getFileName());
-                    return;
-                }
-                boolean saved = fileService.saveAudiobookCoverImages(originalImage, bookEntity.getId());
-                originalImage.flush();
+            boolean saved = fileService.saveAudiobookCoverImages(coverData, bookEntity.getId());
 
-                if (saved) {
-                    if (bookEntity.getMetadata() != null) {
-                        bookEntity.getMetadata().setAudiobookCoverUpdatedOn(Instant.now());
-                    } else {
-                        log.debug("Skipping audiobook cover update on metadata for book ID {}: metadata is null", bookEntity.getId());
-                    }
-                    bookEntity.setAudiobookCoverHash(BookCoverUtils.generateCoverHash());
-                    bookRepository.save(bookEntity);
-                    log.info("Generated audiobook cover from additional file: {}", audioFile.getFileName());
+            if (saved) {
+                if (bookEntity.getMetadata() != null) {
+                    bookEntity.getMetadata().setAudiobookCoverUpdatedOn(Instant.now());
+                } else {
+                    log.debug("Skipping audiobook cover update on metadata for book ID {}: metadata is null", bookEntity.getId());
                 }
+                bookEntity.setAudiobookCoverHash(BookCoverUtils.generateCoverHash());
+                bookRepository.save(bookEntity);
+                log.info("Generated audiobook cover from additional file: {}", audioFile.getFileName());
             }
         } catch (Exception e) {
             log.warn("Error generating audiobook cover from {}: {}", audioFile.getFileName(), e.getMessage());
@@ -129,25 +119,17 @@ public class BookCoverGenerator {
                 return;
             }
 
-            try (ByteArrayInputStream bais = new ByteArrayInputStream(coverData)) {
-                BufferedImage originalImage = FileService.readImage(bais);
-                if (originalImage == null) {
-                    log.warn("Failed to decode cover image for ebook '{}'", ebookFile.getFileName());
-                    return;
-                }
-                boolean saved = fileService.saveCoverImages(originalImage, bookEntity.getId());
-                originalImage.flush();
+            boolean saved = fileService.saveCoverImages(coverData, bookEntity.getId());
 
-                if (saved) {
-                    if (bookEntity.getMetadata() != null) {
-                        FileService.setBookCoverPath(bookEntity.getMetadata());
-                    } else {
-                        log.debug("Skipping ebook cover path update for book ID {}: metadata is null", bookEntity.getId());
-                    }
-                    bookEntity.setBookCoverHash(BookCoverUtils.generateCoverHash());
-                    bookRepository.save(bookEntity);
-                    log.info("Generated ebook cover from additional file: {}", ebookFile.getFileName());
+            if (saved) {
+                if (bookEntity.getMetadata() != null) {
+                    FileService.setBookCoverPath(bookEntity.getMetadata());
+                } else {
+                    log.debug("Skipping ebook cover path update for book ID {}: metadata is null", bookEntity.getId());
                 }
+                bookEntity.setBookCoverHash(BookCoverUtils.generateCoverHash());
+                bookRepository.save(bookEntity);
+                log.info("Generated ebook cover from additional file: {}", ebookFile.getFileName());
             }
         } catch (Exception e) {
             log.warn("Error generating ebook cover from {}: {}", ebookFile.getFileName(), e.getMessage());

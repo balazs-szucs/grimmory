@@ -15,12 +15,10 @@ import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
 import org.booklore.util.FileUtils;
+import org.booklore.util.ImageDimensions;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,6 +51,7 @@ public class CbxReaderService {
 
     private final ArchiveService archiveService;
     private final ChapterCacheService chapterCacheService;
+    private final VipsImageService vipsImageService;
 
     // L1 Cache: Open ZipFile handles for active reading sessions (TTL 30m)
     @Setter
@@ -91,20 +90,10 @@ public class CbxReaderService {
         List<CbxPageDimension> dimensions = new ArrayList<>();
         for (int i = 1; i <= pageCount; i++) {
             Path cachedPage = chapterCacheService.getCachedPage(cacheKey, i);
-            try (ImageInputStream iis = ImageIO.createImageInputStream(cachedPage.toFile())) {
-                Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-                if (readers.hasNext()) {
-                    ImageReader reader = readers.next();
-                    try {
-                        reader.setInput(iis, true, true);
-                        int width = reader.getWidth(0);
-                        int height = reader.getHeight(0);
-                        dimensions.add(CbxPageDimension.builder().pageNumber(i).width(width).height(height).wide(width > height).build());
-                        continue;
-                    } finally {
-                        reader.dispose();
-                    }
-                }
+            try {
+                ImageDimensions dims = vipsImageService.readDimensionsFromFile(cachedPage);
+                dimensions.add(CbxPageDimension.builder().pageNumber(i).width(dims.width()).height(dims.height()).wide(dims.width() > dims.height()).build());
+                continue;
             } catch (Exception e) {
                 log.warn("Failed to read dimensions for cached page {}: {}", i, e.getMessage());
             }
@@ -183,25 +172,13 @@ public class CbxReaderService {
     private CbxPageDimension readEntryDimension(Path cbxPath, String entryName, int pageNumber) {
         try {
             byte[] imageBytes = archiveService.getEntryBytes(cbxPath, entryName);
-            try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(imageBytes))) {
-                Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-                if (readers.hasNext()) {
-                    ImageReader reader = readers.next();
-                    try {
-                        reader.setInput(iis, true, true);
-                        int width = reader.getWidth(0);
-                        int height = reader.getHeight(0);
-                        return CbxPageDimension.builder()
-                                .pageNumber(pageNumber)
-                                .width(width)
-                                .height(height)
-                                .wide(width > height)
-                                .build();
-                    } finally {
-                        reader.dispose();
-                    }
-                }
-            }
+            ImageDimensions dims = vipsImageService.readDimensions(imageBytes);
+            return CbxPageDimension.builder()
+                    .pageNumber(pageNumber)
+                    .width(dims.width())
+                    .height(dims.height())
+                    .wide(dims.width() > dims.height())
+                    .build();
         } catch (Exception e) {
             log.warn("Failed to read dimensions for page {} (entry: {}): {}", pageNumber, entryName, e.getMessage());
         }

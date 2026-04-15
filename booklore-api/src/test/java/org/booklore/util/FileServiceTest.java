@@ -47,13 +47,14 @@ class FileServiceTest {
     @Mock
     private AppSettingService appSettingService;
 
+    private VipsImageService mockVips;
     private FileService fileService;
 
     @TempDir
     Path tempDir;
 
     @BeforeEach
-    void setup() {
+    void setup() throws IOException {
         CoverCroppingSettings coverCroppingSettings = CoverCroppingSettings.builder()
                 .verticalCroppingEnabled(true)
                 .horizontalCroppingEnabled(true)
@@ -66,10 +67,78 @@ class FileServiceTest {
 
         RestTemplate mockRestTemplate = mock(RestTemplate.class);
         RestTemplate mockNoRedirectRestTemplate = mock(RestTemplate.class);
-        VipsImageService mockVips = mock(VipsImageService.class);
-        try {
-            lenient().doThrow(new RuntimeException("vips not available in test")).when(mockVips).resizeImage(any(), any(), anyInt(), anyInt());
-        } catch (Exception ignored) {}
+        mockVips = mock(VipsImageService.class);
+
+        // Stub bufferedImageToJpeg: convert BufferedImage to JPEG bytes using ImageIO
+        lenient().when(mockVips.bufferedImageToJpeg(any(BufferedImage.class), anyInt())).thenAnswer(inv -> {
+            BufferedImage img = inv.getArgument(0);
+            // Convert to RGB if the image has alpha (JPEG doesn't support alpha)
+            if (img.getColorModel().hasAlpha()) {
+                BufferedImage rgb = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = rgb.createGraphics();
+                g.setColor(Color.WHITE);
+                g.fillRect(0, 0, img.getWidth(), img.getHeight());
+                g.drawImage(img, 0, 0, null);
+                g.dispose();
+                img = rgb;
+            }
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(img, "JPEG", baos);
+            return baos.toByteArray();
+        });
+
+        // Stub readDimensions: decode bytes to get dimensions
+        lenient().when(mockVips.readDimensions(any(byte[].class))).thenAnswer(inv -> {
+            byte[] data = inv.getArgument(0);
+            BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+            if (img == null) throw new IOException("Cannot decode image");
+            return new ImageDimensions(img.getWidth(), img.getHeight());
+        });
+
+        // Stub readDimensionsFromFile: read file and decode to get dimensions
+        lenient().when(mockVips.readDimensionsFromFile(any(Path.class))).thenAnswer(inv -> {
+            Path path = inv.getArgument(0);
+            byte[] data = Files.readAllBytes(path);
+            BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+            if (img == null) throw new IOException("Cannot decode image from file");
+            return new ImageDimensions(img.getWidth(), img.getHeight());
+        });
+
+        // Stub findContentBounds: return the full image as content bounds (no trim)
+        lenient().when(mockVips.findContentBounds(any(byte[].class))).thenAnswer(inv -> {
+            byte[] data = inv.getArgument(0);
+            BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+            if (img == null) return new TrimBounds(0, 0, 1, 1);
+            return new TrimBounds(0, 0, img.getWidth(), img.getHeight());
+        });
+
+        // Stub flattenResizeAndSave: write a JPEG to the target path
+        lenient().doAnswer(inv -> {
+            byte[] data = inv.getArgument(0);
+            Path target = inv.getArgument(1);
+            Files.createDirectories(target.getParent());
+            Files.write(target, data);
+            return null;
+        }).when(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+
+        // Stub flattenThumbnailAndSave (file-to-file): copy source to target
+        lenient().doAnswer(inv -> {
+            Path source = inv.getArgument(0);
+            Path target = inv.getArgument(1);
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return null;
+        }).when(mockVips).flattenThumbnailAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+
+        // Stub flattenCropResizeAndSave: write bytes to the target path
+        lenient().doAnswer(inv -> {
+            byte[] data = inv.getArgument(0);
+            Path target = inv.getArgument(1);
+            Files.createDirectories(target.getParent());
+            Files.write(target, data);
+            return null;
+        }).when(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
+
         fileService = new FileService(appProperties, mockRestTemplate, appSettingService, mockNoRedirectRestTemplate, mockVips);
     }
 
@@ -380,195 +449,22 @@ class FileServiceTest {
     class ImageOperationsTests {
 
         @Nested
-        @DisplayName("readImage")
-        class ReadImageTests {
-            @Test
-            void validData_returnsImage() throws IOException {
-                BufferedImage image = createTestImage(100, 100);
-                byte[] imageData = imageToBytes(image);
-
-                BufferedImage result = FileService.readImage(imageData);
-
-                assertNotNull(result);
-                assertEquals(100, result.getWidth());
-                assertEquals(100, result.getHeight());
-            }
-
-            @Test
-            void nullData_throwsException() {
-                IOException ex = assertThrows(IOException.class, () -> FileService.readImage((byte[]) null));
-                assertEquals("Image data is null or empty", ex.getMessage());
-            }
-
-            @Test
-            void emptyData_throwsException() {
-                IOException ex = assertThrows(IOException.class, () -> FileService.readImage(new byte[0]));
-                assertEquals("Image data is null or empty", ex.getMessage());
-            }
-
-            @Test
-            void invalidData_throwsException() {
-                byte[] invalidData = "not an image".getBytes();
-                assertThrows(IOException.class, () -> FileService.readImage(invalidData));
-            }
-        }
-
-        @Nested
-        @DisplayName("resizeImage")
-        class ResizeImageTests {
-
-            @Test
-            void shrinks_imageProperly() {
-                BufferedImage original = createTestImage(100, 100);
-
-                BufferedImage resized = FileService.resizeImage(original, 50, 50);
-
-                assertAll(
-                        () -> assertEquals(50, resized.getWidth()),
-                        () -> assertEquals(50, resized.getHeight())
-                );
-            }
-
-            @Test
-            void enlarges_imageProperly() {
-                BufferedImage original = createTestImage(50, 50);
-
-                BufferedImage resized = FileService.resizeImage(original, 200, 200);
-
-                assertAll(
-                        () -> assertEquals(200, resized.getWidth()),
-                        () -> assertEquals(200, resized.getHeight())
-                );
-            }
-
-            @Test
-            void changesAspectRatio() {
-                BufferedImage original = createTestImage(100, 100);
-
-                BufferedImage resized = FileService.resizeImage(original, 200, 50);
-
-                assertAll(
-                        () -> assertEquals(200, resized.getWidth()),
-                        () -> assertEquals(50, resized.getHeight())
-                );
-            }
-
-            @Test
-            void sameSize_worksCorrectly() {
-                BufferedImage original = createTestImage(100, 100);
-
-                BufferedImage resized = FileService.resizeImage(original, 100, 100);
-
-                assertAll(
-                        () -> assertEquals(100, resized.getWidth()),
-                        () -> assertEquals(100, resized.getHeight()),
-                        () -> assertNotSame(original, resized)
-                );
-            }
-
-            @Test
-            void returnsRGBType() {
-                BufferedImage original = new BufferedImage(100, 100, BufferedImage.TYPE_INT_ARGB);
-
-                BufferedImage resized = FileService.resizeImage(original, 50, 50);
-
-                assertEquals(BufferedImage.TYPE_INT_RGB, resized.getType());
-            }
-
-            @Test
-            void handlesVerySmallDimensions() {
-                BufferedImage original = createTestImage(100, 100);
-
-                BufferedImage resized = FileService.resizeImage(original, 1, 1);
-
-                assertAll(
-                        () -> assertEquals(1, resized.getWidth()),
-                        () -> assertEquals(1, resized.getHeight())
-                );
-            }
-        }
-
-        @Nested
         @DisplayName("saveImage")
         class SaveImageTests {
 
             @Test
-            void validData_createsFile() throws IOException {
-                BufferedImage image = createTestImage(100, 100);
-                byte[] imageData = imageToBytes(image);
-                Path outputPath = tempDir.resolve("test-output.jpg");
-
-                FileService.saveImage(imageData, outputPath.toString());
-
-                assertAll(
-                        () -> assertTrue(Files.exists(outputPath)),
-                        () -> assertTrue(Files.size(outputPath) > 0)
-                );
-            }
-
-            @Test
-            void createsParentDirectories() throws IOException {
-                BufferedImage image = createTestImage(100, 100);
-                byte[] imageData = imageToBytes(image);
-                Path outputPath = tempDir.resolve("nested/deep/folder/test.jpg");
-
-                FileService.saveImage(imageData, outputPath.toString());
-
-                assertTrue(Files.exists(outputPath));
-            }
-
-            @Test
-            void invalidImageData_throwsException() {
-                byte[] invalidData = "not an image".getBytes();
-                Path outputPath = tempDir.resolve("invalid.jpg");
-
-                assertThrows(IOException.class, () ->
-                        FileService.saveImage(invalidData, outputPath.toString()));
+            void nullImageData_doesNotThrow() {
+                Path outputPath = tempDir.resolve("null.jpg");
+                assertDoesNotThrow(() -> fileService.saveImage(null, outputPath.toString()));
                 assertFalse(Files.exists(outputPath));
             }
 
             @Test
-            void emptyImageData_throwsException() {
+            void emptyImageData_doesNotThrow() {
                 byte[] emptyData = new byte[0];
                 Path outputPath = tempDir.resolve("empty.jpg");
-
-                IOException ex = assertThrows(IOException.class, () ->
-                        FileService.saveImage(emptyData, outputPath.toString()));
-                assertEquals("Image data is null or empty", ex.getMessage());
-            }
-
-            @Test
-            void savedImage_isReadable() throws IOException {
-                BufferedImage original = createTestImage(100, 100);
-                byte[] imageData = imageToBytes(original);
-                Path outputPath = tempDir.resolve("readable.jpg");
-
-                FileService.saveImage(imageData, outputPath.toString());
-                BufferedImage loaded = ImageIO.read(outputPath.toFile());
-
-                assertAll(
-                        () -> assertNotNull(loaded),
-                        () -> assertEquals(100, loaded.getWidth()),
-                        () -> assertEquals(100, loaded.getHeight())
-                );
-            }
-
-            @Test
-            void directoryCreationSucceeds_nestedPaths() throws IOException {
-                BufferedImage image = createTestImage(100, 100);
-                byte[] imageData = imageToBytes(image);
-                Path nestedPath = tempDir.resolve("nested/deep/folder/test.jpg");
-                assertDoesNotThrow(() -> FileService.saveImage(imageData, nestedPath.toString()),
-                        "Should create nested directories automatically");
-                assertTrue(Files.exists(nestedPath), "File should be created in nested directory");
-            }
-
-            @Test
-            void nullImageData_throwsException() {
-                Path outputPath = tempDir.resolve("null.jpg");
-                IOException ex = assertThrows(IOException.class, () ->
-                        FileService.saveImage(null, outputPath.toString()));
-                assertEquals("Image data is null or empty", ex.getMessage());
+                assertDoesNotThrow(() -> fileService.saveImage(emptyData, outputPath.toString()));
+                assertFalse(Files.exists(outputPath));
             }
         }
     }
@@ -605,13 +501,8 @@ class FileServiceTest {
 
                 fileService.saveCoverImages(image, 2L);
 
-                BufferedImage thumbnail = ImageIO.read(
-                        new File(fileService.getThumbnailFile(2L)));
-
-                assertAll(
-                        () -> assertEquals(250, thumbnail.getWidth()),
-                        () -> assertEquals(350, thumbnail.getHeight())
-                );
+                // Verify thumbnail was created via vips with correct dimensions
+                verify(mockVips).flattenThumbnailAndSave(any(Path.class), any(Path.class), eq(250), eq(350));
             }
 
             @Test
@@ -626,10 +517,9 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(imageWithAlpha, 3L);
 
                 assertTrue(result);
-
-                BufferedImage saved = ImageIO.read(
-                        new File(fileService.getCoverFile(3L)));
-                assertFalse(saved.getColorModel().hasAlpha(), "Saved image should not have transparency");
+                // Alpha flattening is now handled by vips, verify the call went through
+                verify(mockVips).bufferedImageToJpeg(eq(imageWithAlpha), eq(95));
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
             }
 
             @Test
@@ -649,61 +539,34 @@ class FileServiceTest {
 
                 fileService.saveCoverImages(image, 4L);
 
-                BufferedImage saved = ImageIO.read(
-                        new File(fileService.getCoverFile(4L)));
-
-                assertAll(
-                        () -> assertEquals(800, saved.getWidth()),
-                        () -> assertEquals(1200, saved.getHeight())
-                );
+                // Verify cover was saved via flattenResizeAndSave with max bounds
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
             }
 
             @Test
             void largeImage_isScaledDownToMaxDimensions() throws IOException {
-                // Create a very large image that will trigger scaling
-                int largeWidth = 2000;  // > MAX_ORIGINAL_WIDTH (1000)
-                int largeHeight = 3000; // > MAX_ORIGINAL_HEIGHT (1500)
+                int largeWidth = 2000;
+                int largeHeight = 3000;
 
                 BufferedImage largeImage = createTestImage(largeWidth, largeHeight);
                 boolean result = fileService.saveCoverImages(largeImage, 5L);
 
                 assertTrue(result);
-
-                BufferedImage savedCover = ImageIO.read(
-                        new File(fileService.getCoverFile(5L)));
-
-                assertNotNull(savedCover);
-
-                assertTrue(savedCover.getWidth() <= 1000,
-                        "Cover width should be <= MAX_ORIGINAL_WIDTH (1000), was: " + savedCover.getWidth());
-                assertTrue(savedCover.getHeight() <= 1500,
-                        "Cover height should be <= MAX_ORIGINAL_HEIGHT (1500), was: " + savedCover.getHeight());
-
-                double originalRatio = (double) largeWidth / largeHeight;
-                double savedRatio = (double) savedCover.getWidth() / savedCover.getHeight();
-                assertEquals(originalRatio, savedRatio, 0.01, "Aspect ratio should be preserved");
+                // Resizing is delegated to vips with max bounds
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
             }
 
             @Test
             void smallImage_maintainsOriginalDimensions() throws IOException {
-                // Create a small image that should NOT be scaled down
-                int smallWidth = 400;   // < MAX_ORIGINAL_WIDTH (1000)
-                int smallHeight = 600;  // < MAX_ORIGINAL_HEIGHT (1500)
+                int smallWidth = 400;
+                int smallHeight = 600;
 
                 BufferedImage smallImage = createTestImage(smallWidth, smallHeight);
                 boolean result = fileService.saveCoverImages(smallImage, 6L);
 
                 assertTrue(result);
-
-                BufferedImage savedCover = ImageIO.read(
-                        new File(fileService.getCoverFile(6L)));
-
-                assertNotNull(savedCover);
-
-                assertEquals(smallWidth, savedCover.getWidth(),
-                        "Small image width should be preserved");
-                assertEquals(smallHeight, savedCover.getHeight(),
-                        "Small image height should be preserved");
+                // Still goes through flattenResizeAndSave which handles proportional sizing
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
             }
         }
 
@@ -714,7 +577,6 @@ class FileServiceTest {
             @Test
             @DisplayName("extremely tall image is cropped when vertical cropping enabled")
             void extremelyTallImage_isCropped() throws IOException {
-                // Create an extremely tall image like a web comic page (ratio > 2.5)
                 int width = 940;
                 int height = 11280;  // ratio = 12:1
 
@@ -722,22 +584,14 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(tallImage, 100L);
 
                 assertTrue(result);
-
-                BufferedImage savedCover = ImageIO.read(
-                        new File(fileService.getCoverFile(100L)));
-
-                assertNotNull(savedCover);
-
-                // The image should be cropped to approximately 1.5:1 ratio from the top
-                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
-                assertTrue(savedRatio < 3.0,
-                        "Cropped image should have reasonable aspect ratio, was: " + savedRatio);
+                // Should use flattenCropResizeAndSave for extreme aspect ratio
+                verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
             @DisplayName("extremely wide image is cropped when horizontal cropping enabled")
             void extremelyWideImage_isCropped() throws IOException {
-                // Create an extremely wide image (ratio > 2.5)
                 int width = 3000;
                 int height = 400;  // width/height ratio = 7.5:1
 
@@ -745,22 +599,14 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(wideImage, 101L);
 
                 assertTrue(result);
-
-                BufferedImage savedCover = ImageIO.read(
-                        new File(fileService.getCoverFile(101L)));
-
-                assertNotNull(savedCover);
-
-                // The image should be cropped to a more reasonable aspect ratio
-                double savedRatio = (double) savedCover.getWidth() / savedCover.getHeight();
-                assertTrue(savedRatio < 3.0,
-                        "Cropped image should have reasonable aspect ratio, was: " + savedRatio);
+                // Should use flattenCropResizeAndSave for extreme aspect ratio
+                verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
             @DisplayName("normal aspect ratio image is not cropped")
             void normalAspectRatioImage_isNotCropped() throws IOException {
-                // Create a normal book cover sized image (ratio ~1.5:1)
                 int width = 600;
                 int height = 900;  // ratio = 1.5:1
 
@@ -768,23 +614,14 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(normalImage, 102L);
 
                 assertTrue(result);
-
-                BufferedImage savedCover = ImageIO.read(
-                        new File(fileService.getCoverFile(102L)));
-
-                assertNotNull(savedCover);
-
-                // The image should maintain its original aspect ratio
-                double originalRatio = (double) height / width;
-                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
-                assertEquals(originalRatio, savedRatio, 0.01,
-                        "Normal aspect ratio image should not be cropped");
+                // Should use flattenResizeAndSave (no crop) for normal aspect ratio
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
+                verify(mockVips, never()).flattenCropResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
             @DisplayName("cropping is disabled when settings are off")
             void croppingDisabled_imageNotCropped() throws IOException {
-                // Reconfigure with cropping disabled
                 CoverCroppingSettings disabledSettings = CoverCroppingSettings.builder()
                         .verticalCroppingEnabled(false)
                         .horizontalCroppingEnabled(false)
@@ -795,7 +632,6 @@ class FileServiceTest {
                         .build();
                 when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
-                // Create an extremely tall image
                 int width = 400;
                 int height = 4000;  // ratio = 10:1
 
@@ -803,17 +639,9 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(tallImage, 103L);
 
                 assertTrue(result);
-
-                BufferedImage savedCover = ImageIO.read(
-                        new File(fileService.getCoverFile(103L)));
-
-                assertNotNull(savedCover);
-
-                // Since the image exceeds max dimensions, it will be scaled, but aspect ratio preserved
-                double originalRatio = (double) height / width;
-                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
-                assertEquals(originalRatio, savedRatio, 0.01,
-                        "Image should not be cropped when cropping is disabled");
+                // With cropping disabled, should use flattenResizeAndSave (no crop)
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
+                verify(mockVips, never()).flattenCropResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
@@ -832,21 +660,17 @@ class FileServiceTest {
 
                 int width = 500;
                 int height = 3000;  // ratio = 6:1
-                BufferedImage tallImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-                Graphics2D g = tallImage.createGraphics();
-                g.setColor(Color.WHITE);
-                g.fillRect(0, 0, width, 200);
-                g.setColor(Color.BLUE);
-                g.fillRect(0, 200, width, height - 200);
-                g.dispose();
 
+                // Mock findContentBounds to simulate content starting at y=200
+                when(mockVips.findContentBounds(any(byte[].class))).thenReturn(new TrimBounds(0, 200, width, height - 200));
+
+                BufferedImage tallImage = createTestImage(width, height);
                 boolean result = fileService.saveCoverImages(tallImage, 104L);
                 assertTrue(result);
 
-                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(104L)));
-                assertNotNull(savedCover);
-                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
-                assertTrue(savedRatio < 3.0, "Cropped image should have reasonable aspect ratio");
+                // Should crop with offset from content bounds
+                verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
@@ -865,21 +689,16 @@ class FileServiceTest {
 
                 int width = 3000;
                 int height = 400;  // ratio = 7.5:1
-                BufferedImage wideImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-                Graphics2D g = wideImage.createGraphics();
-                g.setColor(Color.WHITE);
-                g.fillRect(0, 0, 200, height);
-                g.setColor(Color.BLUE);
-                g.fillRect(200, 0, width - 200, height);
-                g.dispose();
 
+                // Mock findContentBounds to simulate content starting at x=200
+                when(mockVips.findContentBounds(any(byte[].class))).thenReturn(new TrimBounds(200, 0, width - 200, height));
+
+                BufferedImage wideImage = createTestImage(width, height);
                 boolean result = fileService.saveCoverImages(wideImage, 105L);
                 assertTrue(result);
 
-                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(105L)));
-                assertNotNull(savedCover);
-                double savedRatio = (double) savedCover.getWidth() / savedCover.getHeight();
-                assertTrue(savedRatio < 3.0, "Cropped image should have reasonable aspect ratio");
+                verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
@@ -898,15 +717,16 @@ class FileServiceTest {
 
                 int width = 500;
                 int height = 3000;
-                BufferedImage uniformImage = createTestImage(width, height, Color.BLUE);
 
+                // For uniform images, findTrim returns zero-area bounds
+                when(mockVips.findContentBounds(any(byte[].class))).thenReturn(new TrimBounds(0, 0, 0, 0));
+
+                BufferedImage uniformImage = createTestImage(width, height, Color.BLUE);
                 boolean result = fileService.saveCoverImages(uniformImage, 106L);
                 assertTrue(result);
 
-                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(106L)));
-                assertNotNull(savedCover);
-                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
-                assertTrue(savedRatio < 3.0, "Cropped image should have reasonable aspect ratio");
+                verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
 
             @Test
@@ -918,16 +738,15 @@ class FileServiceTest {
                 when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
                 int width = 500;
-                int height = 3000;  // Very tall image
+                int height = 3000;
                 BufferedImage tallImage = createTestImage(width, height);
 
                 boolean result = fileService.saveCoverImages(tallImage, 107L);
                 assertTrue(result);
 
-                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(107L)));
-                assertNotNull(savedCover);
-                assertTrue(savedCover.getWidth() <= 1000);
-                assertTrue(savedCover.getHeight() <= 1500);
+                // No cropping settings means no crop
+                verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
+                verify(mockVips, never()).flattenCropResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
             }
         }
 
@@ -1194,7 +1013,7 @@ class FileServiceTest {
         private FileService fileService;
 
         @BeforeEach
-        void setup() {
+        void setup() throws IOException {
             lenient().when(appProperties.getPathConfig()).thenReturn(tempDir.toString());
 
             CoverCroppingSettings coverCroppingSettings = CoverCroppingSettings.builder()
@@ -1208,9 +1027,55 @@ class FileServiceTest {
             lenient().when(appSettingServiceForNetwork.getAppSettings()).thenReturn(appSettings);
 
             VipsImageService networkMockVips = mock(VipsImageService.class);
-            try {
-                lenient().doThrow(new RuntimeException("vips not available in test")).when(networkMockVips).resizeImage(any(), any(), anyInt(), anyInt());
-            } catch (Exception ignored) {}
+
+            // Stub vips for tests that call saveCoverImages
+            lenient().when(networkMockVips.bufferedImageToJpeg(any(BufferedImage.class), anyInt())).thenAnswer(inv -> {
+                BufferedImage img = inv.getArgument(0);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(img, "JPEG", baos);
+                return baos.toByteArray();
+            });
+            lenient().when(networkMockVips.readDimensions(any(byte[].class))).thenAnswer(inv -> {
+                byte[] data = inv.getArgument(0);
+                BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+                if (img == null) throw new IOException("Cannot decode image");
+                return new ImageDimensions(img.getWidth(), img.getHeight());
+            });
+            lenient().when(networkMockVips.readDimensionsFromFile(any(Path.class))).thenAnswer(inv -> {
+                Path path = inv.getArgument(0);
+                byte[] data = Files.readAllBytes(path);
+                BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+                if (img == null) throw new IOException("Cannot decode image from file");
+                return new ImageDimensions(img.getWidth(), img.getHeight());
+            });
+            lenient().when(networkMockVips.findContentBounds(any(byte[].class))).thenAnswer(inv -> {
+                byte[] data = inv.getArgument(0);
+                BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+                if (img == null) return new TrimBounds(0, 0, 1, 1);
+                return new TrimBounds(0, 0, img.getWidth(), img.getHeight());
+            });
+            lenient().doAnswer(inv -> {
+                byte[] data = inv.getArgument(0);
+                Path target = inv.getArgument(1);
+                Files.createDirectories(target.getParent());
+                Files.write(target, data);
+                return null;
+            }).when(networkMockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+            lenient().doAnswer(inv -> {
+                Path source = inv.getArgument(0);
+                Path target = inv.getArgument(1);
+                Files.createDirectories(target.getParent());
+                Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                return null;
+            }).when(networkMockVips).flattenThumbnailAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+            lenient().doAnswer(inv -> {
+                byte[] data = inv.getArgument(0);
+                Path target = inv.getArgument(1);
+                Files.createDirectories(target.getParent());
+                Files.write(target, data);
+                return null;
+            }).when(networkMockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
+
             fileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork, restTemplate, networkMockVips);
         }
 
@@ -1221,7 +1086,7 @@ class FileServiceTest {
             @Test
             @DisplayName("downloads and returns valid image")
             @Timeout(5)
-            void downloadImageFromUrl_validImage_returnsBufferedImage() throws IOException {
+            void downloadImageFromUrl_validImage_returnsBytes() throws IOException {
                 String imageUrl = "http://1.1.1.1/image.jpg";
                 BufferedImage testImage = createTestImage(100, 100);
                 byte[] imageBytes = imageToBytes(testImage);
@@ -1238,11 +1103,10 @@ class FileServiceTest {
                         eq(byte[].class)
                 )).thenReturn(responseEntity);
 
-                BufferedImage result = testFileService.downloadImageFromUrl(imageUrl);
+                byte[] result = testFileService.downloadImageFromUrl(imageUrl);
 
                 assertNotNull(result);
-                assertEquals(100, result.getWidth());
-                assertEquals(100, result.getHeight());
+                assertTrue(result.length > 0);
             }
 
             @Test
@@ -1260,25 +1124,6 @@ class FileServiceTest {
 
                 assertThrows(IOException.class, () ->
                         fileService.downloadImageFromUrl(imageUrl));
-            }
-
-            @Test
-            @DisplayName("throws IOException when ImageIO cannot read bytes")
-            @Timeout(5)
-            void downloadImageFromUrl_invalidImageData_throwsException() throws IOException {
-                String imageUrl = "http://1.1.1.1/image.jpg";
-                byte[] invalidBytes = "not an image".getBytes();
-                ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(invalidBytes);
-                RestTemplate noRedirectMock = (RestTemplate) ReflectionTestUtils.getField(fileService, "noRedirectRestTemplate");
-
-                when(noRedirectMock.exchange(
-                        anyString(),
-                        eq(HttpMethod.GET),
-                        any(HttpEntity.class),
-                        eq(byte[].class)
-                )).thenReturn(responseEntity);
-
-                assertThrows(IOException.class, () -> fileService.downloadImageFromUrl(imageUrl));
             }
 
             @Test
@@ -1319,7 +1164,7 @@ class FileServiceTest {
                         urlCaptor.capture(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)
                 )).thenReturn(redirectResponse, imageResponse);
 
-                BufferedImage result = testFileService.downloadImageFromUrl(originalUrl);
+                byte[] result = testFileService.downloadImageFromUrl(originalUrl);
 
                 assertNotNull(result);
                 assertEquals(originalUrl, urlCaptor.getAllValues().get(0));
@@ -1453,13 +1298,46 @@ class FileServiceTest {
         class CreateThumbnailFromUrlTests {
 
             @Test
-            @DisplayName("downloads and saves cover images successfully")
+            @DisplayName("downloads and delegates to saveCoverImages successfully")
             @Timeout(5)
-            void createThumbnailFromUrl_validImage_createsCoverAndThumbnail() throws IOException {
+            void createThumbnailFromUrl_validImage_delegatesToSaveCoverImages() throws IOException {
                 String imageUrl = "http://1.1.1.1/cover.jpg";
                 long bookId = 42L;
-                BufferedImage testImage = createTestImage(800, 1200); // Portrait image
+                BufferedImage testImage = createTestImage(800, 1200);
                 byte[] imageBytes = imageToBytes(testImage);
+
+                VipsImageService spyVips = mock(VipsImageService.class);
+                lenient().when(spyVips.readDimensions(any(byte[].class))).thenAnswer(inv -> {
+                    byte[] data = inv.getArgument(0);
+                    BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+                    return new ImageDimensions(img.getWidth(), img.getHeight());
+                });
+                lenient().when(spyVips.readDimensionsFromFile(any(Path.class))).thenAnswer(inv -> {
+                    Path path = inv.getArgument(0);
+                    byte[] data = Files.readAllBytes(path);
+                    BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+                    return new ImageDimensions(img.getWidth(), img.getHeight());
+                });
+                lenient().when(spyVips.findContentBounds(any(byte[].class))).thenAnswer(inv -> {
+                    byte[] data = inv.getArgument(0);
+                    BufferedImage img = ImageIO.read(new java.io.ByteArrayInputStream(data));
+                    return new TrimBounds(0, 0, img.getWidth(), img.getHeight());
+                });
+                lenient().doAnswer(inv -> {
+                    Path target = inv.getArgument(1);
+                    Files.createDirectories(target.getParent());
+                    Files.write(target, (byte[]) inv.getArgument(0));
+                    return null;
+                }).when(spyVips).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+                lenient().doAnswer(inv -> {
+                    Path source = inv.getArgument(0);
+                    Path target = inv.getArgument(1);
+                    Files.createDirectories(target.getParent());
+                    Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    return null;
+                }).when(spyVips).flattenThumbnailAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+
+                FileService testFileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork, restTemplate, spyVips);
 
                 ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(imageBytes);
                 when(restTemplate.exchange(
@@ -1470,15 +1348,10 @@ class FileServiceTest {
                 )).thenReturn(responseEntity);
 
                 assertDoesNotThrow(() ->
-                        fileService.createThumbnailFromUrl(bookId, imageUrl));
+                        testFileService.createThumbnailFromUrl(bookId, imageUrl));
 
-                Path imagesFolder = tempDir.resolve("images").resolve(String.valueOf(bookId));
-                assertTrue(Files.exists(imagesFolder.resolve("cover.jpg")));
-                assertTrue(Files.exists(imagesFolder.resolve("thumbnail.jpg")));
-
-                BufferedImage thumbnail = ImageIO.read(imagesFolder.resolve("thumbnail.jpg").toFile());
-                assertEquals(250, thumbnail.getWidth()); // THUMBNAIL_WIDTH
-                assertEquals(350, thumbnail.getHeight()); // THUMBNAIL_HEIGHT
+                verify(spyVips).flattenResizeAndSave(eq(imageBytes), any(Path.class), anyInt(), anyInt());
+                verify(spyVips).flattenThumbnailAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
             }
 
             @Test
