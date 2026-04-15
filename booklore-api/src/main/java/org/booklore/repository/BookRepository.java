@@ -23,12 +23,20 @@ import java.util.Set;
 public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpecificationExecutor<BookEntity> {
     Optional<BookEntity> findBookByIdAndLibraryId(long id, long libraryId);
 
+    @EntityGraph(attributePaths = { "metadata", "metadata.authors", "bookFiles", "libraryPath" })
+    @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+    Optional<BookEntity> findByIdForAudiobook(@Param("id") Long id);
+
     @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "libraryPath", "library", "bookFiles" })
     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByIdWithBookFiles(@Param("id") Long id);
 
     // Only ToOne paths in EntityGraph; collections (authors, categories, moods, tags) loaded via @BatchSize.
-    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "library" })
+    @EntityGraph(attributePaths = { "metadata", "bookFiles", "libraryPath", "library" })
+    @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
+    Optional<BookEntity> findByIdForStreaming(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = { "metadata", "metadata.authors", "metadata.categories", "metadata.moods", "metadata.tags", "metadata.comicMetadata", "library" })
     @Query("SELECT b FROM BookEntity b WHERE b.id = :id AND (b.deleted IS NULL OR b.deleted = false)")
     Optional<BookEntity> findByIdWithMetadata(@Param("id") Long id);
 
