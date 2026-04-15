@@ -12,7 +12,7 @@ import java.util.List;
 public interface BookReviewRepository extends JpaRepository<BookReviewEntity, Long> {
     List<BookReviewEntity> findByBookMetadataBookId(Long bookId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("DELETE FROM BookReviewEntity r WHERE r.bookMetadata.book.id = :bookId")
     void deleteByBookMetadataBookId(@Param("bookId") Long bookId);
