@@ -3,6 +3,8 @@ package org.booklore.service.metadata.writer;
 import org.booklore.model.MetadataClearFlags;
 import org.booklore.model.dto.settings.AppSettings;
 import org.booklore.model.dto.settings.MetadataPersistenceSettings;
+import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.util.FileService;
 import org.booklore.model.entity.AuthorEntity;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookFileEntity;
@@ -45,6 +47,7 @@ class EpubMetadataWriterTest {
     private BookMetadataEntity metadata;
     private BookEntity bookEntity;
     private AppSettingService appSettingService;
+    private FileService fileService;
 
     @TempDir
     Path tempDir;
@@ -52,6 +55,7 @@ class EpubMetadataWriterTest {
     @BeforeEach
     void setUp() {
         appSettingService = mock(AppSettingService.class);
+        fileService = mock(FileService.class);
         MetadataPersistenceSettings.FormatSettings epubFormatSettings = MetadataPersistenceSettings.FormatSettings.builder()
                 .enabled(true)
                 .maxFileSizeInMb(100)
@@ -66,7 +70,7 @@ class EpubMetadataWriterTest {
         when(appSettings.getMetadataPersistenceSettings()).thenReturn(metadataPersistenceSettings);
         when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
-        writer = new EpubMetadataWriter(appSettingService);
+        writer = new EpubMetadataWriter(appSettingService, fileService);
         metadata = new BookMetadataEntity();
         metadata.setTitle("Test Book");
         AuthorEntity author = new AuthorEntity();

@@ -289,6 +289,65 @@ public class FileService {
         }
     }
 
+    /**
+     * Downloads raw image bytes from a URL with full SSRF protection (scheme validation,
+     * DNS resolution checks against internal/private networks).
+     */
+    public byte[] downloadImageBytesFromUrl(String imageUrl) throws IOException {
+        try {
+            return downloadImageBytesFromUrlInternal(imageUrl);
+        } catch (Exception e) {
+            log.warn("Failed to download image bytes from {}: {}", imageUrl, e.getMessage());
+            if (e instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Failed to download image bytes from " + imageUrl + ": " + e.getMessage(), e);
+        }
+    }
+
+    private byte[] downloadImageBytesFromUrlInternal(String imageUrl) throws IOException {
+        URI uri = URI.create(imageUrl);
+        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IOException("Only HTTP and HTTPS protocols are allowed");
+        }
+
+        String host = uri.getHost();
+        if (host == null) {
+            throw new IOException("Invalid URL: no host found in " + imageUrl);
+        }
+
+        InetAddress[] inetAddresses = InetAddress.getAllByName(host);
+        if (inetAddresses.length == 0) {
+            throw new IOException("Could not resolve host: " + host);
+        }
+        for (InetAddress inetAddress : inetAddresses) {
+            if (isInternalAddress(inetAddress)) {
+                throw new SecurityException("URL points to a local or private internal network address: " + host + " (" + inetAddress.getHostAddress() + ")");
+            }
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
+        headers.set(HttpHeaders.ACCEPT, "image/*");
+
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
+        log.debug("Downloading image bytes from: {}", imageUrl);
+
+        ResponseEntity<byte[]> response = restTemplate.exchange(
+                imageUrl,
+                HttpMethod.GET,
+                entity,
+                byte[].class
+        );
+
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            return response.getBody();
+        }
+
+        throw new IOException("Failed to download image bytes. HTTP Status: " + response.getStatusCode());
+    }
+
     private BufferedImage downloadImageFromUrlInternal(String imageUrl) throws IOException {
         String currentUrl = imageUrl;
         int redirectCount = 0;
