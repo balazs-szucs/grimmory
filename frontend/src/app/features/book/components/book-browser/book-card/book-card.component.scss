@@ -14,8 +14,14 @@
     transform: translateY(-2px);
   }
 
-  &.selected {
+  &.selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
     border: 2px solid var(--primary-color);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 10;
   }
 }
 
