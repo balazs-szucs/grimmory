@@ -440,7 +440,7 @@ describe('BookBrowserComponent', () => {
   });
 
   it('calls SeriesCollapseFilter.collapseBooks when computing pipelineInputs', () => {
-    const {component} = createHarness();
+    createHarness();
     const filter = TestBed.inject(SeriesCollapseFilter);
     const collapseBooksSpy = vi.spyOn(filter, 'collapseBooks');
 
