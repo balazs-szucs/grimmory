@@ -13,14 +13,16 @@ export const AuthInterceptorService: HttpInterceptorFn = (req, next: HttpHandler
 
   const token = authService.getInternalAccessToken();
   const isApiRequest = req.url.startsWith(`${API_CONFIG.BASE_URL}/api/`);
-  const isAuthRequest = req.url.startsWith(`${API_CONFIG.BASE_URL}/api/v1/auth/`);
+  const isExcludedAuthRequest = req.url.includes('/api/v1/auth/login') ||
+                                req.url.includes('/api/v1/auth/refresh') ||
+                                req.url.includes('/api/v1/auth/remote');
   const hasAuthHeader = req.headers.has('Authorization');
 
-  const authReq = (token && isApiRequest && !isAuthRequest && !hasAuthHeader) ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
+  const authReq = (token && isApiRequest && !isExcludedAuthRequest && !hasAuthHeader) ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
 
   return next(authReq).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (error.status === 401 && !isAuthRequest) {
+      if (error.status === 401 && !isExcludedAuthRequest) {
         return handle401Error(authService, authReq, next);
       }
       return throwError(() => error);
