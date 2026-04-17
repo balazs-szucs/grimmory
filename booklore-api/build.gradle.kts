@@ -38,40 +38,38 @@ repositories {
     maven(url = "https://jitpack.io")
 }
 
-fun pdfiumNativesClassifier(): String {
-    // Support cross-compilation: check for explicit target overrides first
+fun getTargetPlatformInfo(): Pair<String, String> {
     val targetPlatform = System.getenv("TARGETPLATFORM")
         ?: project.findProperty("targetPlatform")?.toString()
     val targetArch = System.getenv("TARGETARCH")
         ?: project.findProperty("targetArch")?.toString()
 
-    val osName: String
-    val arch: String
-
-    if (targetPlatform != null) {
-        // Docker TARGETPLATFORM format: linux/amd64, linux/arm64
+    return if (targetPlatform != null) {
         val parts = targetPlatform.split("/")
-        osName = parts.getOrElse(0) { "linux" }
-        arch = parts.getOrElse(1) { "amd64" }
+        parts.getOrElse(0) { "linux" } to parts.getOrElse(1) { "amd64" }
     } else {
-        osName = System.getProperty("os.name").lowercase()
-        arch = targetArch ?: System.getProperty("os.arch").lowercase()
+        System.getProperty("os.name").lowercase() to (targetArch ?: System.getProperty("os.arch").lowercase())
     }
+}
+
+fun isMuslTarget(): Boolean {
+    return try {
+        val libDir = File("/lib")
+        libDir.exists() && (libDir.listFiles()?.any { f -> f.name.startsWith("ld-musl-") } == true)
+    } catch (_: Exception) {
+        try {
+            File("/proc/self/maps").readText().contains("musl")
+        } catch (_: Exception) { false }
+    }
+}
+
+fun pdfiumNativesClassifier(): String {
+    val (osName, arch) = getTargetPlatformInfo()
 
     val osKey = when {
         "win" in osName -> "windows"
         "mac" in osName || "darwin" in osName -> "darwin"
-        "nux" in osName || "linux" in osName -> {
-            val isMusl = try {
-                val libDir = File("/lib")
-                libDir.exists() && (libDir.listFiles()?.any { f -> f.name.startsWith("ld-musl-") } == true)
-            } catch (_: Exception) {
-                try {
-                    File("/proc/self/maps").readText().contains("musl")
-                } catch (_: Exception) { false }
-            }
-            if (isMusl) "linux-musl" else "linux"
-        }
+        "nux" in osName || "linux" in osName -> if (isMuslTarget()) "linux-musl" else "linux"
         else -> error("Unsupported OS: $osName")
     }
 
@@ -82,6 +80,25 @@ fun pdfiumNativesClassifier(): String {
     }
 
     return "natives-$osKey-$archKey"
+}
+
+fun epub4jNativesClassifier(): String {
+    val (osName, arch) = getTargetPlatformInfo()
+
+    val osKey = when {
+        "win" in osName -> "windows"
+        "mac" in osName || "darwin" in osName -> "macos"
+        "nux" in osName || "linux" in osName -> if (isMuslTarget()) "linux-musl" else "linux"
+        else -> error("Unsupported OS: $osName")
+    }
+
+    val archKey = when (arch) {
+        "x86_64", "amd64" -> "x86_64"
+        "aarch64", "arm64" -> "aarch64"
+        else -> error("Unsupported architecture: $arch")
+    }
+
+    return "$osKey-$archKey"
 }
 
 configurations {
@@ -132,11 +149,13 @@ dependencies {
 
     // epub4j-grimmory fork publishes as org.grimmory:epub4j-core
     val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.1.0"
-    implementation(epub4jCoords)
+    implementation(epub4jCoords) {
+        exclude(group = "org.grimmory", module = "epub4j-native")
+    }
 
     // epub4j-native for native archive parsing
-    val epub4jNativeCoords = if (useLocalLibs) "org.grimmory:epub4j-native:+" else "org.grimmory:epub4j-native:1.1.0"
-    implementation(epub4jNativeCoords)
+    val epub4jNativeVersion = if (useLocalLibs) "+" else "1.1.0"
+    implementation(group = "org.grimmory", name = "epub4j-native", version = epub4jNativeVersion, classifier = epub4jNativesClassifier())
 
     // --- Audio Metadata (Audiobook Support) ---
     implementation("com.github.RouHim:jaudiotagger:2.0.19")
