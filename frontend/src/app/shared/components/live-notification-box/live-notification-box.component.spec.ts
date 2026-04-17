@@ -1,5 +1,5 @@
 import {Subject} from 'rxjs';
-import {TestBed, ComponentFixture} from '@angular/core/testing';
+import {TestBed} from '@angular/core/testing';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 
 import {TranslocoService} from '@jsverse/transloco';
@@ -12,7 +12,6 @@ describe('LiveNotificationBoxComponent', () => {
   let notifications$: Subject<LogNotification>;
   let langChanges$: Subject<string>;
   let component: LiveNotificationBoxComponent;
-  let fixture: ComponentFixture<LiveNotificationBoxComponent>;
 
   beforeEach(() => {
     notifications$ = new Subject<LogNotification>();
