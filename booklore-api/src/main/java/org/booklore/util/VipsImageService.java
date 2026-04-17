@@ -4,23 +4,24 @@ import app.photofox.vipsffm.VBlob;
 import app.photofox.vipsffm.VImage;
 import app.photofox.vipsffm.Vips;
 import app.photofox.vipsffm.VipsError;
+import app.photofox.vipsffm.VipsHelper;
 import app.photofox.vipsffm.VipsOption;
+import app.photofox.vipsffm.enums.VipsAccess;
+import app.photofox.vipsffm.enums.VipsBandFormat;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -38,11 +39,13 @@ public class VipsImageService {
     private static final Semaphore ENCODING_SEMAPHORE = new Semaphore(Runtime.getRuntime().availableProcessors());
     private static final int DEFAULT_JPEG_QUALITY = 90;
     private static final List<Double> WHITE_BACKGROUND = List.of(255.0, 255.0, 255.0);
+    private static final VipsOption SEQUENTIAL_ACCESS = VipsOption.Enum("access", VipsAccess.ACCESS_SEQUENTIAL);
+    private static final AtomicBoolean VIPS_CONFIGURED = new AtomicBoolean(false);
 
     public ImageDimensions readDimensions(byte[] data) throws IOException {
         var ref = new AtomicReference<ImageDimensions>();
         runVips(arena -> {
-            VImage img = VImage.newFromBytes(arena, data);
+            VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
             ref.set(new ImageDimensions(img.getWidth(), img.getHeight()));
         });
         return ref.get();
@@ -51,7 +54,7 @@ public class VipsImageService {
     public ImageDimensions readDimensionsFromFile(Path path) throws IOException {
         var ref = new AtomicReference<ImageDimensions>();
         runVips(arena -> {
-            VImage img = VImage.newFromFile(arena, path.toString());
+            VImage img = VImage.newFromFile(arena, path.toString(), SEQUENTIAL_ACCESS);
             ref.set(new ImageDimensions(img.getWidth(), img.getHeight()));
         });
         return ref.get();
@@ -60,7 +63,7 @@ public class VipsImageService {
     public TrimBounds findContentBounds(byte[] data) throws IOException {
         var ref = new AtomicReference<TrimBounds>();
         runVips(arena -> {
-            VImage img = VImage.newFromBytes(arena, data);
+            VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
             if (img.hasAlpha()) {
                 img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
             }
@@ -76,7 +79,7 @@ public class VipsImageService {
     public TrimBounds findContentBounds(Path path) throws IOException {
         var ref = new AtomicReference<TrimBounds>();
         runVips(arena -> {
-            VImage img = VImage.newFromFile(arena, path.toString());
+            VImage img = VImage.newFromFile(arena, path.toString(), SEQUENTIAL_ACCESS);
             if (img.hasAlpha()) {
                 img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
             }
@@ -92,7 +95,7 @@ public class VipsImageService {
     public boolean canDecode(byte[] data) {
         if (data == null || data.length == 0) return false;
         try {
-            Vips.run(arena -> VImage.newFromBytes(arena, data));
+            Vips.run(arena -> VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS));
             return true;
         } catch (VipsError e) {
             return false;
@@ -176,7 +179,7 @@ public class VipsImageService {
      */
     public void resizeImage(Path source, Path target, int width, int height) throws IOException {
         runVips(arena -> {
-            VImage img = VImage.newFromFile(arena, source.toString());
+            VImage img = VImage.newFromFile(arena, source.toString(), SEQUENTIAL_ACCESS);
             if (img.getWidth() <= width && img.getHeight() <= height) {
                 try {
                     Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
@@ -207,7 +210,7 @@ public class VipsImageService {
             int cropLeft, int cropTop, int cropWidth, int cropHeight,
             int maxWidth, int maxHeight) throws IOException {
         runVips(arena -> {
-            VImage img = VImage.newFromFile(arena, source.toString());
+            VImage img = VImage.newFromFile(arena, source.toString(), SEQUENTIAL_ACCESS);
             img = img.extractArea(cropLeft, cropTop, cropWidth, cropHeight);
             img = proportionalResize(img, maxWidth, maxHeight);
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
@@ -220,7 +223,7 @@ public class VipsImageService {
     public byte[] encodeAsJpeg(byte[] data, int quality) throws IOException {
         var ref = new AtomicReference<byte[]>();
         runVips(arena -> {
-            VImage img = VImage.newFromBytes(arena, data);
+            VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
             VBlob blob = img.jpegsaveBuffer(VipsOption.Int("Q", quality));
             ref.set(blob.asClonedByteBuffer().array());
         });
@@ -233,7 +236,7 @@ public class VipsImageService {
     public byte[] encodeAsPng(byte[] data) throws IOException {
         var ref = new AtomicReference<byte[]>();
         runVips(arena -> {
-            VImage img = VImage.newFromBytes(arena, data);
+            VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
             VBlob blob = img.pngsaveBuffer();
             ref.set(blob.asClonedByteBuffer().array());
         });
@@ -241,8 +244,9 @@ public class VipsImageService {
     }
 
     /**
-     * Converts a BufferedImage to JPEG bytes using ImageIO.
-     * Works regardless of libvips availability since BufferedImages are already in Java heap.
+     * Converts a BufferedImage to JPEG bytes using libvips via vips-ffm.
+     * Extracts raw RGB pixel data from the BufferedImage and encodes it with
+     * libvips's optimised JPEG encoder (libjpeg-turbo).
      */
     public byte[] bufferedImageToJpeg(BufferedImage img, int quality) throws IOException {
         BufferedImage rgbImage;
@@ -256,29 +260,44 @@ public class VipsImageService {
             g.drawImage(img, 0, 0, null);
             g.dispose();
         }
-        var baos = new ByteArrayOutputStream();
-        var writers = ImageIO.getImageWritersByFormatName("JPEG");
-        if (!writers.hasNext()) {
-            throw new IOException("No JPEG writer available");
-        }
-        var writer = writers.next();
-        try {
-            var param = writer.getDefaultWriteParam();
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(quality / 100.0f);
-            try (var ios = ImageIO.createImageOutputStream(baos)) {
-                writer.setOutput(ios);
-                writer.write(null, new IIOImage(rgbImage, null, null), param);
-            }
-        } finally {
-            writer.dispose();
-        }
-        return baos.toByteArray();
+        int w = rgbImage.getWidth();
+        int h = rgbImage.getHeight();
+        byte[] rgbBytes = extractRgbBytes(rgbImage, w, h);
+        var ref = new AtomicReference<byte[]>();
+        runVips(arena -> {
+            MemorySegment segment = arena.allocate((long) w * h * 3);
+            segment.copyFrom(MemorySegment.ofArray(rgbBytes));
+            VImage vimg = VImage.newFromMemory(arena, segment, w, h, 3,
+                    VipsBandFormat.FORMAT_UCHAR.getRawValue());
+            VBlob blob = vimg.jpegsaveBuffer(VipsOption.Int("Q", quality));
+            ref.set(blob.asClonedByteBuffer().array());
+        });
+        return ref.get();
     }
 
-    // ========================================
-    // LEGACY API (kept for backward compat during migration)
-    // ========================================
+    /**
+     * Downscales a BufferedImage using vips Lanczos3 and encodes directly to JPEG.
+     * Avoids creating an intermediate BufferedImage by combining resize + encode
+     * in a single vips pipeline.
+     */
+    public byte[] downscaleBufferedImageToJpeg(BufferedImage img, int targetWidth, int targetHeight,
+            int quality) throws IOException {
+        int w = img.getWidth();
+        int h = img.getHeight();
+        byte[] rgbBytes = extractRgbBytes(img, w, h);
+        var ref = new AtomicReference<byte[]>();
+        runVips(arena -> {
+            MemorySegment segment = arena.allocate((long) w * h * 3);
+            segment.copyFrom(MemorySegment.ofArray(rgbBytes));
+            VImage vimg = VImage.newFromMemory(arena, segment, w, h, 3,
+                    VipsBandFormat.FORMAT_UCHAR.getRawValue());
+            double scale = Math.min((double) targetWidth / w, (double) targetHeight / h);
+            vimg = vimg.resize(scale);
+            VBlob blob = vimg.jpegsaveBuffer(VipsOption.Int("Q", quality));
+            ref.set(blob.asClonedByteBuffer().array());
+        });
+        return ref.get();
+    }
 
     /**
      * Converts an image to JPEG with optimized quality.
@@ -289,12 +308,8 @@ public class VipsImageService {
         return encodeAsJpeg(data, (int) (quality * 100));
     }
 
-    // ========================================
-    // INTERNAL HELPERS
-    // ========================================
-
     private VImage loadAndFlatten(Arena arena, byte[] data) throws VipsError {
-        VImage img = VImage.newFromBytes(arena, data);
+        VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
         if (img.hasAlpha()) {
             img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
         }
@@ -302,11 +317,23 @@ public class VipsImageService {
     }
 
     private VImage loadAndFlattenFromFile(Arena arena, String path) throws VipsError {
-        VImage img = VImage.newFromFile(arena, path);
+        VImage img = VImage.newFromFile(arena, path, SEQUENTIAL_ACCESS);
         if (img.hasAlpha()) {
             img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
         }
         return img;
+    }
+
+    private byte[] extractRgbBytes(BufferedImage image, int w, int h) {
+        int[] pixels = image.getRGB(0, 0, w, h, null, 0, w);
+        byte[] rgbBytes = new byte[w * h * 3];
+        for (int i = 0; i < pixels.length; i++) {
+            int px = pixels[i];
+            rgbBytes[i * 3]     = (byte) ((px >> 16) & 0xFF);
+            rgbBytes[i * 3 + 1] = (byte) ((px >> 8) & 0xFF);
+            rgbBytes[i * 3 + 2] = (byte) (px & 0xFF);
+        }
+        return rgbBytes;
     }
 
     private VImage proportionalResize(VImage img, int maxWidth, int maxHeight) throws VipsError {
@@ -339,7 +366,18 @@ public class VipsImageService {
     private void runVips(VipsRunnable task) throws IOException {
         ENCODING_SEMAPHORE.acquireUninterruptibly();
         try {
-            Vips.run(task::run);
+            Vips.run(arena -> {
+                if (VIPS_CONFIGURED.compareAndSet(false, true)) {
+                    try {
+                        VipsHelper.cache_set_max(0);
+                        log.info("libvips {} initialised – operation cache disabled",
+                                VipsHelper.version_string());
+                    } catch (VipsError e) {
+                        log.warn("Failed to configure libvips cache settings", e);
+                    }
+                }
+                task.run(arena);
+            });
         } catch (VipsError e) {
             throw new IOException("libvips operation failed", e);
         } finally {

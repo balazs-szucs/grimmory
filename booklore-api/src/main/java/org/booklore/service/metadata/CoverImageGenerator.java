@@ -39,7 +39,6 @@ public class CoverImageGenerator {
 
     public byte[] generateCover(String title, String author, String subtitle) {
         BufferedImage render = null;
-        BufferedImage result = null;
         Graphics2D g = null;
 
         try {
@@ -78,17 +77,13 @@ public class CoverImageGenerator {
                 if (g != null) g.dispose();
             }
 
-            result = downscale(render);
-            render.flush();
-            render = null;
-
-            return encodeJpeg(result);
+            return vipsImageService.downscaleBufferedImageToJpeg(render, WIDTH, HEIGHT, 95);
 
         } catch (Exception e) {
             log.error("Cover generation failed: {}", title, e);
             throw new RuntimeException("Cover generation failed", e);
         } finally {
-            cleanup(g, render, result);
+            cleanup(g, render);
         }
     }
 
@@ -97,7 +92,6 @@ public class CoverImageGenerator {
      */
     public byte[] generateSquareCover(String title, String author) {
         BufferedImage render = null;
-        BufferedImage result = null;
         Graphics2D g = null;
 
         try {
@@ -129,17 +123,13 @@ public class CoverImageGenerator {
                 if (g != null) g.dispose();
             }
 
-            result = downscaleSquare(render);
-            render.flush();
-            render = null;
-
-            return encodeJpeg(result);
+            return vipsImageService.downscaleBufferedImageToJpeg(render, SQUARE_SIZE, SQUARE_SIZE, 95);
 
         } catch (Exception e) {
             log.error("Square cover generation failed: {}", title, e);
             throw new RuntimeException("Square cover generation failed", e);
         } finally {
-            cleanup(g, render, result);
+            cleanup(g, render);
         }
     }
 
@@ -708,32 +698,6 @@ public class CoverImageGenerator {
         return 50 * SCALE;
     }
 
-    private BufferedImage downscale(BufferedImage src) {
-        BufferedImage dst = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = dst.createGraphics();
-        try {
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(src, 0, 0, WIDTH, HEIGHT, null);
-            return dst;
-        } finally {
-            g.dispose();
-        }
-    }
-
-    private BufferedImage downscaleSquare(BufferedImage src) {
-        BufferedImage dst = new BufferedImage(SQUARE_SIZE, SQUARE_SIZE, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = dst.createGraphics();
-        try {
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(src, 0, 0, SQUARE_SIZE, SQUARE_SIZE, null);
-            return dst;
-        } finally {
-            g.dispose();
-        }
-    }
-
     private int calcSquareMargin(int size) {
         int frameOuter = (int) (size * PHI_SQ_INV * 0.10);
         int frameInner = (int) (frameOuter * PHI);
@@ -842,14 +806,6 @@ public class CoverImageGenerator {
         if (len < 25) return 60 * SCALE;
         if (len < 40) return 52 * SCALE;
         return 45 * SCALE;
-    }
-
-    private byte[] encodeJpeg(BufferedImage img) {
-        try {
-            return vipsImageService.bufferedImageToJpeg(img, 95);
-        } catch (java.io.IOException e) {
-            throw new RuntimeException("JPEG encoding failed", e);
-        }
     }
 
     private void cleanup(Graphics2D g, BufferedImage... images) {
