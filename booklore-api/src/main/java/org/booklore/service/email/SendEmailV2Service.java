@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
@@ -71,7 +72,11 @@ public class SendEmailV2Service {
 
     private void sendEmailInVirtualThread(EmailProviderV2Entity emailProvider, String recipientEmail, BookEntity book, BookFileEntity bookFile) {
         String bookTitle = book.getMetadata().getTitle();
-        File bookFileOnDisk = FileUtils.getBookFullPath(book, bookFile).toFile();
+        Path bookPath = FileUtils.getBookFullPath(book, bookFile);
+        if (bookPath == null) {
+            throw ApiError.FILE_NOT_FOUND.createException(bookTitle);
+        }
+        File bookFileOnDisk = bookPath.toFile();
         long bookId = book.getId();
         String logMessage = "Email dispatch initiated for book: " + bookTitle + " to " + recipientEmail;
         notificationService.sendMessage(Topic.LOG, LogNotification.info(logMessage));
