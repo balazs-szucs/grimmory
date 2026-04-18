@@ -313,6 +313,7 @@
               [books]="books"
               [preselectedBookIds]="selectedBooks()"
               (selectedBooksChange)="onSelectedBooksChange($event)"
+              (selectAllRequested)="selectAllBooks()"
               [sortOption]="this.bookSorter.selectedSort!"
               [visibleColumns]="visibleColumns()"
             ></app-book-table>
