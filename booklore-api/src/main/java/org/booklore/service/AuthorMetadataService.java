@@ -13,7 +13,6 @@ import org.booklore.model.dto.Library;
 import org.booklore.model.dto.request.AuthorMatchRequest;
 import org.booklore.model.dto.request.AuthorUpdateRequest;
 import org.booklore.model.entity.AuthorEntity;
-import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.enums.AuditAction;
 import org.booklore.model.enums.AuthorMetadataSource;
 import org.booklore.repository.AuthorRepository;
@@ -45,6 +44,7 @@ import java.util.stream.Collectors;
 public class AuthorMetadataService {
 
     private final AuthorRepository authorRepository;
+    private final AuthorPersistenceService authorPersistenceService;
     private final Map<AuthorMetadataSource, AuthorParser> authorParserMap;
     private final AuditService auditService;
     private final FileService fileService;
@@ -94,7 +94,7 @@ public class AuthorMetadataService {
     }
 
     public AuthorDetails matchAuthor(Long authorId, AuthorMatchRequest request) {
-        AuthorEntity author = authorRepository.findById(authorId)
+        authorPersistenceService.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         AuthorParser provider = request.getSource() != null ? authorParserMap.get(request.getSource()) : null;
@@ -107,37 +107,35 @@ public class AuthorMetadataService {
             throw ApiError.GENERIC_BAD_REQUEST.createException("Failed to fetch author metadata");
         }
 
-        applyMetadataResult(author, result);
-        authorRepository.save(author);
+        AuthorEntity saved = authorPersistenceService.applyMetadataAndSave(authorId, result);
 
-        if (!author.isPhotoLocked() && result.getImageUrl() != null && !result.getImageUrl().isBlank()) {
-            fileService.createAuthorThumbnailFromUrl(author.getId(), result.getImageUrl());
+        if (!saved.isPhotoLocked() && result.getImageUrl() != null && !result.getImageUrl().isBlank()) {
+            fileService.createAuthorThumbnailFromUrl(saved.getId(), result.getImageUrl());
         }
 
         auditService.log(AuditAction.AUTHOR_METADATA_UPDATED, "Author", authorId,
-                "Matched author '" + author.getName() + "' via " + result.getSource() + " (ASIN: " + result.getAsin() + ")");
+                "Matched author '" + saved.getName() + "' via " + result.getSource() + " (ASIN: " + result.getAsin() + ")");
 
-        return toAuthorDetails(author);
+        return toAuthorDetails(saved);
     }
 
     public AuthorDetails quickMatchAuthor(Long authorId, String region) {
-        AuthorEntity author = authorRepository.findById(authorId)
+        AuthorEntity author = authorPersistenceService.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         for (AuthorParser provider : authorParserMap.values()) {
             AuthorSearchResult result = provider.quickSearch(author.getName(), region);
             if (result != null) {
-                applyMetadataResult(author, result);
-                authorRepository.save(author);
+                AuthorEntity saved = authorPersistenceService.applyMetadataAndSave(authorId, result);
 
-                if (!author.isPhotoLocked() && result.getImageUrl() != null && !result.getImageUrl().isBlank()) {
-                    fileService.createAuthorThumbnailFromUrl(author.getId(), result.getImageUrl());
+                if (!saved.isPhotoLocked() && result.getImageUrl() != null && !result.getImageUrl().isBlank()) {
+                    fileService.createAuthorThumbnailFromUrl(saved.getId(), result.getImageUrl());
                 }
 
                 auditService.log(AuditAction.AUTHOR_METADATA_UPDATED, "Author", authorId,
-                        "Quick-matched author '" + author.getName() + "' via " + result.getSource() + " (ASIN: " + result.getAsin() + ")");
+                        "Quick-matched author '" + saved.getName() + "' via " + result.getSource() + " (ASIN: " + result.getAsin() + ")");
 
-                return toAuthorDetails(author);
+                return toAuthorDetails(saved);
             }
         }
 
@@ -148,8 +146,6 @@ public class AuthorMetadataService {
         return Flux.fromIterable(authorIds)
                 .concatMap(authorId ->
                         Mono.fromCallable(() -> {
-                            AuthorEntity author = authorRepository.findById(authorId).orElse(null);
-                            if (author == null) return null;
                             AuthorDetails details = quickMatchAuthor(authorId, "us");
                             return AuthorSummary.builder()
                                     .id(details.getId())
@@ -171,12 +167,9 @@ public class AuthorMetadataService {
 
     public void unmatchAuthors(List<Long> authorIds) {
         for (Long authorId : authorIds) {
-            AuthorEntity author = authorRepository.findById(authorId).orElse(null);
+            AuthorEntity author = authorPersistenceService.unmatch(authorId);
             if (author == null) continue;
 
-            author.setDescription(null);
-            author.setAsin(null);
-            authorRepository.save(author);
             fileService.deleteAuthorImages(authorId);
 
             auditService.log(AuditAction.AUTHOR_METADATA_UPDATED, "Author", authorId,
@@ -186,19 +179,10 @@ public class AuthorMetadataService {
 
     public void deleteAuthors(List<Long> authorIds) {
         for (Long authorId : authorIds) {
-            AuthorEntity author = authorRepository.findById(authorId).orElse(null);
-            if (author == null) continue;
-
-            String authorName = author.getName();
-
-            if (author.getBookMetadataEntityList() != null) {
-                for (BookMetadataEntity metadata : author.getBookMetadataEntityList()) {
-                    metadata.getAuthors().remove(author);
-                }
-            }
+            String authorName = authorPersistenceService.deleteAuthor(authorId);
+            if (authorName == null) continue;
 
             fileService.deleteAuthorImages(authorId);
-            authorRepository.delete(author);
 
             auditService.log(AuditAction.AUTHOR_DELETED, "Author", authorId,
                     "Deleted author '" + authorName + "'");
@@ -206,7 +190,7 @@ public class AuthorMetadataService {
     }
 
     public void uploadAuthorPhoto(Long authorId, MultipartFile file) {
-        AuthorEntity author = authorRepository.findById(authorId)
+        authorPersistenceService.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         try {
@@ -222,32 +206,7 @@ public class AuthorMetadataService {
     }
 
     public AuthorDetails updateAuthor(Long authorId, AuthorUpdateRequest request) {
-        AuthorEntity author = authorRepository.findById(authorId)
-                .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
-
-        if (request.getName() != null) {
-            author.setName(request.getName());
-        }
-        if (request.getDescription() != null) {
-            author.setDescription(request.getDescription().isBlank() ? null : request.getDescription());
-        }
-        if (request.getAsin() != null) {
-            author.setAsin(request.getAsin().isBlank() ? null : request.getAsin());
-        }
-        if (request.getNameLocked() != null) {
-            author.setNameLocked(request.getNameLocked());
-        }
-        if (request.getDescriptionLocked() != null) {
-            author.setDescriptionLocked(request.getDescriptionLocked());
-        }
-        if (request.getAsinLocked() != null) {
-            author.setAsinLocked(request.getAsinLocked());
-        }
-        if (request.getPhotoLocked() != null) {
-            author.setPhotoLocked(request.getPhotoLocked());
-        }
-
-        authorRepository.save(author);
+        AuthorEntity author = authorPersistenceService.update(authorId, request);
 
         auditService.log(AuditAction.AUTHOR_METADATA_UPDATED, "Author", authorId,
                 "Updated author '" + author.getName() + "'");
@@ -262,7 +221,7 @@ public class AuthorMetadataService {
     }
 
     public void uploadAuthorPhotoFromUrl(Long authorId, String imageUrl) {
-        AuthorEntity author = authorRepository.findById(authorId)
+        authorPersistenceService.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         fileService.createAuthorThumbnailFromUrl(authorId, imageUrl);
@@ -316,15 +275,6 @@ public class AuthorMetadataService {
                 .collect(Collectors.toSet());
         if (libraryIds.isEmpty() || !authorRepository.existsByIdAndLibraryIds(authorId, libraryIds)) {
             throw ApiError.AUTHOR_NOT_FOUND.createException(authorId);
-        }
-    }
-
-    private void applyMetadataResult(AuthorEntity author, AuthorSearchResult result) {
-        if (!author.isDescriptionLocked()) {
-            author.setDescription(result.getDescription());
-        }
-        if (!author.isAsinLocked()) {
-            author.setAsin(result.getAsin());
         }
     }
 

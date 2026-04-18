@@ -36,6 +36,7 @@ import static org.mockito.Mockito.lenient;
 class AuthorMetadataServiceTest {
 
     @Mock private AuthorRepository authorRepository;
+    @Mock private AuthorPersistenceService authorPersistenceService;
     @Mock private AuthorParser authorParser;
     @Mock private AuditService auditService;
     @Mock private FileService fileService;
@@ -49,7 +50,7 @@ class AuthorMetadataServiceTest {
         Map<AuthorMetadataSource, AuthorParser> authorParserMap = Map.of(
                 AuthorMetadataSource.AUDNEXUS, authorParser
         );
-        service = new AuthorMetadataService(authorRepository, authorParserMap, auditService, fileService, duckDuckGoCoverService, authenticationService);
+        service = new AuthorMetadataService(authorRepository, authorPersistenceService, authorParserMap, auditService, fileService, duckDuckGoCoverService, authenticationService);
 
         BookLoreUser.UserPermissions adminPermissions = new BookLoreUser.UserPermissions();
         adminPermissions.setAdmin(true);
@@ -107,7 +108,13 @@ class AuthorMetadataServiceTest {
         author.setId(1L);
         author.setName("Stephen King");
 
-        when(authorRepository.findById(1L)).thenReturn(Optional.of(author));
+        AuthorEntity savedAuthor = new AuthorEntity();
+        savedAuthor.setId(1L);
+        savedAuthor.setName("Stephen King");
+        savedAuthor.setDescription("Master of horror");
+        savedAuthor.setAsin("B000APZGGS");
+
+        when(authorPersistenceService.findById(1L)).thenReturn(Optional.of(author));
 
         AuthorSearchResult result = AuthorSearchResult.builder()
                 .source(AuthorMetadataSource.AUDNEXUS).asin("B000APZGGS")
@@ -116,7 +123,7 @@ class AuthorMetadataServiceTest {
                 .build();
 
         when(authorParser.getAuthorByAsin("B000APZGGS", "us")).thenReturn(result);
-        when(authorRepository.save(any(AuthorEntity.class))).thenAnswer(i -> i.getArgument(0));
+        when(authorPersistenceService.applyMetadataAndSave(eq(1L), any(AuthorSearchResult.class))).thenReturn(savedAuthor);
 
         AuthorMatchRequest request = new AuthorMatchRequest();
         request.setAsin("B000APZGGS");
@@ -130,17 +137,14 @@ class AuthorMetadataServiceTest {
         assertThat(details.getDescription()).isEqualTo("Master of horror");
         assertThat(details.getAsin()).isEqualTo("B000APZGGS");
 
-        assertThat(author.getDescription()).isEqualTo("Master of horror");
-        assertThat(author.getAsin()).isEqualTo("B000APZGGS");
-
-        verify(authorRepository).save(author);
+        verify(authorPersistenceService).applyMetadataAndSave(eq(1L), any(AuthorSearchResult.class));
         verify(fileService).createAuthorThumbnailFromUrl(eq(1L), eq("https://example.com/king.jpg"));
         verify(auditService).log(eq(AuditAction.AUTHOR_METADATA_UPDATED), eq("Author"), eq(1L), anyString());
     }
 
     @Test
     void matchAuthor_throwsWhenAuthorNotFound() {
-        when(authorRepository.findById(99L)).thenReturn(Optional.empty());
+        when(authorPersistenceService.findById(99L)).thenReturn(Optional.empty());
 
         AuthorMatchRequest request = new AuthorMatchRequest();
         request.setAsin("B000APZGGS");
@@ -157,7 +161,7 @@ class AuthorMetadataServiceTest {
         author.setId(1L);
         author.setName("Test Author");
 
-        when(authorRepository.findById(1L)).thenReturn(Optional.of(author));
+        when(authorPersistenceService.findById(1L)).thenReturn(Optional.of(author));
         when(authorParser.getAuthorByAsin("INVALID", "us")).thenReturn(null);
 
         AuthorMatchRequest request = new AuthorMatchRequest();
@@ -176,7 +180,7 @@ class AuthorMetadataServiceTest {
         author.setId(1L);
         author.setName("Test Author");
 
-        when(authorRepository.findById(1L)).thenReturn(Optional.of(author));
+        when(authorPersistenceService.findById(1L)).thenReturn(Optional.of(author));
 
         AuthorMatchRequest request = new AuthorMatchRequest();
         request.setAsin("12345");
@@ -236,7 +240,14 @@ class AuthorMetadataServiceTest {
         author.setName("Test Author");
         author.setPhotoLocked(true);
 
-        when(authorRepository.findById(1L)).thenReturn(Optional.of(author));
+        AuthorEntity savedAuthor = new AuthorEntity();
+        savedAuthor.setId(1L);
+        savedAuthor.setName("Test Author");
+        savedAuthor.setPhotoLocked(true);
+        savedAuthor.setDescription("Bio");
+        savedAuthor.setAsin("B000APZGGS");
+
+        when(authorPersistenceService.findById(1L)).thenReturn(Optional.of(author));
 
         AuthorSearchResult result = AuthorSearchResult.builder()
                 .source(AuthorMetadataSource.AUDNEXUS).asin("B000APZGGS")
@@ -245,7 +256,7 @@ class AuthorMetadataServiceTest {
                 .build();
 
         when(authorParser.getAuthorByAsin("B000APZGGS", "us")).thenReturn(result);
-        when(authorRepository.save(any(AuthorEntity.class))).thenAnswer(i -> i.getArgument(0));
+        when(authorPersistenceService.applyMetadataAndSave(eq(1L), any(AuthorSearchResult.class))).thenReturn(savedAuthor);
 
         AuthorMatchRequest request = new AuthorMatchRequest();
         request.setAsin("B000APZGGS");
