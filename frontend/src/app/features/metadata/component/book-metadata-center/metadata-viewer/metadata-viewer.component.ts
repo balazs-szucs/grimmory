@@ -87,9 +87,27 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
 
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
-  private dialogRef?: DynamicDialogRef;
+  private dialogRef = inject(DynamicDialogRef, { optional: true });
   private userState = this.userService.currentUser;
   private appSettings = this.appSettingsService.appSettings;
+
+  private navigateAfterDialogClose(navigate: () => void): void {
+    if (this.metadataCenterViewMode !== 'dialog') {
+      navigate();
+      return;
+    }
+
+    const dialogRef = this.dialogRef;
+    if (!dialogRef) {
+      navigate();
+      return;
+    }
+
+    dialogRef.onClose
+      .pipe(take(1), takeUntilDestroyed(this.destroyRef))
+      .subscribe(navigate);
+    dialogRef.close();
+  }
 
   readonly readMenuItems = computed<MenuItem[]>(() => {
     const book = this.currentBook();
@@ -780,14 +798,7 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
     this.authorService.getAuthorByName(author).subscribe({
       next: (authorDetails) => {
         const navigate = () => this.router.navigate(['/author', authorDetails.id]);
-        if (this.metadataCenterViewMode === 'dialog') {
-          this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
-            navigate();
-          });
-          this.dialogRef?.close();
-        } else {
-          navigate();
-        }
+        this.navigateAfterDialogClose(() => void navigate());
       },
       error: () => {
         this.handleMetadataClick('author', author);
@@ -816,25 +827,15 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
   }
 
   goToLibrary(libraryId: number): void {
-    if (this.metadataCenterViewMode === 'dialog') {
-      this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
-        this.router.navigate(['/library', libraryId, 'books']);
-      });
-      this.dialogRef?.close();
-    } else {
-      this.router.navigate(['/library', libraryId, 'books']);
-    }
+    this.navigateAfterDialogClose(() => {
+      void this.router.navigate(['/library', libraryId, 'books']);
+    });
   }
 
   goToShelf(shelfId: number): void {
-    if (this.metadataCenterViewMode === 'dialog') {
-      this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
-        this.router.navigate(['/shelf', shelfId, 'books']);
-      });
-      this.dialogRef?.close();
-    } else {
-      this.router.navigate(['/shelf', shelfId, 'books']);
-    }
+    this.navigateAfterDialogClose(() => {
+      void this.router.navigate(['/shelf', shelfId, 'books']);
+    });
   }
 
   goToPublishedYear(publishedDate: string): void {
@@ -923,14 +924,9 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
   }
 
   private handleMetadataClick(filterKey: string, filterValue: string): void {
-    if (this.metadataCenterViewMode === 'dialog') {
-      this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
-        this.navigateToFilteredBooks(filterKey, filterValue);
-      });
-      this.dialogRef?.close();
-    } else {
+    this.navigateAfterDialogClose(() => {
       this.navigateToFilteredBooks(filterKey, filterValue);
-    }
+    });
   }
 
   isMetadataFullyLocked(metadata: BookMetadata): boolean {
