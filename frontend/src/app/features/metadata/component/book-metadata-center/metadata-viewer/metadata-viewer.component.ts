@@ -18,7 +18,7 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ProgressBar} from 'primeng/progressbar';
 import {MetadataRefreshType} from '../../../model/request/metadata-refresh-type.enum';
 import {Router} from '@angular/router';
-import {tap} from 'rxjs/operators';
+import {take, tap} from 'rxjs/operators';
 import {Menu} from 'primeng/menu';
 import {ResetProgressType, ResetProgressTypes} from '../../../../../shared/constants/reset-progress-type';
 import {DatePicker} from 'primeng/datepicker';
@@ -781,8 +781,10 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
       next: (authorDetails) => {
         const navigate = () => this.router.navigate(['/author', authorDetails.id]);
         if (this.metadataCenterViewMode === 'dialog') {
+          this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
+            navigate();
+          });
           this.dialogRef?.close();
-          setTimeout(navigate, 200);
         } else {
           navigate();
         }
@@ -815,10 +817,23 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
 
   goToLibrary(libraryId: number): void {
     if (this.metadataCenterViewMode === 'dialog') {
+      this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
+        this.router.navigate(['/library', libraryId, 'books']);
+      });
       this.dialogRef?.close();
-      setTimeout(() => this.router.navigate(['/library', libraryId, 'books']), 200);
     } else {
       this.router.navigate(['/library', libraryId, 'books']);
+    }
+  }
+
+  goToShelf(shelfId: number): void {
+    if (this.metadataCenterViewMode === 'dialog') {
+      this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
+        this.router.navigate(['/shelf', shelfId, 'books']);
+      });
+      this.dialogRef?.close();
+    } else {
+      this.router.navigate(['/shelf', shelfId, 'books']);
     }
   }
 
@@ -909,8 +924,10 @@ export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChec
 
   private handleMetadataClick(filterKey: string, filterValue: string): void {
     if (this.metadataCenterViewMode === 'dialog') {
+      this.dialogRef?.onClose.pipe(take(1)).subscribe(() => {
+        this.navigateToFilteredBooks(filterKey, filterValue);
+      });
       this.dialogRef?.close();
-      setTimeout(() => this.navigateToFilteredBooks(filterKey, filterValue), 200);
     } else {
       this.navigateToFilteredBooks(filterKey, filterValue);
     }
