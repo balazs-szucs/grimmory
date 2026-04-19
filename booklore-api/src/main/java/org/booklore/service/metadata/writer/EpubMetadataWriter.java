@@ -25,7 +25,6 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -926,30 +925,26 @@ public class EpubMetadataWriter implements MetadataWriter {
         return true;
     }
 
-    private byte[] loadImage(String pathOrUrl) {
-        if (pathOrUrl == null || pathOrUrl.isBlank()) return null;
+    private byte[] loadImage(String url) {
+        if (url == null || url.isBlank()) return null;
+
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            log.warn("Rejected non-HTTP image URL (scheme not allowed): [redacted]");
+            return null;
+        }
 
         try {
-            if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
-                URI uri = new URI(pathOrUrl).normalize();
-                if (!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme())) {
-                     throw new IllegalArgumentException("Invalid URI scheme");
-                }
-                try (InputStream stream = uri.toURL().openStream()) {
-                    return stream.readAllBytes();
-                }
-            } else {
-                Path p = Path.of(pathOrUrl).normalize();
-                File f = p.toFile();
-                if (!f.exists() || !f.isFile()) {
-                     return null;
-                }
-                try (InputStream stream = new FileInputStream(f)) {
-                    return stream.readAllBytes();
-                }
+            URI uri = URI.create(url);
+            String scheme = uri.getScheme();
+            if (!"http".equals(scheme) && !"https".equals(scheme)) {
+                log.warn("Rejected image URL with unexpected scheme after URI parsing: {}", scheme);
+                return null;
+            }
+            try (InputStream stream = uri.toURL().openStream()) {
+                return stream.readAllBytes();
             }
         } catch (Exception e) {
-            log.warn("Failed to load image from {}: {}", pathOrUrl, e.getMessage());
+            log.warn("Failed to load image from URL: {}", e.getMessage());
             return null;
         }
     }
