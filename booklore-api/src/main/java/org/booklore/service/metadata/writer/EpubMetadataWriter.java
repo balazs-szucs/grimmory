@@ -28,25 +28,25 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import org.grimmory.epub4j.archive.EpubContainer;
-import org.grimmory.epub4j.archive.EpubContainers;
+import org.booklore.util.MimeDetector;
+import org.grimmory.epub4j.native_parsing.NativeArchive;
+import org.grimmory.epub4j.native_parsing.NativeImageProcessor;
 
 @Slf4j
 @Component
@@ -54,6 +54,31 @@ import org.grimmory.epub4j.archive.EpubContainers;
 public class EpubMetadataWriter implements MetadataWriter {
 
     private static final String OPF_NS = "http://www.idpf.org/2007/opf";
+    private static final String DC_NS = "http://purl.org/dc/elements/1.1/";
+    private static final Map<String, String> LANGUAGE_NAME_TO_CODE;
+    private static final Set<String> ISO_LANGUAGES;
+    private static final DateTimeFormatter EPUB_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC);
+
+    static {
+        Map<String, String> map = new HashMap<>();
+        for (Locale locale : Locale.getAvailableLocales()) {
+            String language = locale.getLanguage();
+            if (language.isEmpty()) continue;
+            
+            // Map English name of the language
+            map.putIfAbsent(locale.getDisplayLanguage(Locale.ENGLISH).toLowerCase(), language);
+            // Map native name of the language
+            map.putIfAbsent(locale.getDisplayLanguage(locale).toLowerCase(), language);
+        }
+        LANGUAGE_NAME_TO_CODE = Collections.unmodifiableMap(map);
+
+        Set<String> langs = new HashSet<>();
+        for (String iso : Locale.getISOLanguages()) {
+            langs.add(iso.toLowerCase());
+        }
+        ISO_LANGUAGES = Collections.unmodifiableSet(langs);
+    }
+
     private final AppSettingService appSettingService;
 
     @Override
@@ -85,7 +110,6 @@ public class EpubMetadataWriter implements MetadataWriter {
 
             NodeList metadataList = opfDoc.getElementsByTagNameNS(OPF_NS, "metadata");
             Element metadataElement = (Element) metadataList.item(0);
-            final String DC_NS = "http://purl.org/dc/elements/1.1/";
 
             boolean[] hasChanges = {false};
             MetadataCopyHelper helper = new MetadataCopyHelper(metadata);
@@ -99,7 +123,10 @@ public class EpubMetadataWriter implements MetadataWriter {
             helper.copyDescription(clear != null && clear.isDescription(), val -> replaceAndTrackChange(opfDoc, metadataElement, "description", DC_NS, val, hasChanges));
             helper.copyPublisher(clear != null && clear.isPublisher(), val -> replaceAndTrackChange(opfDoc, metadataElement, "publisher", DC_NS, val, hasChanges));
             helper.copyPublishedDate(clear != null && clear.isPublishedDate(), val -> replaceAndTrackChange(opfDoc, metadataElement, "date", DC_NS, val != null ? val.toString() : null, hasChanges));
-            helper.copyLanguage(clear != null && clear.isLanguage(), val -> replaceAndTrackChange(opfDoc, metadataElement, "language", DC_NS, val, hasChanges));
+            helper.copyLanguage(clear != null && clear.isLanguage(), val -> {
+                String normalizedLang = normalizeLanguage(val);
+                replaceAndTrackChange(opfDoc, metadataElement, "language", DC_NS, normalizedLang, hasChanges);
+            });
 
             helper.copyAuthors(clear != null && clear.isAuthors(), names -> {
                 removeCreatorsByRole(metadataElement, "");
@@ -284,8 +311,17 @@ public class EpubMetadataWriter implements MetadataWriter {
     private boolean replaceElementText(Document doc, Element parent, String tagName, String namespaceURI, String newValue, boolean restoreMode) {
         NodeList nodes = parent.getElementsByTagNameNS(namespaceURI, tagName);
         String currentValue = null;
+        List<Node> preservedAttributes = new ArrayList<>();
+
         if (nodes.getLength() > 0) {
-            currentValue = nodes.item(0).getTextContent();
+            Element existing = (Element) nodes.item(0);
+            currentValue = existing.getTextContent();
+            
+            // Preserve all attributes of the first existing element
+            org.w3c.dom.NamedNodeMap attrMap = existing.getAttributes();
+            for (int i = 0; i < attrMap.getLength(); i++) {
+                preservedAttributes.add(attrMap.item(i));
+            }
         }
 
         boolean changed = !Objects.equals(currentValue, newValue);
@@ -298,6 +334,14 @@ public class EpubMetadataWriter implements MetadataWriter {
             Element newElem = doc.createElementNS(namespaceURI, tagName);
             newElem.setPrefix("dc");
             newElem.setTextContent(newValue);
+            // Restore preserved attributes with namespace support
+            for (Node attr : preservedAttributes) {
+                if (attr.getNamespaceURI() != null) {
+                    newElem.setAttributeNS(attr.getNamespaceURI(), attr.getNodeName(), attr.getNodeValue());
+                } else {
+                    newElem.setAttribute(attr.getNodeName(), attr.getNodeValue());
+                }
+            }
             parent.appendChild(newElem);
         } else if (restoreMode) {
             changed = true;
@@ -357,8 +401,13 @@ public class EpubMetadataWriter implements MetadataWriter {
 
     private void replaceCoverImageInternal(BookEntity bookEntity, byte[] coverData, String source) {
         Path tempDir = null;
+        File backupFile = null;
         try {
             File epubFile = new File(bookEntity.getFullFilePath().toUri());
+
+            backupFile = new File(epubFile.getParentFile(), epubFile.getName() + ".bak");
+            Files.copy(epubFile.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
             tempDir = Files.createTempDirectory("epub_cover_" + UUID.randomUUID());
 
             extractZipToDirectory(epubFile, tempDir);
@@ -373,6 +422,21 @@ public class EpubMetadataWriter implements MetadataWriter {
             Document opfDoc = builder.parse(opfFile);
 
             applyCoverImageToEpub(tempDir, opfDoc, coverData);
+            
+            // EPUB 3: Update modified timestamp
+            NodeList metadataList = opfDoc.getElementsByTagNameNS(OPF_NS, "metadata");
+            if (metadataList.getLength() > 0) {
+                Element metadataElement = (Element) metadataList.item(0);
+                if (isEpub3(opfDoc)) {
+                    removeMetaByProperty(metadataElement, "dcterms:modified");
+                    removeMetaByName(metadataElement, "calibre:timestamp");
+
+                    Element modified = opfDoc.createElementNS(OPF_NS, "meta");
+                    modified.setAttribute("property", "dcterms:modified");
+                    modified.setTextContent(ZonedDateTime.now().format(EPUB_DATE_FORMATTER));
+                    metadataElement.appendChild(modified);
+                }
+            }
 
             removeEmptyTextNodes(opfDoc);
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
@@ -390,9 +454,45 @@ public class EpubMetadataWriter implements MetadataWriter {
 
         } catch (Exception e) {
             log.warn("Failed to update EPUB cover image from {}: {}", source, e.getMessage(), e);
+            if (backupFile != null && backupFile.exists()) {
+                try {
+                    File epubFile = new File(bookEntity.getFullFilePath().toUri());
+                    Files.copy(backupFile.toPath(), epubFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    log.info("Restored EPUB from backup: {}", epubFile.getName());
+                } catch (IOException io) {
+                    log.error("Failed to restore EPUB from backup: {}", io.getMessage(), io);
+                }
+            }
         } finally {
             if (tempDir != null) {
                 deleteDirectoryRecursively(tempDir);
+            }
+            if (backupFile != null && backupFile.exists()) {
+                try {
+                    Files.delete(backupFile.toPath());
+                } catch (IOException ex) {
+                    log.warn("Failed to delete backup: {}", ex.getMessage());
+                }
+            log.warn("Failed to update EPUB cover image from {}: {}", source, e.getMessage(), e);
+            if (backupFile != null && backupFile.exists()) {
+                try {
+                    File epubFile = new File(bookEntity.getFullFilePath().toUri());
+                    Files.copy(backupFile.toPath(), epubFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    log.info("Restored EPUB from backup: {}", epubFile.getName());
+                } catch (IOException io) {
+                    log.error("Failed to restore EPUB from backup: {}", io.getMessage(), io);
+                }
+            }
+        } finally {
+            if (tempDir != null) {
+                deleteDirectoryRecursively(tempDir);
+            }
+            if (backupFile != null && backupFile.exists()) {
+                try {
+                    Files.delete(backupFile.toPath());
+                } catch (IOException ex) {
+                    log.warn("Failed to delete backup: {}", ex.getMessage());
+                }
             }
         }
     }
@@ -436,7 +536,7 @@ public class EpubMetadataWriter implements MetadataWriter {
             for (int i = 0; i < items.getLength(); i++) {
                 Element item = (Element) items.item(i);
                 String properties = item.getAttribute("properties");
-                if (properties != null && properties.contains("cover-image")) {
+                if (properties.contains("cover-image")) {
                     existingCoverItem = item;
                     break;
                 }
@@ -476,8 +576,126 @@ public class EpubMetadataWriter implements MetadataWriter {
         Path opfDir = opfPath.getParent();
         Path coverFilePath = opfDir.resolve(decodedCoverHref).normalize();
 
+        // Detect media type and update manifest
+        String mediaType = detectMediaType(coverData);
+        if (mediaType != null) {
+            existingCoverItem.setAttribute("media-type", mediaType);
+            
+            // If the extension doesn't match the media type, update the href
+            String expectedExtension = getExtensionForMediaType(mediaType);
+            if (expectedExtension != null) {
+                String currentHref = existingCoverItem.getAttribute("href");
+                int lastDot = currentHref.lastIndexOf('.');
+                if (lastDot > 0) {
+                    String currentExtension = currentHref.substring(lastDot);
+                    if (!currentExtension.equalsIgnoreCase(expectedExtension)) {
+                        // Delete old file if it exists and has different name
+                        try {
+                            Files.deleteIfExists(coverFilePath);
+                        } catch (IOException e) {
+                            log.warn("Failed to delete old cover file: {}", coverFilePath);
+                        }
+
+                        String newHref = currentHref.substring(0, lastDot) + expectedExtension;
+                        existingCoverItem.setAttribute("href", newHref);
+                        
+                        String newDecodedHref = URLDecoder.decode(newHref, StandardCharsets.UTF_8);
+                        coverFilePath = opfDir.resolve(newDecodedHref).normalize();
+                    }
+                }
+            }
+        }
+
+        byte[] finalCoverData = coverData;
+        if (NativeImageProcessor.isAvailable()) {
+            if ("image/jpeg".equals(mediaType)) {
+                try (NativeImageProcessor.ImageData optimized = NativeImageProcessor.compressJpeg(coverData, 85, true)) {
+                    byte[] optimizedData = optimized.toByteArray();
+                    if (optimizedData.length < coverData.length) {
+                        finalCoverData = optimizedData;
+                        log.debug("Native JPEG optimization reduced cover size from {} to {} bytes", coverData.length, finalCoverData.length);
+                    } else {
+                        log.debug("Native JPEG optimization did not reduce size ({} vs {}), keeping original", optimizedData.length, coverData.length);
+                    }
+                } catch (Exception e) {
+                    log.warn("Native JPEG optimization failed: {}", e.getMessage());
+                }
+            } else if ("image/png".equals(mediaType)) {
+                try (NativeImageProcessor.ImageData optimized = NativeImageProcessor.optimizePng(coverData, true)) {
+                    byte[] optimizedData = optimized.toByteArray();
+                    if (optimizedData.length < coverData.length) {
+                        finalCoverData = optimizedData;
+                        log.debug("Native PNG optimization reduced cover size from {} to {} bytes", coverData.length, finalCoverData.length);
+                    } else {
+                        log.debug("Native PNG optimization did not reduce size ({} vs {}), keeping original", optimizedData.length, coverData.length);
+                    }
+                } catch (Exception e) {
+                    log.warn("Native PNG optimization failed: {}", e.getMessage());
+                }
+            }
+        }
+
         Files.createDirectories(coverFilePath.getParent());
-        Files.write(coverFilePath, coverData);
+        Files.write(coverFilePath, finalCoverData);
+    }
+
+    private static final Set<String> SUPPORTED_EPUB_IMAGE_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"
+    );
+
+    private String detectMediaType(byte[] data) {
+        if (data == null || data.length == 0) return null;
+        try {
+            String mimeType = MimeDetector.detect(new ByteArrayInputStream(data));
+            
+            // Ensure it's an image type supported by EPUB core media types
+            if (mimeType != null && SUPPORTED_EPUB_IMAGE_TYPES.contains(mimeType)) {
+                return mimeType;
+            }
+        } catch (IOException e) {
+            log.warn("Failed to detect media type: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private String getExtensionForMediaType(String mediaType) {
+        if (mediaType == null) return null;
+        return switch (mediaType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/webp" -> ".webp";
+            case "image/svg+xml" -> ".svg";
+            default -> null;
+        };
+    }
+
+    private String normalizeLanguage(String lang) {
+        if (lang == null || lang.isBlank()) return lang;
+        
+        String trimmed = lang.trim();
+        String lowerTrimmed = trimmed.toLowerCase();
+
+        // 1. Check the static map for display names (e.g. "English" -> "en")
+        String code = LANGUAGE_NAME_TO_CODE.get(lowerTrimmed);
+        if (code != null) {
+            return code;
+        }
+
+        // 2. Try as a BCP 47 language tag (e.g. "en-US", "zh-TW")
+        Locale tagLocale = Locale.forLanguageTag(trimmed);
+        String tagLang = tagLocale.getLanguage();
+        if (!tagLang.isEmpty() && isIsoLanguage(tagLang)) {
+            return tagLocale.toLanguageTag();
+        }
+
+        // 3. Fallback: return as-is
+        return trimmed;
+    }
+
+    private boolean isIsoLanguage(String lang) {
+        if (lang == null) return false;
+        return ISO_LANGUAGES.contains(lang.toLowerCase());
     }
 
     private Path findOpfPath(Path tempDir) throws IOException, ParserConfigurationException, SAXException {
@@ -523,15 +741,21 @@ public class EpubMetadataWriter implements MetadataWriter {
     }
 
     private void extractZipToDirectory(File zipSource, Path targetDir) throws IOException {
-        try (EpubContainer container = EpubContainers.open(zipSource.toPath())) {
-            for (String name : container.listAllFiles()) {
+        try (NativeArchive archive = NativeArchive.open(zipSource.toPath())) {
+            for (String name : archive.listEntries()) {
                 Path entryPath = targetDir.resolve(name).normalize();
                 if (!entryPath.startsWith(targetDir)) {
                     throw new IOException("ZIP entry outside target directory: " + name);
                 }
+
+                if (name.endsWith("/")) {
+                    Files.createDirectories(entryPath);
+                    continue;
+                }
+
                 Files.createDirectories(entryPath.getParent());
                 try (OutputStream out = Files.newOutputStream(entryPath)) {
-                    container.streamTo(name, out);
+                    archive.streamEntry(name, out);
                 }
             }
         }
@@ -586,6 +810,16 @@ public class EpubMetadataWriter implements MetadataWriter {
         for (int i = metas.getLength() - 1; i >= 0; i--) {
             Element meta = (Element) metas.item(i);
             if (name.equals(meta.getAttribute("name"))) {
+                metadataElement.removeChild(meta);
+            }
+        }
+    }
+
+    private void removeMetaByProperty(Element metadataElement, String property) {
+        NodeList metas = metadataElement.getElementsByTagNameNS("*", "meta");
+        for (int i = metas.getLength() - 1; i >= 0; i--) {
+            Element meta = (Element) metas.item(i);
+            if (property.equals(meta.getAttribute("property"))) {
                 metadataElement.removeChild(meta);
             }
         }
@@ -680,7 +914,6 @@ public class EpubMetadataWriter implements MetadataWriter {
 
             if (fileAs != null) {
                 Element fileAsMeta = doc.createElementNS(OPF_NS, "meta");
-                fileAsMeta.setPrefix("opf");
                 fileAsMeta.setAttribute("refines", "#" + creatorId);
                 fileAsMeta.setAttribute("property", "file-as");
                 fileAsMeta.setTextContent(fileAs);
@@ -688,7 +921,6 @@ public class EpubMetadataWriter implements MetadataWriter {
             }
             if (role != null) {
                 Element roleMeta = doc.createElementNS(OPF_NS, "meta");
-                roleMeta.setPrefix("opf");
                 roleMeta.setAttribute("refines", "#" + creatorId);
                 roleMeta.setAttribute("property", "role");
                 roleMeta.setAttribute("scheme", "marc:relators");
@@ -909,14 +1141,12 @@ public class EpubMetadataWriter implements MetadataWriter {
                 String collectionId = "collection-" + UUID.randomUUID().toString().substring(0, 8);
 
                 Element collectionMeta = doc.createElementNS(OPF_NS, "meta");
-                collectionMeta.setPrefix("opf");
                 collectionMeta.setAttribute("id", collectionId);
                 collectionMeta.setAttribute("property", "belongs-to-collection");
                 collectionMeta.setTextContent(seriesName);
                 metadataElement.appendChild(collectionMeta);
 
                 Element typeMeta = doc.createElementNS(OPF_NS, "meta");
-                typeMeta.setPrefix("opf");
                 typeMeta.setAttribute("property", "collection-type");
                 typeMeta.setAttribute("refines", "#" + collectionId);
                 typeMeta.setTextContent("series");
@@ -924,7 +1154,6 @@ public class EpubMetadataWriter implements MetadataWriter {
 
                 if (seriesNumber != null && seriesNumber > 0) {
                     Element positionMeta = doc.createElementNS(OPF_NS, "meta");
-                    positionMeta.setPrefix("opf");
                     positionMeta.setAttribute("property", "group-position");
                     positionMeta.setAttribute("refines", "#" + collectionId);
                     if (seriesNumber % 1.0f == 0) {
@@ -958,7 +1187,6 @@ public class EpubMetadataWriter implements MetadataWriter {
     }
 
     private void addSubtitleToTitle(Element metadataElement, Document doc, String subtitle) {
-        final String DC_NS = "http://purl.org/dc/elements/1.1/";
         boolean epub3 = isEpub3(doc);
 
         // Remove existing subtitle elements (both EPUB2 and EPUB3 forms)
@@ -992,7 +1220,6 @@ public class EpubMetadataWriter implements MetadataWriter {
             metadataElement.appendChild(subtitleElement);
 
             Element typeMeta = doc.createElementNS(OPF_NS, "meta");
-            typeMeta.setPrefix("opf");
             typeMeta.setAttribute("refines", "#" + subtitleId);
             typeMeta.setAttribute("property", "title-type");
             typeMeta.setTextContent("subtitle");
@@ -1017,6 +1244,15 @@ public class EpubMetadataWriter implements MetadataWriter {
                     packageElement.setAttribute("prefix", existingPrefix.trim() + " " + bookloreNamespace);
                 }
             }
+            
+            // EPUB3: Ensure only one dcterms:modified exists and it is current
+            removeMetaByProperty(metadataElement, "dcterms:modified");
+            removeMetaByName(metadataElement, "calibre:timestamp");
+            
+            Element modified = doc.createElementNS(OPF_NS, "meta");
+            modified.setAttribute("property", "dcterms:modified");
+            modified.setTextContent(ZonedDateTime.now().format(EPUB_DATE_FORMATTER));
+            metadataElement.appendChild(modified);
         }
         
         removeAllBookloreMetadata(metadataElement);
@@ -1093,7 +1329,6 @@ public class EpubMetadataWriter implements MetadataWriter {
     private Element createBookloreMetaElement(Document doc, String property, String value, boolean epub3) {
         if (epub3) {
             Element meta = doc.createElementNS(OPF_NS, "meta");
-            meta.setPrefix("opf");
             meta.setAttribute("property", "booklore:" + property);
             meta.setTextContent(value);
             return meta;
@@ -1123,8 +1358,7 @@ public class EpubMetadataWriter implements MetadataWriter {
         if (metadataElement.hasAttribute("xmlns:calibre")) {
             metadataElement.removeAttribute("xmlns:calibre");
         }
-        
-        final String DC_NS = "http://purl.org/dc/elements/1.1/";
+
         NodeList identifiers = metadataElement.getElementsByTagNameNS(DC_NS, "identifier");
         for (int i = identifiers.getLength() - 1; i >= 0; i--) {
             Element idElement = (Element) identifiers.item(i);
@@ -1161,7 +1395,6 @@ public class EpubMetadataWriter implements MetadataWriter {
     }
 
     private void organizeMetadataElements(Element metadataElement) {
-        final String DC_NS = "http://purl.org/dc/elements/1.1/";
         java.util.List<Element> identifiers = new java.util.ArrayList<>();
         java.util.List<Element> titles = new java.util.ArrayList<>();
         java.util.List<Element> creators = new java.util.ArrayList<>();
@@ -1171,12 +1404,42 @@ public class EpubMetadataWriter implements MetadataWriter {
         java.util.List<Element> publishers = new java.util.ArrayList<>();
         java.util.List<Element> descriptions = new java.util.ArrayList<>();
         java.util.List<Element> subjects = new java.util.ArrayList<>();
+        java.util.List<Element> otherDcElements = new java.util.ArrayList<>();
         java.util.List<Element> seriesMetas = new java.util.ArrayList<>();
         java.util.List<Element> bookloreMetas = new java.util.ArrayList<>();
         java.util.List<Element> modifiedMetas = new java.util.ArrayList<>();
         java.util.List<Element> otherMetas = new java.util.ArrayList<>();
-        
+        java.util.List<Element> linkElements = new java.util.ArrayList<>();
+        java.util.List<Element> uncategorized = new java.util.ArrayList<>();
+
+        // Collect IDs of elements that have refines pointing to them
+        Set<String> allIds = new HashSet<>();
+        Map<String, java.util.List<Element>> refinesMap = new HashMap<>();
+
         NodeList allChildren = metadataElement.getChildNodes();
+        for (int i = 0; i < allChildren.getLength(); i++) {
+            Node node = allChildren.item(i);
+            if (node.getNodeType() != Node.ELEMENT_NODE) continue;
+            Element elem = (Element) node;
+            String id = elem.getAttribute("id");
+            if (!id.isEmpty()) allIds.add(id);
+        }
+
+        // First pass: identify refines meta elements and build lookup map
+        for (int i = 0; i < allChildren.getLength(); i++) {
+            Node node = allChildren.item(i);
+            if (node.getNodeType() != Node.ELEMENT_NODE) continue;
+            Element elem = (Element) node;
+            if ("meta".equals(elem.getLocalName())) {
+                String refines = elem.getAttribute("refines");
+                if (refines != null && refines.startsWith("#") && allIds.contains(refines.substring(1))) {
+                    refinesMap.computeIfAbsent(refines.substring(1), k -> new java.util.ArrayList<>()).add(elem);
+                }
+            }
+        }
+
+        // Second pass: categorize all elements
+        Set<Element> handledRefines = new HashSet<>();
         for (int i = 0; i < allChildren.getLength(); i++) {
             Node node = allChildren.item(i);
             if (node.getNodeType() != Node.ELEMENT_NODE) continue;
@@ -1195,8 +1458,15 @@ public class EpubMetadataWriter implements MetadataWriter {
                     case "publisher" -> publishers.add(elem);
                     case "description" -> descriptions.add(elem);
                     case "subject" -> subjects.add(elem);
+                    default -> otherDcElements.add(elem);
                 }
             } else if ("meta".equals(localName)) {
+                String refines = elem.getAttribute("refines");
+                if (refines != null && refines.startsWith("#") && allIds.contains(refines.substring(1))) {
+                    // This is a refines meta — it will be appended after its parent element
+                    handledRefines.add(elem);
+                    continue;
+                }
                 String property = elem.getAttribute("property");
                 String name = elem.getAttribute("name");
                 if (property.startsWith("booklore:") || name.startsWith("booklore:")) {
@@ -1209,25 +1479,44 @@ public class EpubMetadataWriter implements MetadataWriter {
                 } else {
                     otherMetas.add(elem);
                 }
+            } else if ("link".equals(localName)) {
+                linkElements.add(elem);
+            } else {
+                uncategorized.add(elem);
             }
         }
         
         while (metadataElement.hasChildNodes()) {
             metadataElement.removeChild(metadataElement.getFirstChild());
         }
-        
-        identifiers.forEach(metadataElement::appendChild);
-        titles.forEach(metadataElement::appendChild);
-        creators.forEach(metadataElement::appendChild);
-        contributors.forEach(metadataElement::appendChild);
-        languages.forEach(metadataElement::appendChild);
-        dates.forEach(metadataElement::appendChild);
-        publishers.forEach(metadataElement::appendChild);
-        descriptions.forEach(metadataElement::appendChild);
-        subjects.forEach(metadataElement::appendChild);
-        seriesMetas.forEach(metadataElement::appendChild);
+
+        // Helper to append an element followed by any refines meta that reference it
+        java.util.function.Consumer<Element> appendWithRefines = elem -> {
+            metadataElement.appendChild(elem);
+            String id = elem.getAttribute("id");
+            if (!id.isEmpty()) {
+                java.util.List<Element> refs = refinesMap.get(id);
+                if (refs != null) {
+                    refs.forEach(metadataElement::appendChild);
+                }
+            }
+        };
+
+        identifiers.forEach(appendWithRefines);
+        titles.forEach(appendWithRefines);
+        creators.forEach(appendWithRefines);
+        contributors.forEach(appendWithRefines);
+        languages.forEach(appendWithRefines);
+        dates.forEach(appendWithRefines);
+        publishers.forEach(appendWithRefines);
+        descriptions.forEach(appendWithRefines);
+        subjects.forEach(appendWithRefines);
+        otherDcElements.forEach(appendWithRefines);
+        seriesMetas.forEach(appendWithRefines);
         modifiedMetas.forEach(metadataElement::appendChild);
         otherMetas.forEach(metadataElement::appendChild);
+        linkElements.forEach(metadataElement::appendChild);
         bookloreMetas.forEach(metadataElement::appendChild);
+        uncategorized.forEach(metadataElement::appendChild);
     }
 }

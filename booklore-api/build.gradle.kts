@@ -190,6 +190,14 @@ dependencies {
 
     // PDFBox for test PDF creation only (production code uses PDFium4j)
     testImplementation("org.apache.pdfbox:pdfbox:3.0.7")
+    testImplementation("org.w3c:epubcheck:5.3.0") {
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+        exclude(group = "org.slf4j", module = "slf4j-jdk14")
+        exclude(group = "org.slf4j", module = "slf4j-log4j12")
+        exclude(group = "org.slf4j", module = "slf4j-nop")
+        exclude(group = "ch.qos.logback", module = "logback-classic")
+        exclude(group = "commons-logging", module = "commons-logging")
+    }
 }
 
 hibernate {
