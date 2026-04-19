@@ -11,7 +11,11 @@ import org.booklore.model.enums.BookFileType;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.MimeDetector;
 import org.grimmory.epub4j.native_parsing.NativeImageProcessor;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -27,9 +31,8 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLConnection;
+import java.net.InetAddress;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -87,7 +90,20 @@ public class EpubMetadataWriter implements MetadataWriter {
         ISO_LANGUAGES = Collections.unmodifiableSet(langs);
     }
 
+    private static final int MAX_COVER_BYTES = 20 * 1024 * 1024; // 20 MiB
+
     private final AppSettingService appSettingService;
+    private final RestTemplate coverRestTemplate;
+
+    public EpubMetadataWriter(AppSettingService appSettingService) {
+        this.appSettingService = appSettingService;
+        // No-redirect factory, redirects to internal addresses would bypass SSRF protection
+        SimpleClientHttpRequestFactory factory =
+                new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000);
+        factory.setReadTimeout(30_000);
+        this.coverRestTemplate = new RestTemplate(factory);
+    }
 
     @Override
     public void saveMetadataToFile(File epubFile, BookMetadataEntity metadata, String thumbnailUrl, MetadataClearFlags clear) {
@@ -930,39 +946,54 @@ public class EpubMetadataWriter implements MetadataWriter {
     private byte[] loadImage(String url) {
         if (url == null || url.isBlank()) return null;
 
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            log.warn("Rejected non-HTTP image URL (scheme not allowed)");
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            log.warn("Rejected malformed cover URL: {}", e.getMessage());
+            return null;
+        }
+
+        String scheme = uri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+            log.warn("Rejected cover URL with disallowed scheme: {}", scheme);
+            return null;
+        }
+
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            log.warn("Rejected cover URL with missing host");
+            return null;
+        }
+        try {
+            InetAddress addr = InetAddress.getByName(host);
+            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()) {
+                log.warn("Rejected cover URL targeting private/internal address for host: {}", host);
+                return null;
+            }
+        } catch (Exception e) {
+            log.warn("Rejected cover URL — hostname could not be resolved: {}", host);
             return null;
         }
 
         try {
-            URL parsed = new URL(url);
-            String protocol = parsed.getProtocol();
-            if (!"http".equals(protocol) && !"https".equals(protocol)) {
-                log.warn("Rejected image URL with unexpected protocol after parsing: {}", protocol);
-                return null;
-            }
-            URLConnection conn = parsed.openConnection();
-            if (!(conn instanceof HttpURLConnection httpConn)) {
-                log.warn("openConnection() did not return HttpURLConnection — rejecting");
-                return null;
-            }
-            httpConn.setConnectTimeout(10_000);
-            httpConn.setReadTimeout(30_000);
-            httpConn.setInstanceFollowRedirects(true);
-            httpConn.connect();
-            int status = httpConn.getResponseCode();
-            if (status < 200 || status >= 300) {
-                log.warn("Image fetch returned HTTP {}", status);
-                return null;
-            }
-            try (InputStream stream = httpConn.getInputStream()) {
-                return stream.readAllBytes();
-            } finally {
-                httpConn.disconnect();
-            }
+            return coverRestTemplate.execute(uri, HttpMethod.GET, null, response -> {
+                MediaType contentType = response.getHeaders().getContentType();
+                if (contentType == null || !contentType.getType().equalsIgnoreCase("image")) {
+                    log.warn("Rejected cover response with non-image Content-Type: {}", contentType);
+                    return null;
+                }
+                try (InputStream in = response.getBody()) {
+                    byte[] data = in.readNBytes(MAX_COVER_BYTES + 1);
+                    if (data.length > MAX_COVER_BYTES) {
+                        log.warn("Rejected cover response exceeding {} MiB size cap", MAX_COVER_BYTES / (1024 * 1024));
+                        return null;
+                    }
+                    return data;
+                }
+            });
         } catch (Exception e) {
-            log.warn("Failed to load image from URL: {}", e.getMessage());
+            log.warn("Failed to fetch cover image from URL: {}", e.getMessage());
             return null;
         }
     }
