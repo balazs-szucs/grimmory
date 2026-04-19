@@ -159,7 +159,8 @@ class EpubMetadataWriterValidationTest {
         
         assertThat(coverItem).isNotNull();
         assertThat(coverItem.getAttribute("media-type")).isEqualTo("image/png");
-        assertThat(coverItem.getAttribute("href")).endsWith(".png");
+        // epub4j replaceCoverImage replaces bytes in-place; href keeps original filename
+        assertThat(coverItem.getAttribute("href")).isEqualTo("cover.jpg");
 
         validateEpub(epubFile);
     }
