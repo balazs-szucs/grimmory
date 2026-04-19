@@ -316,6 +316,129 @@ class EpubMetadataWriterValidationTest {
         validateEpub(epubFile);
     }
 
+    @Test
+    @DisplayName("Should update manifest media-type when saveMetadataToFile replaces PNG cover with JPEG via thumbnailUrl")
+    void validate_coverMediaTypeUpdatedBySaveMetadataToFile() throws Exception {
+        // EPUB has a PNG cover in manifest, but we'll write JPEG cover data via saveMetadataToFile
+        String opfContent = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+                    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:title>Cover Media-Type Test</dc:title>
+                        <dc:language>en</dc:language>
+                        <dc:identifier id="id">test-id</dc:identifier>
+                        <meta property="dcterms:modified">2024-04-19T10:00:00Z</meta>
+                        <meta name="cover" content="cover-image"/>
+                    </metadata>
+                    <manifest>
+                        <item id="cover-image" href="cover.png" media-type="image/png" properties="cover-image"/>
+                        <item id="text" href="index.html" media-type="application/xhtml+xml"/>
+                        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+                        <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+                    </manifest>
+                    <spine toc="ncx">
+                        <itemref idref="text"/>
+                    </spine>
+                </package>
+                """;
+        File epubFile = createFullEpubWithPngCover(opfContent, "cover-mediatype-mismatch.epub");
+
+        // Serve a JPEG image from a local file path for the thumbnailUrl
+        byte[] jpegData = createMinimalValidImage("jpg");
+        File jpegFile = tempDir.resolve("thumb.jpg").toFile();
+        try (FileOutputStream fos = new FileOutputStream(jpegFile)) {
+            fos.write(jpegData);
+        }
+        String thumbnailUrl = jpegFile.getAbsolutePath();
+
+        BookMetadataEntity metadata = new BookMetadataEntity();
+        metadata.setTitle("Cover Media-Type Test");
+
+        writer.saveMetadataToFile(epubFile, metadata, thumbnailUrl, new MetadataClearFlags());
+
+        // Verify the manifest media-type was updated from image/png to image/jpeg
+        Document doc = parseOpf(epubFile);
+        NodeList items = doc.getElementsByTagNameNS("http://www.idpf.org/2007/opf", "item");
+        Element coverItem = null;
+        for (int i = 0; i < items.getLength(); i++) {
+            Element item = (Element) items.item(i);
+            if ("cover-image".equals(item.getAttribute("id"))) {
+                coverItem = item;
+                break;
+            }
+        }
+        assertThat(coverItem).isNotNull();
+        assertThat(coverItem.getAttribute("media-type")).isEqualTo("image/jpeg");
+
+        validateEpub(epubFile);
+    }
+
+    @Test
+    @DisplayName("Should clean up subject refines when replacing categories")
+    void validate_subjectRefinesCleanedUp() throws Exception {
+        // EPUB has subjects with IDs and refines metas pointing to them
+        String opfContent = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+                    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:title>Subject Refines Test</dc:title>
+                        <dc:language>en</dc:language>
+                        <dc:identifier id="id">test-id</dc:identifier>
+                        <dc:subject id="subject-1">Fiction</dc:subject>
+                        <dc:subject id="subject-2">Drama</dc:subject>
+                        <meta property="dcterms:modified">2024-04-19T10:00:00Z</meta>
+                        <meta refines="#subject-1" property="authority">BISAC</meta>
+                        <meta refines="#subject-1" property="term">FIC000000</meta>
+                        <meta refines="#subject-2" property="authority">BISAC</meta>
+                        <meta refines="#subject-2" property="term">FIC007000</meta>
+                    </metadata>
+                    <manifest>
+                        <item id="text" href="index.html" media-type="application/xhtml+xml"/>
+                        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+                        <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+                    </manifest>
+                    <spine toc="ncx">
+                        <itemref idref="text"/>
+                    </spine>
+                </package>
+                """;
+        File epubFile = createFullEpub(opfContent, "subject-refines.epub");
+
+        BookMetadataEntity metadata = new BookMetadataEntity();
+        metadata.setTitle("Subject Refines Test");
+        metadata.setCategories(java.util.Set.of(
+                createCategory("Science Fiction"),
+                createCategory("Adventure")
+        ));
+
+        writer.saveMetadataToFile(epubFile, metadata, null, new MetadataClearFlags());
+
+        // Verify: old refines are gone, new subjects are present
+        Document doc = parseOpf(epubFile);
+        Element metadataElement = (Element) doc.getElementsByTagNameNS("http://www.idpf.org/2007/opf", "metadata").item(0);
+
+        // No orphaned refines pointing to old subject IDs
+        NodeList metas = metadataElement.getElementsByTagNameNS("*", "meta");
+        for (int i = 0; i < metas.getLength(); i++) {
+            Element meta = (Element) metas.item(i);
+            String refines = meta.getAttribute("refines");
+            assertThat(refines).withFailMessage("Found orphaned refines: " + refines)
+                    .doesNotStartWith("#subject-");
+        }
+
+        // New subjects present
+        NodeList subjects = doc.getElementsByTagNameNS("http://purl.org/dc/elements/1.1/", "subject");
+        assertThat(subjects.getLength()).isEqualTo(2);
+
+        validateEpub(epubFile);
+    }
+
+    private org.booklore.model.entity.CategoryEntity createCategory(String name) {
+        org.booklore.model.entity.CategoryEntity cat = new org.booklore.model.entity.CategoryEntity();
+        cat.setName(name);
+        return cat;
+    }
+
     boolean isNativeImageProcessorAvailable() {
         return NativeImageProcessor.isAvailable();
     }
@@ -428,6 +551,29 @@ class EpubMetadataWriterValidationTest {
                 return builder.parse(is);
             }
         }
+    }
+
+    private File createFullEpubWithPngCover(String opfContent, String filename) throws IOException {
+        File epubFile = createFullEpub(opfContent, filename);
+        // The standard createFullEpub only adds cover.jpg; re-create with cover.png
+        File result = tempDir.resolve(filename + ".tmp").toFile();
+        try (ZipFile source = new ZipFile(epubFile);
+             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(result))) {
+            source.stream().forEach(entry -> {
+                try {
+                    zos.putNextEntry(new ZipEntry(entry.getName()));
+                    source.getInputStream(entry).transferTo(zos);
+                    zos.closeEntry();
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+            zos.putNextEntry(new ZipEntry("OEBPS/cover.png"));
+            zos.write(createMinimalValidImage("png"));
+            zos.closeEntry();
+        }
+        java.nio.file.Files.move(result.toPath(), epubFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        return epubFile;
     }
 
     private byte[] createMinimalValidImage(String format) throws IOException {

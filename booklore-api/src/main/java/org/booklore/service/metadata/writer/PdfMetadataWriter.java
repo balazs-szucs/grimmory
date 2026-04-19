@@ -418,18 +418,17 @@ public class PdfMetadataWriter implements MetadataWriter {
             return null;
         }
         
-        // Extract numeric ID from slug format "12345678-book-title"
-        int dashIndex = goodreadsId.indexOf('-');
-        if (dashIndex > 0) {
-            String numericPart = goodreadsId.substring(0, dashIndex);
-            // Validate it's actually numeric
+        // Extract numeric ID from slug format "12345678-book-title" or "12345678.Book_Title"
+        int sep = goodreadsId.indexOf('-');
+        if (sep < 0) sep = goodreadsId.indexOf('.');
+        if (sep > 0) {
+            String numericPart = goodreadsId.substring(0, sep);
             if (numericPart.matches("\\d+")) {
                 return numericPart;
             }
         }
         
-        // Already just the ID, or return as-is if it's all numeric
-        return goodreadsId.matches("\\d+") ? goodreadsId : goodreadsId;
+        return goodreadsId;
     }
 
 }

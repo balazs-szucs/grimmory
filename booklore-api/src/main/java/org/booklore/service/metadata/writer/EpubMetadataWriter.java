@@ -123,6 +123,15 @@ public class EpubMetadataWriter implements MetadataWriter {
                 if (coverData != null) {
                     coverData = optimizeCoverImage(coverData);
                     org.grimmory.epub4j.epub.EpubMetadataWriter.replaceCoverImage(epubFile.toPath(), coverData);
+
+                    // Update manifest media-type to match the new cover image format
+                    String newMediaType = detectMediaType(coverData);
+                    if (newMediaType != null) {
+                        org.grimmory.epub4j.epub.EpubMetadataWriter.updateMetadata(epubFile.toPath(), opfDoc -> {
+                            updateCoverManifestEntry(opfDoc, newMediaType);
+                            removeEmptyTextNodes(opfDoc);
+                        });
+                    }
                 }
             }
 
@@ -420,7 +429,12 @@ public class EpubMetadataWriter implements MetadataWriter {
     private void removeElementsByTagNameNS(Element parent) {
         NodeList nodes = parent.getElementsByTagNameNS(EpubMetadataWriter.DC_NS, "subject");
         for (int i = nodes.getLength() - 1; i >= 0; i--) {
-            parent.removeChild(nodes.item(i));
+            Element subject = (Element) nodes.item(i);
+            String id = subject.getAttribute("id");
+            if (StringUtils.isNotBlank(id)) {
+                removeMetaByRefines(parent, "#" + id);
+            }
+            parent.removeChild(subject);
         }
     }
 

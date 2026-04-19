@@ -47,6 +47,7 @@ public class GoodReadsParser implements BookParser, DetailedMetadataProvider {
     private static final int COUNT_DETAILED_METADATA_TO_GET_RETRY = 2;
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
     private static final Pattern BOOK_SHOW_ID_PATTERN = Pattern.compile("/book/show/(\\d+)");
+    private static final Pattern NUMERIC = Pattern.compile("\\d+");
 
     private final AppSettingService appSettingService;
 
@@ -124,12 +125,25 @@ public class GoodReadsParser implements BookParser, DetailedMetadataProvider {
             if (path == null || path.isBlank()) {
                 return null;
             }
-            String id = path.substring(path.lastIndexOf('/') + 1);
-            return id.isBlank() ? null : id;
+            String slug = path.substring(path.lastIndexOf('/') + 1);
+            return slug.isBlank() ? null : extractNumericId(slug);
         } catch (URISyntaxException e) {
             log.warn("GoodReads: Could not parse og:url '{}': {}", ogUrl, e.getMessage());
             return null;
         }
+    }
+
+    private String extractNumericId(String slug) {
+        // Goodreads slugs can be "52555538-dead-simple-python" or "52555538.Dead_Simple_Python"
+        int sep = slug.indexOf('-');
+        if (sep < 0) sep = slug.indexOf('.');
+        if (sep > 0) {
+            String numericPart = slug.substring(0, sep);
+            if (NUMERIC.matcher(numericPart).matches()) {
+                return numericPart;
+            }
+        }
+        return slug;
     }
 
     @Override
