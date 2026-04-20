@@ -391,9 +391,41 @@ describe('BookReviewsComponent', () => {
     expect(component.loading()).toBe(true);
 
     // 5. Wait for loadReviews(43) to finish (after 100ms total)
-    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(component.loading()).toBe(false);
+  });
+
+  it('ignores stale responses in a 1 -> 2 -> 1 navigation sequence (ABA problem)', async () => {
+    const book1InitialReviews = [createReview(1, {body: 'First Request'})];
+    const book1LatestReviews = [createReview(1, {body: 'Second Request'})];
+    const book2Reviews = [createReview(2)];
+
+    // 1. First request for Book 1 is very slow
+    reviewService.getByBookId.mockReturnValueOnce(of(book1InitialReviews).pipe(delay(100)));
+    // 2. Request for Book 2 is fast
+    reviewService.getByBookId.mockReturnValueOnce(of(book2Reviews));
+    // 3. Second request for Book 1 is slow
+    reviewService.getByBookId.mockReturnValueOnce(of(book1LatestReviews).pipe(delay(50)));
+
+    // Navigate: Book 1
+    component.bookId = 1;
+    component.ngOnChanges({bookId: new SimpleChange(undefined, 1, true)});
+
+    // Navigate: Book 2
+    component.bookId = 2;
+    component.ngOnChanges({bookId: new SimpleChange(1, 2, false)});
+
+    // Navigate: Book 1 again
+    component.bookId = 1;
+    component.ngOnChanges({bookId: new SimpleChange(2, 1, false)});
+
+    // Wait for all requests to finish
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Should have the reviews from the SECOND request for Book 1, not the first
+    expect(component.reviews?.[0].body).toBe('Second Request');
     expect(component.loading()).toBe(false);
   });
 });
+
 
 

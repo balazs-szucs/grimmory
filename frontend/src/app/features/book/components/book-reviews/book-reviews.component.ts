@@ -40,6 +40,9 @@ export class BookReviewsComponent implements OnInit, OnChanges {
   private readonly t = inject(TranslocoService);
   private bookIdState = signal<number | null>(null);
   private loadingBookId: number | null = null;
+  private loadingRequestSeq = 0;
+  private activeLoadingRequestSeq: number | null = null;
+
 
 
   loading = signal(false);
@@ -81,27 +84,31 @@ export class BookReviewsComponent implements OnInit, OnChanges {
       return;
     }
 
+    const requestSeq = ++this.loadingRequestSeq;
     this.loadingBookId = requestedBookId;
+    this.activeLoadingRequestSeq = requestSeq;
     this.loading.set(true);
     this.reviewService.getByBookId(requestedBookId)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => {
-          if (this.loadingBookId === requestedBookId) {
+          if (this.activeLoadingRequestSeq === requestSeq) {
             this.loadingBookId = null;
+            this.activeLoadingRequestSeq = null;
             this.loading.set(false);
           }
         })
       )
       .subscribe({
         next: (reviews) => {
-          if (this.bookId !== requestedBookId) return;
+          if (this.bookId !== requestedBookId || this.activeLoadingRequestSeq !== requestSeq) return;
           this.reviews = this.sortReviewsByDate(reviews || []);
         },
         error: (error) => {
-          if (this.bookId !== requestedBookId) return;
+          if (this.bookId !== requestedBookId || this.activeLoadingRequestSeq !== requestSeq) return;
           console.error('Failed to load reviews for bookId', requestedBookId, ':', error);
           this.reviews = [];
+
 
           this.messageService.add({
             severity: 'error',
@@ -118,7 +125,9 @@ export class BookReviewsComponent implements OnInit, OnChanges {
     const requestedBookId = this.bookId;
     if (!requestedBookId || this.loadingBookId === requestedBookId || this.loading() || this.reviewsLocked) return;
 
+    const requestSeq = ++this.loadingRequestSeq;
     this.loadingBookId = requestedBookId;
+    this.activeLoadingRequestSeq = requestSeq;
     this.loading.set(true);
     this.revealedSpoilers.clear();
 
@@ -126,16 +135,18 @@ export class BookReviewsComponent implements OnInit, OnChanges {
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => {
-          if (this.loadingBookId === requestedBookId) {
+          if (this.activeLoadingRequestSeq === requestSeq) {
             this.loadingBookId = null;
+            this.activeLoadingRequestSeq = null;
             this.loading.set(false);
           }
         })
       )
       .subscribe({
         next: (reviews) => {
-          if (this.bookId !== requestedBookId) return;
+          if (this.bookId !== requestedBookId || this.activeLoadingRequestSeq !== requestSeq) return;
           this.reviews = this.sortReviewsByDate(reviews || []);
+
           this.updateSpoilerState();
           this.messageService.add({
             severity: 'success',
@@ -145,8 +156,9 @@ export class BookReviewsComponent implements OnInit, OnChanges {
           });
         },
         error: (error) => {
-          if (this.bookId !== requestedBookId) return;
+          if (this.bookId !== requestedBookId || this.activeLoadingRequestSeq !== requestSeq) return;
           console.error('Failed to fetch new reviews:', error);
+
           this.messageService.add({
             severity: 'error',
             summary: this.t.translate('book.reviews.toast.fetchFailedSummary'),
