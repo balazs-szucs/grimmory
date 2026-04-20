@@ -102,10 +102,10 @@ export function patchBookFieldsInCache(queryClient: QueryClient, updates: {bookI
 
 export function patchAppBooksCoverInCache(
   queryClient: QueryClient,
-  patches: {id: number; coverUpdatedOn: string}[]
+  patches: {id: number; coverUpdatedOn?: string | null; audiobookCoverUpdatedOn?: string | null}[]
 ): void {
   if (patches.length === 0) return;
-  const patchMap = new Map(patches.map(p => [p.id, p.coverUpdatedOn]));
+  const patchMap = new Map(patches.map(p => [p.id, p]));
 
   queryClient.setQueriesData<InfiniteData<AppPageResponse<AppBookSummary>>>(
     {queryKey: APP_BOOKS_QUERY_PREFIX},
@@ -116,8 +116,13 @@ export function patchAppBooksCoverInCache(
         pages: current.pages.map(page => ({
           ...page,
           content: page.content.map(summary => {
-            const coverUpdatedOn = patchMap.get(summary.id);
-            return coverUpdatedOn ? {...summary, coverUpdatedOn} : summary;
+            const patch = patchMap.get(summary.id);
+            if (!patch) return summary;
+            return {
+              ...summary,
+              ...('coverUpdatedOn' in patch ? {coverUpdatedOn: patch.coverUpdatedOn ?? null} : {}),
+              ...('audiobookCoverUpdatedOn' in patch ? {audiobookCoverUpdatedOn: patch.audiobookCoverUpdatedOn ?? null} : {}),
+            };
           })
         }))
       };

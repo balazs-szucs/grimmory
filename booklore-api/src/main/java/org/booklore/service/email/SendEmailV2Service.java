@@ -97,7 +97,11 @@ public class SendEmailV2Service {
         helper.setTo(recipientEmail);
         helper.setSubject("Your Book from Grimmory: " + book.getMetadata().getTitle());
         helper.setText(generateEmailBody(book.getMetadata().getTitle()));
-        File bookFile = FileUtils.getBookFullPath(book, bookFileEntity).toFile();
+        var bookPath = FileUtils.getBookFullPath(book, bookFileEntity);
+        if (bookPath == null) {
+            throw ApiError.FILE_NOT_FOUND.createException(book.getId());
+        }
+        File bookFile = bookPath.toFile();
         helper.addAttachment(bookFile.getName(), bookFile);
         dynamicMailSender.send(message);
         log.info("Book sent successfully to {}", recipientEmail);
