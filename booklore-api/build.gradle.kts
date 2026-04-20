@@ -210,6 +210,7 @@ jacoco {
 tasks.named<Test>("test") {
     useJUnitPlatform()
     maxHeapSize = "2560m"
+    maxParallelForks = 1
     jvmArgs("-XX:+EnableDynamicAgentLoading", "--enable-native-access=ALL-UNNAMED", "--enable-preview")
     finalizedBy(tasks.named("jacocoTestReport"))
 }

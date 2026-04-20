@@ -20,19 +20,19 @@ build:
 
 # Run the backend test suite.
 test:
-    {{ gradle }} test --no-daemon --parallel --build-cache
+    {{ gradle }} test --no-daemon --build-cache
 
 # Run a single backend test class, for example `just test-class test_class=org.booklore.service.BookServiceTest`.
 test-class test_class:
-    {{ gradle }} test --tests "{{ test_class }}" --no-daemon --parallel --build-cache
+    {{ gradle }} test --tests "{{ test_class }}" --no-daemon --build-cache
 
 # Run tests and generate JaCoCo coverage output.
 coverage:
-    {{ gradle }} test jacocoTestReport --no-daemon --parallel --build-cache
+    {{ gradle }} test jacocoTestReport --no-daemon --build-cache
 
 # Run the Gradle `check` lifecycle used for local backend verification.
 check:
-    {{ gradle }} check --no-daemon --parallel --build-cache
+    {{ gradle }} check --no-daemon --build-cache
 
 # Remove backend build outputs.
 clean:
