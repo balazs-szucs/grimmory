@@ -434,8 +434,8 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                             switch (scheme) {
                                 case "ISBN", "ISBN10", "ISBN13" -> {
                                     String cleanValue = ISBN_SEPARATOR_PATTERN.matcher(value).replaceAll("");
-                                    if (cleanValue.length() == 13) builderMeta.isbn13(value);
-                                    else if (cleanValue.length() == 10) builderMeta.isbn10(value);
+                                    if (cleanValue.length() == 13) builderMeta.isbn13(cleanValue);
+                                    else if (cleanValue.length() == 10) builderMeta.isbn10(cleanValue);
                                 }
                                 case "GOODREADS" -> builderMeta.goodreadsId(value);
                                 case "COMICVINE" -> builderMeta.comicvineId(value);
@@ -569,7 +569,6 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
     );
 
     private void mapNativeIdentifiers(Map<String, String> allMetadata, BookMetadata.BookMetadataBuilder builder) {
-        // Native identifiers are often exposed as "scheme:value" or via specific keys
         allMetadata.forEach((key, value) -> {
             if (StringUtils.isBlank(value)) return;
             
