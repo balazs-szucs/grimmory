@@ -158,13 +158,15 @@ class EpubMetadataExtractorTest {
         }
 
         @Test
-        void returnsNullWhenNoMetadataElement() throws IOException {
+        void fallsBackToFilenameWhenNoMetadataElement() throws IOException {
             String opf = """
                     <?xml version="1.0" encoding="UTF-8"?>
                     <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
                       <manifest/>
                     </package>""";
-            assertThat(extractor.extractMetadata(createEpub(opf))).isNull();
+            BookMetadata metadata = extractor.extractMetadata(createEpub(opf));
+            assertThat(metadata).isNotNull();
+            assertThat(metadata.getTitle()).isEqualTo("test");
         }
     }
 

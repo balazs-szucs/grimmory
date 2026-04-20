@@ -269,7 +269,13 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
             Document doc = container.parseOpf();
 
             Element metadata = (Element) doc.getElementsByTagNameNS("*", "metadata").item(0);
-            if (metadata == null) return null;
+            if (metadata == null) {
+                // Java path cannot proceed, but native may have populated builderMeta.
+                BookMetadata nativeOnly = builderMeta.build();
+                return StringUtils.isBlank(nativeOnly.getTitle())
+                        ? builderMeta.title(FilenameUtils.getBaseName(epubFile.getName())).build()
+                        : nativeOnly;
+            }
 
             boolean seriesFound = false;
             boolean seriesIndexFound = false;
@@ -527,7 +533,11 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
             return extractedMetadata;
         } catch (Exception e) {
             log.error("Failed to read metadata from EPUB file {}: {}", epubFile.getName(), e.getMessage(), e);
-            return null;
+            BookMetadata nativeOnly = builderMeta.build();
+            if (StringUtils.isBlank(nativeOnly.getTitle()) && (nativeOnly.getAuthors() == null || nativeOnly.getAuthors().isEmpty())) {
+                return null;
+            }
+            return nativeOnly;
         }
     }
 
