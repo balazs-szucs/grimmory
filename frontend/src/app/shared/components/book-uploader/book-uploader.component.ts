@@ -203,7 +203,7 @@ export class BookUploaderComponent {
     if (batch.length === 0) {
       this.isUploading.set(false);
       this.uploadCompleted.set(true);
-      this.uploadCompleted.set(true);
+
       if (destination === 'bookdrop') {
         this.ref.close('uploaded_to_bookdrop');
       }

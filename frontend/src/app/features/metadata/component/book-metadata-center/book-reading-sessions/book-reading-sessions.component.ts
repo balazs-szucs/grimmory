@@ -55,7 +55,9 @@ export class BookReadingSessionsComponent implements OnInit, OnChanges {
         next: (response) => {
           this.sessions = response.content;
         },
-        error: () => undefined
+        error: () => {
+          this.sessions = [];
+        }
       });
   }
 
