@@ -112,10 +112,14 @@ export class BookUploaderComponent {
   onClear(clearCallback: () => void): void {
     clearCallback();
     this.files = [];
+    this.uploadCompleted.set(false);
   }
 
+
   onFilesSelect(event: FileSelectEvent): void {
+    this.uploadCompleted.set(false);
     if (this.value === 'library' && (!this.selectedLibrary || !this.selectedPath)) {
+
       this.messageService.add({
         severity: 'error',
         summary: this.t.translate('shared.bookUploader.toast.noDestinationSummary'),

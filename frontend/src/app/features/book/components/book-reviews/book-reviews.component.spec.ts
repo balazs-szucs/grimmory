@@ -1,6 +1,7 @@
 import {SimpleChange} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {of, throwError} from 'rxjs';
+import {of, throwError, delay} from 'rxjs';
+
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ConfirmationService, MessageService} from 'primeng/api';
 import {TranslocoService} from '@jsverse/transloco';
@@ -339,4 +340,34 @@ describe('BookReviewsComponent', () => {
     expect(component.getProviderSeverity('goodreads')).toBe('success');
     expect(component.formatDate('2026-03-28T12:00:00.000Z')).toBe('March 28, 2026');
   });
+
+  it('ignores stale responses if the bookId changes while a request is in-flight', async () => {
+    const book1Reviews = [createReview(1)];
+    const book2Reviews = [createReview(2)];
+
+    // First request is slow
+    reviewService.getByBookId.mockReturnValueOnce(of(book1Reviews).pipe(delay(50)));
+    // Second request is fast
+    reviewService.getByBookId.mockReturnValueOnce(of(book2Reviews));
+
+    // Select book 1
+    component.bookId = 1;
+    component.ngOnChanges({
+      bookId: new SimpleChange(undefined, 1, true),
+    });
+
+    // Immediately select book 2 while book 1 is still loading
+    component.bookId = 2;
+    component.ngOnChanges({
+      bookId: new SimpleChange(1, 2, false),
+    });
+
+    // Wait for both to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Should only have book 2's reviews
+    expect(component.reviews?.map(r => r.id)).toEqual([2]);
+    expect(component.loading()).toBe(false);
+  });
 });
+
