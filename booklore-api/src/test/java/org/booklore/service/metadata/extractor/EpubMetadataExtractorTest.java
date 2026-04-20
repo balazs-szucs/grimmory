@@ -22,6 +22,8 @@ import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.booklore.test.NativeLibraryInitializer;
+
 class EpubMetadataExtractorTest {
 
     private EpubMetadataExtractor extractor;
@@ -31,7 +33,7 @@ class EpubMetadataExtractorTest {
 
     @BeforeEach
     void setUp() {
-        extractor = new EpubMetadataExtractor();
+        extractor = new EpubMetadataExtractor(NativeLibraryInitializer.createEpubNativeService());
     }
 
     private File createEpub(String opfContent) throws IOException {

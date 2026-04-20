@@ -13,6 +13,7 @@ import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.metadata.BookLoreMetadata;
+import org.booklore.service.PdfiumNativeService;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -30,6 +31,7 @@ import java.util.*;
 public class PdfMetadataWriter implements MetadataWriter {
 
     private final AppSettingService appSettingService;
+    private final PdfiumNativeService pdfiumNativeService;
 
     @Override
     public void saveMetadataToFile(File file, BookMetadataEntity metadataEntity, String thumbnailUrl, MetadataClearFlags clear) {
@@ -43,47 +45,56 @@ public class PdfMetadataWriter implements MetadataWriter {
         }
 
         Path filePath = file.toPath();
-        Path backupPath = null;
-        boolean backupCreated = false;
-        File tempFile = null;
+        Path backup = createTempBackup(filePath, file.getName());
 
         try {
-            String prefix = "pdfBackup-" + UUID.randomUUID() + "-";
-            backupPath = Files.createTempFile(prefix, ".pdf");
-            Files.copy(filePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
-            backupCreated = true;
-        } catch (IOException e) {
-            log.warn("Could not create PDF temp backup for {}: {}", file.getName(), e.getMessage());
-        }
-
-        try (PdfDocument doc = PdfDocument.open(filePath)) {
-            applyMetadataToDocument(doc, metadataEntity, clear);
-            tempFile = File.createTempFile("pdfmeta-", ".pdf");
-            doc.save(tempFile.toPath(), SaveOptions.SKIP_VALIDATION);
-            Files.move(tempFile.toPath(), filePath, StandardCopyOption.REPLACE_EXISTING);
-            tempFile = null; // Prevent deletion in finally block after successful move
-            log.info("Successfully embedded metadata into PDF: {}", file.getName());
+            pdfiumNativeService.withDocumentVoid(filePath, doc -> {
+                applyMetadataToDocument(doc, metadataEntity, clear);
+                File tmp = File.createTempFile("pdfmeta-", ".pdf");
+                try {
+                    doc.save(tmp.toPath(), SaveOptions.SKIP_VALIDATION);
+                    Files.move(tmp.toPath(), filePath, StandardCopyOption.REPLACE_EXISTING);
+                } catch (Exception e) {
+                    tmp.delete();
+                    throw e;
+                }
+                log.info("Successfully embedded metadata into PDF: {}", file.getName());
+            });
         } catch (Exception e) {
             log.warn("Failed to write metadata to PDF {}: {}", file.getName(), e.getMessage(), e);
-            if (backupCreated) {
-                try {
-                    Files.copy(backupPath, filePath, StandardCopyOption.REPLACE_EXISTING);
-                    log.info("Restored PDF {} from temp backup after failure", file.getName());
-                } catch (IOException ex) {
-                    log.error("Failed to restore PDF temp backup for {}: {}", file.getName(), ex.getMessage(), ex);
-                }
-            }
+            restoreFromBackup(backup, filePath, file.getName());
         } finally {
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
-            if (backupCreated) {
-                try {
-                    Files.deleteIfExists(backupPath);
-                } catch (IOException e) {
-                    log.warn("Could not delete PDF temp backup for {}: {}", file.getName(), e.getMessage());
-                }
-            }
+            deleteSilently(backup, file.getName());
+        }
+    }
+
+    private Path createTempBackup(Path source, String displayName) {
+        try {
+            Path backup = Files.createTempFile("pdfBackup-" + UUID.randomUUID() + "-", ".pdf");
+            Files.copy(source, backup, StandardCopyOption.REPLACE_EXISTING);
+            return backup;
+        } catch (IOException e) {
+            log.warn("Could not create PDF temp backup for {}: {}", displayName, e.getMessage());
+            return null;
+        }
+    }
+
+    private void restoreFromBackup(Path backup, Path target, String displayName) {
+        if (backup == null) return;
+        try {
+            Files.copy(backup, target, StandardCopyOption.REPLACE_EXISTING);
+            log.info("Restored PDF {} from temp backup after failure", displayName);
+        } catch (IOException ex) {
+            log.error("Failed to restore PDF temp backup for {}: {}", displayName, ex.getMessage(), ex);
+        }
+    }
+
+    private void deleteSilently(Path path, String displayName) {
+        if (path == null) return;
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("Could not delete PDF temp backup for {}: {}", displayName, e.getMessage());
         }
     }
 

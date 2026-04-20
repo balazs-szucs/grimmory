@@ -47,6 +47,7 @@ import java.util.zip.ZipOutputStream;
 
 import org.grimmory.epub4j.archive.EpubContainer;
 import org.grimmory.epub4j.archive.EpubContainers;
+import org.booklore.service.EpubNativeService;
 
 @Slf4j
 @Component
@@ -55,6 +56,7 @@ public class EpubMetadataWriter implements MetadataWriter {
 
     private static final String OPF_NS = "http://www.idpf.org/2007/opf";
     private final AppSettingService appSettingService;
+    private final EpubNativeService epubNativeService;
 
     @Override
     public void saveMetadataToFile(File epubFile, BookMetadataEntity metadata, String thumbnailUrl, MetadataClearFlags clear) {
@@ -523,18 +525,20 @@ public class EpubMetadataWriter implements MetadataWriter {
     }
 
     private void extractZipToDirectory(File zipSource, Path targetDir) throws IOException {
-        try (EpubContainer container = EpubContainers.open(zipSource.toPath())) {
-            for (String name : container.listAllFiles()) {
-                Path entryPath = targetDir.resolve(name).normalize();
-                if (!entryPath.startsWith(targetDir)) {
-                    throw new IOException("ZIP entry outside target directory: " + name);
-                }
-                Files.createDirectories(entryPath.getParent());
-                try (OutputStream out = Files.newOutputStream(entryPath)) {
-                    container.streamTo(name, out);
+        epubNativeService.executeVoid(() -> {
+            try (EpubContainer container = EpubContainers.open(zipSource.toPath())) {
+                for (String name : container.listAllFiles()) {
+                    Path entryPath = targetDir.resolve(name).normalize();
+                    if (!entryPath.startsWith(targetDir)) {
+                        throw new IOException("ZIP entry outside target directory: " + name);
+                    }
+                    Files.createDirectories(entryPath.getParent());
+                    try (OutputStream out = Files.newOutputStream(entryPath)) {
+                        container.streamTo(name, out);
+                    }
                 }
             }
-        }
+        });
     }
 
     private void createEpubZipFromDirectory(Path sourceDir, Path targetZip) throws IOException {

@@ -3,7 +3,6 @@ package org.booklore.service.metadata.extractor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.grimmory.pdfium4j.PdfDocument;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.util.SecureXmlUtils;
@@ -25,10 +24,15 @@ import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import lombok.RequiredArgsConstructor;
+import org.booklore.service.PdfiumNativeService;
+
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class PdfMetadataExtractor implements FileMetadataExtractor {
 
+    private final PdfiumNativeService pdfiumNativeService;
 
     private static final Pattern COMMA_AMPERSAND_PATTERN = Pattern.compile("[,&]");
     private static final Pattern ISBN_CLEANUP_PATTERN = Pattern.compile("[^0-9Xx]");
@@ -38,8 +42,10 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     @Override
     public byte[] extractCover(File file) {
-        try (PdfDocument doc = PdfDocument.open(file.toPath())) {
-            return doc.renderPageToBytes(0, 300, "jpeg");
+        try {
+            return pdfiumNativeService.withDocument(file.toPath(), doc ->
+                    doc.renderPageToBytes(0, 300, "jpeg")
+            );
         } catch (Exception e) {
             log.warn("Failed to extract cover from PDF: {}", file.getAbsolutePath(), e);
             return null;
@@ -53,9 +59,10 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
             return BookMetadata.builder().build();
         }
 
-        BookMetadata.BookMetadataBuilder metadataBuilder = BookMetadata.builder();
+        try {
+            return pdfiumNativeService.withDocument(file.toPath(), doc -> {
 
-        try (PdfDocument doc = PdfDocument.open(file.toPath())) {
+            BookMetadata.BookMetadataBuilder metadataBuilder = BookMetadata.builder();
 
             String title = doc.metadata(MetadataTag.TITLE).orElse(null);
             if (StringUtils.isNotBlank(title)) {
@@ -213,11 +220,12 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
                 }
             }
 
+            return metadataBuilder.build();
+            });
         } catch (Exception e) {
             log.error("Failed to load PDF file: {}", file.getPath(), e);
+            return BookMetadata.builder().build();
         }
-
-        return metadataBuilder.build();
     }
 
     private void extractDublinCoreMetadata(XPath xpath, Document doc, BookMetadata.BookMetadataBuilder builder) throws XPathExpressionException {

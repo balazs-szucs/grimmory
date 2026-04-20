@@ -1,5 +1,7 @@
 package org.booklore.service.reader;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.exception.ApiError;
@@ -16,6 +18,7 @@ import org.grimmory.epub4j.domain.*;
 import org.grimmory.epub4j.epub.CoverDetector;
 import org.grimmory.epub4j.epub.EpubReader;
 import org.grimmory.epub4j.native_parsing.NativeArchive;
+import org.booklore.service.EpubNativeService;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -67,7 +70,8 @@ public class EpubReaderService {
     );
 
     private final BookRepository bookRepository;
-    private final com.github.benmanes.caffeine.cache.Cache<String, CachedEpubMetadata> metadataCache = com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+    private final EpubNativeService epubNativeService;
+    private final Cache<String, CachedEpubMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
@@ -378,9 +382,11 @@ public class EpubReaderService {
     }
 
     private void streamEntryFromZip(Path epubPath, String entryName, OutputStream outputStream) throws IOException {
-        try (NativeArchive archive = NativeArchive.open(epubPath)) {
-            archive.streamEntry(entryName, outputStream);
-        }
+        epubNativeService.executeVoid(() -> {
+            try (NativeArchive archive = NativeArchive.open(epubPath)) {
+                archive.streamEntry(entryName, outputStream);
+            }
+        });
     }
 
     private String guessContentType(String path) {

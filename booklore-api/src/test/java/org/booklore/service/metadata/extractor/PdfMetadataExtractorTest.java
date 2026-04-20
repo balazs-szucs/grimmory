@@ -26,6 +26,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.booklore.test.NativeLibraryInitializer;
 import org.booklore.test.RequiresPdfium;
 
 @RequiresPdfium
@@ -38,7 +39,7 @@ class PdfMetadataExtractorTest {
 
     @BeforeEach
     void setUp() {
-        extractor = new PdfMetadataExtractor();
+        extractor = new PdfMetadataExtractor(NativeLibraryInitializer.createPdfiumNativeService());
     }
 
     private File createPdf(PdfCustomizer customizer) throws Exception {

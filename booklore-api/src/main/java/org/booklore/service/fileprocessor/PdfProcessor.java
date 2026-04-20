@@ -16,6 +16,7 @@ import org.booklore.service.book.BookCreatorService;
 import org.booklore.service.metadata.MetadataMatchService;
 import org.booklore.service.metadata.extractor.PdfMetadataExtractor;
 import org.booklore.service.metadata.sidecar.SidecarMetadataWriter;
+import org.booklore.service.PdfiumNativeService;
 import org.booklore.util.BookCoverUtils;
 import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
@@ -33,6 +34,7 @@ import static org.booklore.util.FileService.truncate;
 public class PdfProcessor extends AbstractFileProcessor implements BookFileProcessor {
 
     private final PdfMetadataExtractor pdfMetadataExtractor;
+    private final PdfiumNativeService pdfiumNativeService;
 
     public PdfProcessor(BookRepository bookRepository,
                         BookAdditionalFileRepository bookAdditionalFileRepository,
@@ -41,9 +43,11 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
                         FileService fileService,
                         MetadataMatchService metadataMatchService,
                         SidecarMetadataWriter sidecarMetadataWriter,
-                        PdfMetadataExtractor pdfMetadataExtractor) {
+                        PdfMetadataExtractor pdfMetadataExtractor,
+                        PdfiumNativeService pdfiumNativeService) {
         super(bookRepository, bookAdditionalFileRepository, bookCreatorService, bookMapper, fileService, metadataMatchService, sidecarMetadataWriter);
         this.pdfMetadataExtractor = pdfMetadataExtractor;
+        this.pdfiumNativeService = pdfiumNativeService;
     }
 
     @Override
@@ -72,19 +76,15 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
     @Override
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
         File pdfFile = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
-        try (PdfDocument doc = PdfDocument.open(pdfFile.toPath())) {
-            return generateCoverImageAndSave(bookEntity.getId(), doc);
+        try {
+            return pdfiumNativeService.withDocument(pdfFile.toPath(), doc ->
+                    generateCoverImageAndSave(bookEntity.getId(), doc)
+            );
         } catch (OutOfMemoryError e) {
-            // Note: Catching OOM is generally discouraged, but for batch processing
-            // of potentially large/corrupted PDFs, we prefer graceful degradation
-            // over crashing the entire service.
             log.error("Out of memory (heap space exhausted) while generating cover for '{}'. Skipping cover generation.", bookFile.getFileName());
-            System.gc(); // Hint to JVM to reclaim memory
+            System.gc();
             return false;
         } catch (NegativeArraySizeException e) {
-            // This can appear on corrupted PDF, or PDF with such large images that the
-            // initial memory buffer is already bigger than the entire JVM heap, therefore
-            // it leads to NegativeArrayException (basically run out of memory, and overflows)
             log.warn("Corrupted PDF structure for '{}'. Skipping cover generation.", bookFile.getFileName());
             return false;
         } catch (Exception e) {
