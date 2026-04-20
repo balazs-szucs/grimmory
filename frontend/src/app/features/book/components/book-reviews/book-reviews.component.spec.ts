@@ -151,7 +151,7 @@ describe('BookReviewsComponent', () => {
     expect(reviewService.getByBookId).toHaveBeenCalledWith(42);
     expect(component.reviews?.map(review => review.id)).toEqual([3, 2, 1]);
     expect(component.reviewsLocked).toBe(true);
-    expect(component.loading).toBe(false);
+    expect(component.loading()).toBe(false);
   });
 
   it('refreshes reviews, clears revealed spoilers, and shows a success toast', () => {
@@ -167,7 +167,7 @@ describe('BookReviewsComponent', () => {
     expect(component.reviews?.map(review => review.id)).toEqual([5, 4]);
     expect(component.revealedSpoilers.size).toBe(0);
     expect(component.allSpoilersRevealed).toBe(false);
-    expect(component.loading).toBe(false);
+    expect(component.loading()).toBe(false);
     expect(messageService.add).toHaveBeenCalledWith({
       severity: 'success',
       summary: 'book.reviews.toast.reviewsUpdatedSummary',
@@ -184,7 +184,7 @@ describe('BookReviewsComponent', () => {
     component.fetchNewReviews();
 
     expect(errorSpy).toHaveBeenCalledWith('Failed to fetch new reviews:', error);
-    expect(component.loading).toBe(false);
+    expect(component.loading()).toBe(false);
     expect(messageService.add).toHaveBeenCalledWith({
       severity: 'error',
       summary: 'book.reviews.toast.fetchFailedSummary',

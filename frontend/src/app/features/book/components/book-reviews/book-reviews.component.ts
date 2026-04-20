@@ -38,7 +38,7 @@ export class BookReviewsComponent implements OnInit, OnChanges {
   private readonly t = inject(TranslocoService);
   private bookIdState = signal<number | null>(null);
 
-  loading = false;
+  loading = signal(false);
   hasPermission = false;
   revealedSpoilers = new Set<number>();
   sortAscending = false;
@@ -72,22 +72,22 @@ export class BookReviewsComponent implements OnInit, OnChanges {
   }
 
   private loadReviews(): void {
-    if (this.loading || !this.bookId) {
+    if (this.loading() || !this.bookId) {
       return;
     }
 
-    this.loading = true;
+    this.loading.set(true);
     this.reviewService.getByBookId(this.bookId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (reviews) => {
           this.reviews = this.sortReviewsByDate(reviews || []);
-          this.loading = false;
+          this.loading.set(false);
         },
         error: (error) => {
           console.error('Failed to load reviews for bookId', this.bookId, ':', error);
           this.reviews = [];
-          this.loading = false;
+          this.loading.set(false);
 
           this.messageService.add({
             severity: 'error',
@@ -100,9 +100,9 @@ export class BookReviewsComponent implements OnInit, OnChanges {
   }
 
   fetchNewReviews(): void {
-    if (!this.bookId || this.loading || this.reviewsLocked) return;
+    if (!this.bookId || this.loading() || this.reviewsLocked) return;
 
-    this.loading = true;
+    this.loading.set(true);
     this.revealedSpoilers.clear();
 
     this.reviewService.refreshReviews(this.bookId)
@@ -110,7 +110,7 @@ export class BookReviewsComponent implements OnInit, OnChanges {
       .subscribe({
         next: (reviews) => {
           this.reviews = this.sortReviewsByDate(reviews || []);
-          this.loading = false;
+          this.loading.set(false);
           this.updateSpoilerState();
           this.messageService.add({
             severity: 'success',
@@ -121,7 +121,7 @@ export class BookReviewsComponent implements OnInit, OnChanges {
         },
         error: (error) => {
           console.error('Failed to fetch new reviews:', error);
-          this.loading = false;
+          this.loading.set(false);
           this.messageService.add({
             severity: 'error',
             summary: this.t.translate('book.reviews.toast.fetchFailedSummary'),

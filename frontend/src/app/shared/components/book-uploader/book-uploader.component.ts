@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, inject, ViewChild, effect} from '@angular/core';
+import {ChangeDetectorRef, Component, inject, ViewChild, effect, signal} from '@angular/core';
 import {FileSelectEvent, FileUpload, FileUploadHandlerEvent} from 'primeng/fileupload';
 import {Button} from 'primeng/button';
 import {FormsModule} from '@angular/forms';
@@ -47,8 +47,8 @@ export class BookUploaderComponent {
   @ViewChild(FileUpload) fileUpload!: FileUpload;
 
   files: UploadingFile[] = [];
-  isUploading: boolean = false;
-  uploadCompleted: boolean = false;
+  isUploading = signal(false);
+  uploadCompleted = signal(false);
   _selectedLibrary: Library | null = null;
   selectedPath: LibraryPath | null = null;
 
@@ -185,8 +185,8 @@ export class BookUploaderComponent {
     const filesToUpload = this.files.filter(f => f.status === 'Pending');
     if (filesToUpload.length === 0) return;
 
-    this.isUploading = true;
-    this.uploadCompleted = false;
+    this.isUploading.set(true);
+    this.uploadCompleted.set(false);
     const destination = this.value;
     const libraryId = this.selectedLibrary?.id?.toString();
     const pathId = this.selectedPath?.id?.toString();
@@ -197,9 +197,9 @@ export class BookUploaderComponent {
   private uploadBatch(files: UploadingFile[], startIndex: number, batchSize: number, destination: string, libraryId?: string, pathId?: string): void {
     const batch = files.slice(startIndex, startIndex + batchSize);
     if (batch.length === 0) {
-      this.isUploading = false;
-      this.uploadCompleted = true;
-      this.cdr.detectChanges();
+      this.isUploading.set(false);
+      this.uploadCompleted.set(true);
+      this.uploadCompleted.set(true);
       if (destination === 'bookdrop') {
         this.ref.close('uploaded_to_bookdrop');
       }
@@ -266,9 +266,9 @@ export class BookUploaderComponent {
 
   isChooseDisabled(): boolean {
     if (this.value === 'bookdrop') {
-      return this.isUploading;
+      return this.isUploading();
     }
-    return !this.selectedLibrary || !this.selectedPath || this.isUploading;
+    return !this.selectedLibrary || !this.selectedPath || this.isUploading();
   }
 
   isUploadDisabled(): boolean {
@@ -324,7 +324,7 @@ export class BookUploaderComponent {
   }
 
   hasUploadCompleted(): boolean {
-    return this.uploadCompleted;
+    return this.uploadCompleted();
   }
 
   closeDialog(): void {
