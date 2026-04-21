@@ -9,6 +9,7 @@ import org.booklore.model.entity.BookFileEntity;
 import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.entity.LibraryPathEntity;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.test.NativeLibraryInitializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -66,7 +67,7 @@ class EpubMetadataWriterTest {
         when(appSettings.getMetadataPersistenceSettings()).thenReturn(metadataPersistenceSettings);
         when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
-        writer = new EpubMetadataWriter(appSettingService);
+        writer = new EpubMetadataWriter(appSettingService, NativeLibraryInitializer.createEpubNativeService());
         metadata = new BookMetadataEntity();
         metadata.setTitle("Test Book");
         AuthorEntity author = new AuthorEntity();

@@ -7,6 +7,8 @@ import org.booklore.model.dto.response.EpubSpineItem;
 import org.booklore.model.dto.response.EpubTocItem;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
+import org.booklore.service.EpubNativeService;
+import org.booklore.service.VoidNativeCall;
 import org.booklore.util.FileUtils;
 import org.grimmory.epub4j.domain.*;
 import org.grimmory.epub4j.epub.EpubWriter;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +42,9 @@ class EpubReaderServiceTest {
 
     @Mock
     BookRepository bookRepository;
+
+    @Mock
+    EpubNativeService epubNativeService;
 
     @InjectMocks
     EpubReaderService epubReaderService;
@@ -55,6 +61,13 @@ class EpubReaderServiceTest {
         bookEntity.setId(1L);
         epubPath = tempDir.resolve("test.epub");
         Files.deleteIfExists(epubPath);
+
+        // Make the mock actually invoke the lambda passed to executeVoid
+        doAnswer(invocation -> {
+            VoidNativeCall call = invocation.getArgument(0);
+            call.run();
+            return null;
+        }).when(epubNativeService).executeVoid(any());
     }
 
     private void writeTestEpub() throws Exception {

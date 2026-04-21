@@ -9,11 +9,13 @@ import org.grimmory.epub4j.domain.Resource;
 import org.grimmory.epub4j.epub.CoverDetector;
 import org.grimmory.epub4j.epub.CoverDetector.CoverDetectionResult;
 import org.grimmory.epub4j.epub.EpubReader;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.service.metadata.BookLoreMetadata;
+import org.booklore.service.EpubNativeService;
 import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.stereotype.Component;
@@ -35,7 +37,10 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class EpubMetadataExtractor implements FileMetadataExtractor {
+
+    private final EpubNativeService epubNativeService;
 
     private static final Pattern YEAR_ONLY_PATTERN = Pattern.compile("^\\d{4}$");
     private static final String OPF_NS = "http://www.idpf.org/2007/opf";
@@ -108,56 +113,61 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
         }
 
         // Last resort: scan container for cover-like images
-        try (EpubContainer container = EpubContainers.open(epubFile.toPath())) {
-            Document opf = container.parseOpf();
-            String opfName = container.getOpfName();
+        try {
+            return epubNativeService.execute(() -> {
+                try (EpubContainer container = EpubContainers.open(epubFile.toPath())) {
+                    Document opf = container.parseOpf();
+                    String opfName = container.getOpfName();
 
-            // Try OPF manifest for cover-image property
-            NodeList items = opf.getElementsByTagName("item");
-            for (int i = 0; i < items.getLength(); i++) {
-                Element item = (Element) items.item(i);
-                String properties = item.getAttribute("properties");
-                if (properties != null && properties.contains("cover-image")) {
-                    String href = URLDecoder.decode(item.getAttribute("href"), StandardCharsets.UTF_8);
-                    String fullPath = resolvePath(opfName, href);
-                    if (container.exists(fullPath)) {
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                        container.streamTo(fullPath, baos);
-                        return baos.toByteArray();
+                    // Try OPF manifest for cover-image property
+                    NodeList items = opf.getElementsByTagName("item");
+                    for (int i = 0; i < items.getLength(); i++) {
+                        Element item = (Element) items.item(i);
+                        String properties = item.getAttribute("properties");
+                        if (properties != null && properties.contains("cover-image")) {
+                            String href = URLDecoder.decode(item.getAttribute("href"), StandardCharsets.UTF_8);
+                            String fullPath = resolvePath(opfName, href);
+                            if (container.exists(fullPath)) {
+                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                container.streamTo(fullPath, baos);
+                                return baos.toByteArray();
+                            }
+                        }
                     }
-                }
-            }
 
-            // Search manifest for cover-looking items by id/href
-            for (int i = 0; i < items.getLength(); i++) {
-                Element item = (Element) items.item(i);
-                String id = item.getAttribute("id");
-                String href = item.getAttribute("href");
-                String mediaType = item.getAttribute("media-type");
-                if (mediaType != null && mediaType.startsWith("image/")) {
-                    if ((id != null && id.toLowerCase().contains("cover")) ||
-                            (href != null && href.toLowerCase().contains("cover"))) {
-                        String decodedHref = URLDecoder.decode(href, StandardCharsets.UTF_8);
-                        String fullPath = resolvePath(opfName, decodedHref);
-                        if (container.exists(fullPath)) {
+                    // Search manifest for cover-looking items by id/href
+                    for (int i = 0; i < items.getLength(); i++) {
+                        Element item = (Element) items.item(i);
+                        String id = item.getAttribute("id");
+                        String href = item.getAttribute("href");
+                        String mediaType = item.getAttribute("media-type");
+                        if (mediaType != null && mediaType.startsWith("image/")) {
+                            if ((id != null && id.toLowerCase().contains("cover")) ||
+                                    (href != null && href.toLowerCase().contains("cover"))) {
+                                String decodedHref = URLDecoder.decode(href, StandardCharsets.UTF_8);
+                                String fullPath = resolvePath(opfName, decodedHref);
+                                if (container.exists(fullPath)) {
+                                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                    container.streamTo(fullPath, baos);
+                                    return baos.toByteArray();
+                                }
+                            }
+                        }
+                    }
+
+                    // Scan all files for cover-named images
+                    for (String name : container.listAllFiles()) {
+                        String lower = name.toLowerCase();
+                        if (lower.contains("cover") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                                lower.endsWith(".png") || lower.endsWith(".webp"))) {
                             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                            container.streamTo(fullPath, baos);
+                            container.streamTo(name, baos);
                             return baos.toByteArray();
                         }
                     }
                 }
-            }
-
-            // Scan all files for cover-named images
-            for (String name : container.listAllFiles()) {
-                String lower = name.toLowerCase();
-                if (lower.contains("cover") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-                        lower.endsWith(".png") || lower.endsWith(".webp"))) {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    container.streamTo(name, baos);
-                    return baos.toByteArray();
-                }
-            }
+                return null;
+            });
         } catch (Exception e) {
             log.debug("Container cover search failed for {}: {}", epubFile.getName(), e.getMessage());
         }
@@ -167,7 +177,9 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
 
     @Override
     public BookMetadata extractMetadata(File epubFile) {
-        try (EpubContainer container = EpubContainers.open(epubFile.toPath())) {
+        try {
+            return epubNativeService.execute(() -> {
+                try (EpubContainer container = EpubContainers.open(epubFile.toPath())) {
             Document doc = container.parseOpf();
 
             Element metadata = (Element) doc.getElementsByTagNameNS("*", "metadata").item(0);
@@ -419,6 +431,8 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
             }
 
             return extractedMetadata;
+                }
+            });
         } catch (Exception e) {
             log.error("Failed to read metadata from EPUB file {}: {}", epubFile.getName(), e.getMessage(), e);
             return null;

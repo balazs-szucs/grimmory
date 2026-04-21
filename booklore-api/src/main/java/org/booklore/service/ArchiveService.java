@@ -3,7 +3,7 @@ package org.booklore.service;
 import com.github.gotson.nightcompress.Archive;
 import com.github.gotson.nightcompress.ArchiveEntry;
 import com.github.gotson.nightcompress.LibArchiveException;
-import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.exception.ApiError;
 import org.springframework.stereotype.Service;
@@ -22,47 +22,27 @@ import java.util.stream.Stream;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ArchiveService {
     private static final int LOCK_STRIPE_COUNT = 256;
     private final ReentrantLock[] lockStripes = IntStream.range(0, LOCK_STRIPE_COUNT)
             .mapToObj(ignored -> new ReentrantLock())
             .toArray(ReentrantLock[]::new);
-    private volatile boolean available = safeCheckAvailable();
-
-    private static boolean safeCheckAvailable() {
-        try {
-            return Archive.isAvailable();
-        } catch (Throwable e) {
-            return false;
-        }
-    }
+    private final NativeLibraryManager nativeLibraryManager;
 
     private ReentrantLock getFileLock(Path path) {
         int hash = path.toAbsolutePath().normalize().toString().hashCode();
         return lockStripes[Math.floorMod(hash, LOCK_STRIPE_COUNT)];
     }
 
-    @PostConstruct
-    public void initLibArchive() {
-        // Log the availability result that was already determined at construction
-        // time.  The @PostConstruct runs on the Spring startup thread which also
-        // ensures the native library is fully loaded before any concurrent HTTP
-        // request thread can call into it.
-        if (available) {
-            log.info("LibArchive loaded successfully");
-        } else {
-            log.error("LibArchive is not available – CBX/archive features will not work");
-        }
-    }
-
     private void requireAvailable() throws IOException {
-        if (!available) {
+        if (!nativeLibraryManager.isLibArchiveAvailable()) {
             throw new IOException("LibArchive is not available – cannot process archive");
         }
     }
 
-    public static boolean isAvailable() {
-        return Archive.isAvailable();
+    public boolean isAvailable() {
+        return nativeLibraryManager.isLibArchiveAvailable();
     }
 
     public record Entry(String name, long size) {}

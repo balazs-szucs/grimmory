@@ -27,6 +27,7 @@ import java.util.stream.IntStream;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import org.booklore.service.PdfiumNativeService;
 
 @Slf4j
 @Service
@@ -39,6 +40,7 @@ public class PdfReaderService {
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
+    private final PdfiumNativeService pdfiumNativeService;
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
@@ -67,8 +69,7 @@ public class PdfReaderService {
         }
 
         log.info("Populating PDF disk cache for {}: {} pages", cacheKey, metadata.pageCount);
-        // PdfDocument is not thread-safe — render pages serially then cache
-        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
+        pdfiumNativeService.withDocumentVoid(pdfPath, doc -> {
             for (int i = 1; i <= metadata.pageCount; i++) {
                 Path target = chapterCacheService.getCachedPage(cacheKey, i);
                 if (!Files.exists(target) || Files.size(target) == 0) {
@@ -76,7 +77,7 @@ public class PdfReaderService {
                     writeAtomically(target, jpeg);
                 }
             }
-        }
+        });
 
         Files.setLastModifiedTime(cacheDir, Files.getLastModifiedTime(pdfPath));
     }
@@ -189,11 +190,11 @@ public class PdfReaderService {
             throw new FileNotFoundException("PDF file is not readable: " + pdfPath);
         }
         long lastModified = Files.getLastModifiedTime(pdfPath).toMillis();
-        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
+        return pdfiumNativeService.withDocument(pdfPath, doc -> {
             int pageCount = doc.pageCount();
             List<PdfOutlineItem> outline = extractOutline(doc);
             return new CachedPdfMetadata(pageCount, lastModified, outline);
-        }
+        });
     }
 
     private List<PdfOutlineItem> extractOutline(PdfDocument doc) {
@@ -242,13 +243,9 @@ public class PdfReaderService {
     }
 
     private byte[] renderPageToBytes(Path pdfPath, int page) throws IOException {
-        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
-            // page is 1-based from the API, renderPageToBytes expects 0-based
-            return doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
-        } catch (Exception e) {
-            log.error("Failed to render PDF page {} from {}", page, pdfPath, e);
-            throw new IOException(e);
-        }
+        return pdfiumNativeService.withDocument(pdfPath, doc ->
+            doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg")
+        );
     }
 
     /**

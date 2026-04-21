@@ -12,6 +12,7 @@ import org.booklore.model.entity.TagEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.service.metadata.extractor.PdfMetadataExtractor;
+import org.booklore.test.NativeLibraryInitializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,8 +54,8 @@ class PdfMetadataWriterTest {
         settings.setMetadataPersistenceSettings(persistence);
         Mockito.when(appSettingService.getAppSettings()).thenReturn(settings);
 
-        writer = new PdfMetadataWriter(appSettingService);
-        extractor = new PdfMetadataExtractor();
+        writer = new PdfMetadataWriter(appSettingService, NativeLibraryInitializer.createPdfiumNativeService());
+        extractor = new PdfMetadataExtractor(NativeLibraryInitializer.createPdfiumNativeService());
         tempDir = Files.createTempDirectory("pdf_writer_test_");
     }
 
