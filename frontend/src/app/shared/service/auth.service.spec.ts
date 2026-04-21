@@ -1,14 +1,14 @@
-import {provideHttpClient} from '@angular/common/http';
-import {HttpTestingController, provideHttpClientTesting} from '@angular/common/http/testing';
-import {TestBed} from '@angular/core/testing';
-import {Router} from '@angular/router';
-import {of, throwError} from 'rxjs';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
+import { of, throwError } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {API_CONFIG} from '../../core/config/api-config';
-import {PostLoginInitializerService} from '../../core/services/post-login-initializer.service';
-import {RxStompService} from '../websocket/rx-stomp.service';
-import {AuthService, websocketInitializer} from './auth.service';
+import { API_CONFIG } from '../../core/config/api-config';
+import { PostLoginInitializerService } from '../../core/services/post-login-initializer.service';
+import { RxStompService } from '../websocket/rx-stomp.service';
+import { AuthService, websocketInitializer } from './auth.service';
 
 describe('AuthService', () => {
   const router = {
@@ -28,15 +28,21 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Mock location for navigation testing
+    vi.stubGlobal('location', {
+      ...window.location,
+      replace: vi.fn(),
+      assign: vi.fn(),
+    });
     localStorage.clear();
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        {provide: Router, useValue: router},
-        {provide: RxStompService, useValue: rxStompService},
-        {provide: PostLoginInitializerService, useValue: postLoginInitializer},
+        { provide: Router, useValue: router },
+        { provide: RxStompService, useValue: rxStompService },
+        { provide: PostLoginInitializerService, useValue: postLoginInitializer },
         AuthService,
       ]
     });
@@ -58,12 +64,12 @@ describe('AuthService', () => {
   });
 
   it('logs in with internal credentials and initializes the authenticated session', () => {
-    service.internalLogin({username: 'admin', password: 'secret'}).subscribe();
+    service.internalLogin({ username: 'admin', password: 'secret' }).subscribe();
 
     const request = httpTestingController.expectOne(`${API_CONFIG.BASE_URL}/api/v1/auth/login`);
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({username: 'admin', password: 'secret'});
-    request.flush({accessToken: 'access', refreshToken: 'refresh', isDefaultPassword: 'false'});
+    expect(request.request.body).toEqual({ username: 'admin', password: 'secret' });
+    request.flush({ accessToken: 'access', refreshToken: 'refresh', isDefaultPassword: 'false' });
 
     expect(service.getInternalAccessToken()).toBe('access');
     expect(service.getInternalRefreshToken()).toBe('refresh');
@@ -79,8 +85,8 @@ describe('AuthService', () => {
     service.internalRefreshToken().subscribe();
 
     const request = httpTestingController.expectOne(`${API_CONFIG.BASE_URL}/api/v1/auth/refresh`);
-    expect(request.request.body).toEqual({refreshToken: 'refresh-token'});
-    request.flush({accessToken: 'new-access', refreshToken: 'new-refresh'});
+    expect(request.request.body).toEqual({ refreshToken: 'refresh-token' });
+    request.flush({ accessToken: 'new-access', refreshToken: 'new-refresh' });
 
     expect(service.getInternalAccessToken()).toBe('new-access');
     expect(service.getInternalRefreshToken()).toBe('new-refresh');
@@ -91,7 +97,7 @@ describe('AuthService', () => {
 
     const request = httpTestingController.expectOne(`${API_CONFIG.BASE_URL}/api/v1/auth/remote`);
     expect(request.request.method).toBe('GET');
-    request.flush({accessToken: 'remote-access', refreshToken: 'remote-refresh', isDefaultPassword: 'false'});
+    request.flush({ accessToken: 'remote-access', refreshToken: 'remote-refresh', isDefaultPassword: 'false' });
 
     expect(service.getInternalAccessToken()).toBe('remote-access');
     expect(rxStompService.activate).toHaveBeenCalledOnce();
@@ -105,13 +111,13 @@ describe('AuthService', () => {
     service.logout();
 
     const request = httpTestingController.expectOne(`${API_CONFIG.BASE_URL}/api/v1/auth/logout`);
-    request.flush({logoutUrl: null});
+    request.flush({ logoutUrl: null });
 
     await Promise.resolve();
 
     expect(service.token()).toBeNull();
     expect(rxStompService.deactivate).toHaveBeenCalledOnce();
-    expect(router.navigate).toHaveBeenCalledWith(['/login']);
+    expect(window.location.replace).toHaveBeenCalledWith('/login');
   });
 
   it('logs out locally when the backend logout request fails', async () => {
@@ -121,13 +127,13 @@ describe('AuthService', () => {
     service.logout();
 
     const request = httpTestingController.expectOne(`${API_CONFIG.BASE_URL}/api/v1/auth/logout`);
-    request.flush('boom', {status: 500, statusText: 'Server Error'});
+    request.flush('boom', { status: 500, statusText: 'Server Error' });
 
     await Promise.resolve();
 
     expect(service.token()).toBeNull();
     expect(rxStompService.deactivate).toHaveBeenCalledOnce();
-    expect(router.navigate).toHaveBeenCalledWith(['/login']);
+    expect(window.location.replace).toHaveBeenCalledWith('/login');
   });
 
   it('clears the session and navigates with a reason during force logout', () => {
@@ -138,9 +144,7 @@ describe('AuthService', () => {
 
     expect(service.token()).toBeNull();
     expect(rxStompService.deactivate).toHaveBeenCalledOnce();
-    expect(router.navigate).toHaveBeenCalledWith(['/login'], {
-      queryParams: {reason: 'session_revoked'},
-    });
+    expect(window.location.replace).toHaveBeenCalledWith('/login?reason=session_revoked');
   });
 
   it('clears the session when the login page is opened', () => {

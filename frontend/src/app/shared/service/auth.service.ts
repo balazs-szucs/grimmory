@@ -1,11 +1,11 @@
-import {computed, inject, Injectable, Injector, signal} from '@angular/core';
-import {HttpClient} from '@angular/common/http';
-import {Observable, tap} from 'rxjs';
-import {RxStompService} from '../websocket/rx-stomp.service';
-import {API_CONFIG} from '../../core/config/api-config';
-import {createRxStompConfig} from '../websocket/rx-stomp.config';
-import {Router} from '@angular/router';
-import {PostLoginInitializerService} from '../../core/services/post-login-initializer.service';
+import { computed, inject, Injectable, Injector, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, tap, finalize } from 'rxjs';
+import { RxStompService } from '../websocket/rx-stomp.service';
+import { API_CONFIG } from '../../core/config/api-config';
+import { createRxStompConfig } from '../websocket/rx-stomp.config';
+import { Router } from '@angular/router';
+import { PostLoginInitializerService } from '../../core/services/post-login-initializer.service';
 
 @Injectable({
   providedIn: 'root',
@@ -14,7 +14,10 @@ export class AuthService {
 
   private apiUrl = `${API_CONFIG.BASE_URL}/api/v1/auth`;
   private rxStompService?: RxStompService;
-  private postLoginInitialized = false;
+  private readonly _postLoginInitialized = signal(false);
+  readonly postLoginInitialized = this._postLoginInitialized.asReadonly();
+  private readonly _logoutInProgress = signal(false);
+  readonly logoutInProgress = this._logoutInProgress.asReadonly();
 
   private http = inject(HttpClient);
   private injector = inject(Injector);
@@ -38,7 +41,7 @@ export class AuthService {
 
   internalRefreshToken(): Observable<{ accessToken: string; refreshToken: string }> {
     const refreshToken = this.getInternalRefreshToken();
-    return this.http.post<{ accessToken: string; refreshToken: string }>(`${this.apiUrl}/refresh`, {refreshToken}).pipe(
+    return this.http.post<{ accessToken: string; refreshToken: string }>(`${this.apiUrl}/refresh`, { refreshToken }).pipe(
       tap((response) => {
         if (response.accessToken && response.refreshToken) {
           this.saveInternalTokens(response.accessToken, response.refreshToken);
@@ -74,26 +77,37 @@ export class AuthService {
   }
 
   logout(): void {
+    if (this._logoutInProgress()) return;
+    this._logoutInProgress.set(true);
+
     const refreshToken = this.getInternalRefreshToken();
-    this.http.post<{ logoutUrl: string | null }>(`${this.apiUrl}/logout`, {refreshToken}).subscribe({
-      next: (response) => {
-        if (response.logoutUrl) {
-          window.location.href = response.logoutUrl;
-        } else {
-          this.clearSession();
-          this.router.navigate(['/login']).then(() => window.location.reload());
+    this.clearSession();
+
+    this.http.post<{ logoutUrl: string | null }>(`${this.apiUrl}/logout`, { refreshToken })
+      .pipe(finalize(() => {
+        this._logoutInProgress.set(false);
+      }))
+      .subscribe({
+        next: (response) => {
+          if (response.logoutUrl) {
+            window.location.href = response.logoutUrl;
+          } else {
+            window.location.replace('/login');
+          }
+        },
+        error: () => {
+          window.location.replace('/login');
         }
-      },
-      error: () => {
-        this.clearSession();
-        this.router.navigate(['/login']).then(() => window.location.reload());
-      }
-    });
+      });
   }
 
   forceLogout(reason: string): void {
+    if (this._logoutInProgress()) return;
+    this._logoutInProgress.set(true);
     this.clearSession();
-    this.router.navigate(['/login'], {queryParams: {reason}});
+    window.location.replace(`/login?reason=${encodeURIComponent(reason)}`);
+    // Reset only for test cleanliness; in prod, the page will be torn down
+    this._logoutInProgress.set(false);
   }
 
   clearSessionOnLoginPage(): void {
@@ -104,7 +118,7 @@ export class AuthService {
     localStorage.removeItem('accessToken_Internal');
     localStorage.removeItem('refreshToken_Internal');
     this.token.set(null);
-    this.postLoginInitialized = false;
+    this._postLoginInitialized.set(false);
     this.getRxStompService().deactivate();
   }
 
@@ -130,8 +144,8 @@ export class AuthService {
   }
 
   private handleSuccessfulAuth() {
-    if (this.postLoginInitialized) return;
-    this.postLoginInitialized = true;
+    if (this._postLoginInitialized()) return;
+    this._postLoginInitialized.set(true);
     this.postLoginInitializer.initialize().subscribe({
       next: () => console.log('AuthService: Post-login initialization completed'),
       error: (err) => console.error('AuthService: Post-login initialization failed:', err)
