@@ -90,7 +90,7 @@ export class AuthService {
       .subscribe({
         next: (response) => {
           if (response.logoutUrl) {
-            this.redirectTo(response.logoutUrl);
+            this.redirectTo(response.logoutUrl, true);
           } else {
             this.redirectTo('/login', true);
           }

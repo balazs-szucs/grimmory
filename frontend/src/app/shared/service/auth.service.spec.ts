@@ -50,8 +50,9 @@ describe('AuthService', () => {
     service = TestBed.inject(AuthService);
     httpTestingController = TestBed.inject(HttpTestingController);
 
-    // Mock redirectTo for all tests
-    vi.spyOn(service as any, 'redirectTo').mockImplementation(() => undefined);
+    // Mock redirectTo for all tests using a narrow test-only type to access protected method
+    vi.spyOn(service as unknown as { redirectTo: AuthService['redirectTo'] }, 'redirectTo')
+      .mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -114,7 +115,7 @@ describe('AuthService', () => {
 
     expect(service.token()).toBeNull();
     expect(rxStompService.deactivate).toHaveBeenCalledOnce();
-    expect((service as any).redirectTo).toHaveBeenCalledWith('/login', true);
+    expect((service as unknown as { redirectTo: AuthService['redirectTo'] }).redirectTo).toHaveBeenCalledWith('/login', true);
   });
 
   it('logs out locally when the backend logout request fails', async () => {
@@ -130,7 +131,7 @@ describe('AuthService', () => {
 
     expect(service.token()).toBeNull();
     expect(rxStompService.deactivate).toHaveBeenCalledOnce();
-    expect((service as any).redirectTo).toHaveBeenCalledWith('/login', true);
+    expect((service as unknown as { redirectTo: AuthService['redirectTo'] }).redirectTo).toHaveBeenCalledWith('/login', true);
   });
 
   it('clears the session and navigates with a reason during force logout', () => {
@@ -141,7 +142,7 @@ describe('AuthService', () => {
 
     expect(service.token()).toBeNull();
     expect(rxStompService.deactivate).toHaveBeenCalledOnce();
-    expect((service as any).redirectTo).toHaveBeenCalledWith('/login?reason=session_revoked', true);
+    expect((service as unknown as { redirectTo: AuthService['redirectTo'] }).redirectTo).toHaveBeenCalledWith('/login?reason=session_revoked', true);
   });
 
   it('clears the session when the login page is opened', () => {
