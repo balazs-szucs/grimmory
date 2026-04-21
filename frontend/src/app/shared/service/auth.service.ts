@@ -90,24 +90,37 @@ export class AuthService {
       .subscribe({
         next: (response) => {
           if (response.logoutUrl) {
-            window.location.href = response.logoutUrl;
+            this.redirectTo(response.logoutUrl);
           } else {
-            window.location.replace('/login');
+            this.redirectTo('/login', true);
           }
         },
         error: () => {
-          window.location.replace('/login');
+          this.redirectTo('/login', true);
         }
       });
   }
 
   forceLogout(reason: string): void {
-    if (this._logoutInProgress()) return;
+    const isStandardLogoutInFlight = this._logoutInProgress();
     this._logoutInProgress.set(true);
     this.clearSession();
-    window.location.replace(`/login?reason=${encodeURIComponent(reason)}`);
-    // Reset only for test cleanliness; in prod, the page will be torn down
-    this._logoutInProgress.set(false);
+    this.redirectTo(`/login?reason=${encodeURIComponent(reason)}`, true);
+
+    // If a standard logout was NOT in flight, we need to reset the flag manually
+    // because forceLogout doesn't have an async pipeline to reset it.
+    // However, if we don't reset it, it protects against re-entry before page unloads.
+    if (isStandardLogoutInFlight) {
+      // We'll let the standard logout pipeline finish resetting it if it's still around
+    }
+  }
+
+  protected redirectTo(url: string, replace = false): void {
+    if (replace) {
+      window.location.replace(url);
+    } else {
+      window.location.href = url;
+    }
   }
 
   clearSessionOnLoginPage(): void {
@@ -138,7 +151,7 @@ export class AuthService {
     stompService.updateConfig(config);
     stompService.activate();
 
-    if (!this.postLoginInitialized) {
+    if (!this._postLoginInitialized()) {
       this.handleSuccessfulAuth();
     }
   }
