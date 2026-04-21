@@ -15,8 +15,6 @@ import { AuthService, websocketInitializer } from './app/shared/service/auth.ser
 import { inject, isDevMode, provideAppInitializer, provideZonelessChangeDetection } from '@angular/core';
 import { initializeAuthFactory } from './app/core/security/auth-initializer';
 import { StartupService } from './app/shared/service/startup.service';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideTransloco } from '@jsverse/transloco';
 import { AVAILABLE_LANGS, TranslocoInlineLoader } from './app/core/config/transloco-loader';
@@ -26,7 +24,6 @@ import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-exper
 bootstrapApplication(AppComponent, {
   providers: [
     provideZonelessChangeDetection(),
-    provideCharts(withDefaultRegisterables(), ChartDataLabels),
     provideTanStackQuery(new QueryClient({
       defaultOptions: {
         queries: {

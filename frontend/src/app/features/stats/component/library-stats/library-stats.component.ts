@@ -17,6 +17,8 @@ import {LibraryFilterService, LibraryOption} from './service/library-filter.serv
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {BookService} from '../../../book/service/book.service';
 import {LibraryService} from '../../../book/service/library.service';
+import {provideCharts, withDefaultRegisterables} from 'ng2-charts';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 
 interface ChartConfig {
   id: string;
@@ -44,6 +46,7 @@ interface ChartConfig {
     ReadingJourneyChartComponent,
     TranslocoDirective
   ],
+  providers: [provideCharts(withDefaultRegisterables(), ChartDataLabels)],
   templateUrl: './library-stats.component.html',
   styleUrls: ['./library-stats.component.scss']
 })

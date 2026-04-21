@@ -50,6 +50,7 @@ export class BookCardComponent {
   readonly showBookTypePill = computed(() => (this.overlayPreferenceService() ?? this.overlayService).showBookTypePill());
   readonly forceEbookMode = input(false);
   readonly useSquareCovers = input(false);
+  readonly eager = input(false);
 
   readonly checkboxClick = output<{ index: number; book: Book; selected: boolean; shiftKey: boolean }>();
   readonly menuToggled = output<boolean>();

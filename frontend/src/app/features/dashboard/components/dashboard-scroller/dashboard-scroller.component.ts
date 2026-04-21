@@ -27,6 +27,7 @@ export class DashboardScrollerComponent {
   readonly isMagicShelf = input<boolean>(false);
   readonly useSquareCovers = input<boolean>(false);
   readonly overlayPreferenceService = input.required<BookCardOverlayPreferenceService>();
+  readonly eagerCount = input<number>(0);
 
   readonly forceEbookMode = computed(() => this.bookListType() === ScrollerType.LAST_READ);
 }

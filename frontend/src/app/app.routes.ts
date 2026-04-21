@@ -8,7 +8,6 @@ import {SetupGuard} from './shared/components/setup/setup.guard';
 import {SetupRedirectGuard} from './shared/components/setup/setup-redirect.guard';
 import {EmptyComponent} from './shared/components/empty/empty.component';
 import {OidcCallbackComponent} from './core/security/oidc-callback/oidc-callback.component';
-import {MainDashboardComponent} from './features/dashboard/components/main-dashboard/main-dashboard.component';
 import {LoginGuard} from './shared/components/setup/login.guard';
 import {BookdropGuard} from './core/security/guards/bookdrop.guard';
 import {LibraryStatsGuard} from './core/security/guards/library-stats.guard';
@@ -35,7 +34,7 @@ export const routes: Routes = [
     path: '',
     component: AppLayoutComponent,
     children: [
-      {path: 'dashboard', component: MainDashboardComponent, canActivate: [AuthGuard]},
+      {path: 'dashboard', loadComponent: () => import('./features/dashboard/components/main-dashboard/main-dashboard.component').then(m => m.MainDashboardComponent), canActivate: [AuthGuard]},
       {path: 'all-books', loadComponent: loadBookBrowserComponent, canActivate: [AuthGuard]},
       {path: 'settings', loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent), canActivate: [AuthGuard]},
       {path: 'library/:libraryId/books', loadComponent: loadBookBrowserComponent, canActivate: [AuthGuard]},
