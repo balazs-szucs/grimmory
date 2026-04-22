@@ -9,6 +9,7 @@ import {lastValueFrom} from 'rxjs';
 import {mapAppBookToBook} from '../../book/model/app-book.model';
 import {AppDashboardResponse} from '../models/app-dashboard.model';
 import {AuthService} from '../../../shared/service/auth.service';
+import {LocalStorageService} from '../../../shared/service/local-storage.service';
 
 @Injectable({
   providedIn: 'root'
@@ -18,6 +19,7 @@ export class DashboardBookService {
   private readonly authService = inject(AuthService);
   private readonly bookService = inject(BookService);
   private readonly configService = inject(DashboardConfigService);
+  private readonly localStorageService = inject(LocalStorageService);
 
   private readonly dashboardUrl = `${API_CONFIG.BASE_URL}/api/v1/app/dashboard`;
 
@@ -61,7 +63,7 @@ export class DashboardBookService {
           audioUpdatedOn: firstBook.metadata?.audiobookCoverUpdatedOn,
           isAudio: firstBook.primaryFile?.bookType === 'AUDIOBOOK'
         };
-        localStorage.setItem('lcp_book_candidate', JSON.stringify(candidate));
+        this.localStorageService.set('lcp_book_candidate', candidate);
       }
     });
   }

@@ -540,6 +540,20 @@ export class BookBrowserComponent implements AfterViewInit {
     });
   });
 
+  private readonly updateLcpCandidateEffect = effect(() => {
+    const books = this.books();
+    if (books && books.length > 0) {
+      const firstBook = books[0];
+      const candidate = {
+        id: firstBook.id,
+        updatedOn: firstBook.metadata?.coverUpdatedOn,
+        audioUpdatedOn: firstBook.metadata?.audiobookCoverUpdatedOn,
+        isAudio: firstBook.primaryFile?.bookType === 'AUDIOBOOK'
+      };
+      this.localStorageService.set('lcp_book_candidate', candidate);
+    }
+  });
+
   @ViewChild(BookTableComponent)
   bookTableComponent!: BookTableComponent;
   @ViewChild(BookFilterComponent, {static: true})
