@@ -119,12 +119,7 @@ export class BookService {
   private getBooksQueryOptions() {
     return queryOptions({
       queryKey: BOOKS_QUERY_KEY,
-      // NOTE: stripForListView must stay false. The backend's strip routine nulls
-      // metadata fields (subtitle, seriesTotal, thumbnailUrl, external IDs, audible/
-      // lubimyczytac ratings, etc.) that the frontend's magic-shelf rule evaluator
-      // and several browser filters rely on. Flipping this to true silently empties
-      // every magic shelf that filters on those fields.
-      queryFn: () => lastValueFrom(this.http.get<Book[]>(this.url, {params: {stripForListView: false}})),
+      queryFn: () => lastValueFrom(this.http.get<Book[]>(this.url, {params: {stripForListView: true}})),
       staleTime: 5 * 60_000,
     });
   }

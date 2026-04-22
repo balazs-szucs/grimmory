@@ -126,6 +126,7 @@
   border-radius: 999px;
   background: var(--p-content-border-color);
   animation: menu-skeleton-pulse 1.5s ease-in-out infinite;
+  will-change: opacity;
 }
 
 .menu-skeleton-header {
@@ -169,6 +170,7 @@
   border-radius: 999px;
   background: var(--p-content-border-color);
   animation: menu-skeleton-pulse 1.5s ease-in-out infinite;
+  will-change: opacity;
 }
 
 .menu-skeleton-header {

@@ -227,6 +227,13 @@ public class BookQueryService {
             m.setAudibleRating(null);
             m.setAudibleReviewCount(null);
             m.setLubimyczytacRating(null);
+            m.setAmazonRating(null);
+            m.setAmazonReviewCount(null);
+            m.setGoodreadsRating(null);
+            m.setGoodreadsReviewCount(null);
+            m.setHardcoverRating(null);
+            m.setHardcoverReviewCount(null);
+            m.setRanobedbRating(null);
 
             // Strip empty metadata collections
             if (m.getMoods() != null && m.getMoods().isEmpty()) m.setMoods(null);
