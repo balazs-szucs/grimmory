@@ -36,7 +36,7 @@ public class AppBootstrapService {
         if (user != null && user.getId() != null && user.getId() != -1L) {
             try {
                 builder.user(user)
-                        .menuCounts(menuCountsService.getMenuCounts())
+                        .menuCounts(menuCountsService.getMenuCounts(user))
                         .libraries(libraryService.getLibraries(user))
                         .shelves(shelfService.getShelves(user));
             } catch (Exception e) {

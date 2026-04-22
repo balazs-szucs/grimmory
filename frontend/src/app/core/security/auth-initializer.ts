@@ -29,8 +29,10 @@ export function initializeAuthFactory() {
       staleTime: 5 * 60_000
     });
 
+    const SETTINGS_TIMEOUT_MS = 5000;
+    
     const finalizeAuth = (data?: AppBootstrapResponse) => {
-      console.log('[Auth] Finalizing auth with data:', data ? 'present' : 'missing');
+      console.log('[Auth] Finalizing auth. Data present:', !!data, 'User:', data?.user?.username);
       if (data) {
         console.log('[Auth] Seeding caches: user=', data.user?.username, 'libraries=', data.libraries?.length, 'shelves=', data.shelves?.length);
         // Seed the individual caches with the consolidated data
@@ -39,12 +41,14 @@ export function initializeAuthFactory() {
         queryClient.setQueryData(MENU_COUNTS_QUERY_KEY, data.menuCounts);
         queryClient.setQueryData(LIBRARIES_QUERY_KEY, [...(data.libraries || [])].sort((a, b) => a.name.localeCompare(b.name)));
         queryClient.setQueryData(SHELVES_QUERY_KEY, data.shelves || []);
+        console.log('[Auth] Caches seeded successfully');
       }
 
       if (authService.getInternalAccessToken()) {
         console.log('[Auth] Found internal access token, initializing WS');
         authService.initializeWebSocketConnection();
       }
+      console.log('[Auth] Marking as initialized');
       authInitService.markAsInitialized();
     };
 
@@ -53,16 +57,12 @@ export function initializeAuthFactory() {
     const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);
     const timeoutPromise = new Promise<null>(resolve =>
       setTimeout(() => {
-        console.warn('[Auth] Bootstrap fetch reached 10s timeout');
+        console.warn('[Auth] Bootstrap fetch reached 5s timeout');
         resolve(null);
       }, SETTINGS_TIMEOUT_MS)
     );
 
     return Promise.race([bootstrapPromise, timeoutPromise])
-      .catch(err => {
-        console.error('[Auth] Bootstrap fetch failed:', err);
-        return null;
-      })
       .then(data => {
         if (!data) {
           console.warn('[Auth] Proceeding with limited state due to bootstrap failure/timeout');

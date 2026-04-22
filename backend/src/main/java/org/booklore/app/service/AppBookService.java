@@ -1,19 +1,24 @@
 package org.booklore.app.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Root;
-import org.booklore.config.security.service.AuthenticationService;
-import org.booklore.exception.ApiError;
-import org.booklore.app.dto.AppBookDetail;
-import org.booklore.app.dto.AppBookProgressResponse;
-import org.booklore.app.dto.AppBookSummary;
-import org.booklore.app.dto.AppFilterOptions;
-import org.booklore.app.dto.AppPageResponse;
-import org.booklore.app.dto.UpdateProgressRequest;
-import org.booklore.app.dto.BookListRequest;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.booklore.app.dto.*;
 import org.booklore.app.mapper.AppBookMapper;
 import org.booklore.app.specification.AppBookSpecification;
+import org.booklore.config.security.service.AuthenticationService;
+import org.booklore.exception.ApiError;
 import org.booklore.model.dto.Book;
 import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.dto.Library;
@@ -22,10 +27,7 @@ import org.booklore.model.entity.*;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.ComicCreatorRole;
 import org.booklore.model.enums.ReadStatus;
-import org.booklore.repository.BookRepository;
-import org.booklore.repository.ShelfRepository;
-import org.booklore.repository.UserBookFileProgressRepository;
-import org.booklore.repository.UserBookProgressRepository;
+import org.booklore.repository.*;
 import org.booklore.service.book.BookService;
 import org.booklore.service.opds.MagicShelfBookService;
 import org.springframework.data.domain.Page;
@@ -33,19 +35,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.Tuple;
-import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 @Service
 @Transactional(readOnly = true)
@@ -55,8 +47,10 @@ public class AppBookService {
     private static final int MAX_PAGE_SIZE = 50;
 
     private final BookRepository bookRepository;
+    private final LibraryRepository libraryRepository;
     private final UserBookProgressRepository userBookProgressRepository;
     private final UserBookFileProgressRepository userBookFileProgressRepository;
+    private final UserRepository userRepository;
     private final ShelfRepository shelfRepository;
     private final AuthenticationService authenticationService;
     private final AppBookMapper mobileBookMapper;
@@ -70,8 +64,10 @@ public class AppBookService {
             .build();
 
     public AppBookService(BookRepository bookRepository,
+                          LibraryRepository libraryRepository,
                           UserBookProgressRepository userBookProgressRepository,
                           UserBookFileProgressRepository userBookFileProgressRepository,
+                          UserRepository userRepository,
                           ShelfRepository shelfRepository,
                           AuthenticationService authenticationService,
                           AppBookMapper mobileBookMapper,
@@ -79,8 +75,10 @@ public class AppBookService {
                           MagicShelfBookService magicShelfBookService,
                           EntityManager entityManager) {
         this.bookRepository = bookRepository;
+        this.libraryRepository = libraryRepository;
         this.userBookProgressRepository = userBookProgressRepository;
         this.userBookFileProgressRepository = userBookFileProgressRepository;
+        this.userRepository = userRepository;
         this.shelfRepository = shelfRepository;
         this.authenticationService = authenticationService;
         this.mobileBookMapper = mobileBookMapper;
@@ -246,7 +244,6 @@ public class AppBookService {
 
         Specification<BookEntity> spec = AppBookSpecification.combine(
                 AppBookSpecification.notDeleted(),
-                AppBookSpecification.hasDigitalFile(),
                 AppBookSpecification.inLibraries(accessibleLibraryIds),
                 AppBookSpecification.searchText(query)
         );
@@ -769,7 +766,9 @@ public class AppBookService {
 
     private Set<Long> getAccessibleLibraryIds(BookLoreUser user) {
         if (user.getPermissions().isAdmin()) {
-            return null;
+            return libraryRepository.findAll().stream()
+                    .map(LibraryEntity::getId)
+                    .collect(Collectors.toSet());
         }
         if (user.getAssignedLibraries() == null || user.getAssignedLibraries().isEmpty()) {
             return Collections.emptySet();
@@ -797,7 +796,6 @@ public class AppBookService {
 
         List<Specification<BookEntity>> specs = new ArrayList<>();
         specs.add(AppBookSpecification.notDeleted());
-        specs.add(AppBookSpecification.hasDigitalFile());
 
         if (accessibleLibraryIds != null) {
             if (req.libraryId() != null && accessibleLibraryIds.contains(req.libraryId())) {
@@ -917,7 +915,7 @@ public class AppBookService {
         }
 
         if (req.matchScore() != null && !req.matchScore().isEmpty()) {
-            List<String> cleaned = BookListRequest.cleanValues(req.matchScore());
+            List<String> cleaned = req.matchScore();
             if (!cleaned.isEmpty()) {
                 specs.add(AppBookSpecification.withMatchScores(cleaned, req.effectiveFilterMode()));
             }

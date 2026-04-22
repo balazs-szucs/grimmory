@@ -46,12 +46,17 @@ public class AppDashboardController {
 
         for (BookLoreUser.UserSettings.ScrollerConfig scroller : config.getScrollers()) {
             if (!scroller.isEnabled()) {
+                log.debug("[Dashboard] Scroller {} ({}) is disabled, skipping", scroller.getId(), scroller.getType());
                 continue;
             }
 
             String type = scroller.getType();
-            if (type == null) continue;
+            if (type == null) {
+                log.warn("[Dashboard] Scroller {} has null type, skipping", scroller.getId());
+                continue;
+            }
 
+            log.debug("[Dashboard] Fetching books for scroller {} (type: {}, max: {})", scroller.getId(), type, scroller.getMaxItems());
             List<AppBookSummary> books = switch (type) {
                 case "lastRead", "LAST_READ" -> mobileBookService.getContinueReading(scroller.getMaxItems());
                 case "lastListened", "LAST_LISTENED" -> mobileBookService.getContinueListening(scroller.getMaxItems());
@@ -62,6 +67,7 @@ public class AppDashboardController {
                     if (scroller.getMagicShelfId() != null) {
                         yield mobileBookService.getBooksByMagicShelf(scroller.getMagicShelfId(), 0, scroller.getMaxItems()).getContent();
                     }
+                    log.warn("[Dashboard] Magic shelf scroller {} missing magicShelfId", scroller.getId());
                     yield List.of();
                 }
                 default -> {
@@ -70,6 +76,7 @@ public class AppDashboardController {
                 }
             };
 
+            log.debug("[Dashboard] Scroller {} (type: {}) returned {} books", scroller.getId(), type, books.size());
             scrollerData.put(scroller.getId(), books);
         }
 

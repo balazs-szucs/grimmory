@@ -35,10 +35,6 @@ import java.util.stream.Collectors;
  * Produces lightweight aggregate book counts for the sidebar menu so the frontend
  * does not need to fetch the full book list on every app load just to render
  * counts next to libraries, shelves, and magic shelves.
- *
- * <p>Each count is a single {@code COUNT(*)} query against a scoping
- * {@link Specification}. Content restrictions are not applied (see
- * {@link MenuCountsResponse}) in exchange for bounded database work.
  */
 @Slf4j
 @Service
@@ -56,6 +52,10 @@ public class MenuCountsService {
 
     public MenuCountsResponse getMenuCounts() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
+        return getMenuCounts(user);
+    }
+
+    public MenuCountsResponse getMenuCounts(BookLoreUser user) {
         if (user == null) {
             return new MenuCountsResponse(Map.of(), Map.of(), Map.of(), 0L, 0L);
         }
@@ -69,7 +69,7 @@ public class MenuCountsService {
         }
 
         Map<Long, Long> libraryCounts = computeLibraryCounts(user, accessibleLibraryIds);
-        Map<Long, Long> shelfCounts = computeShelfCounts(visibleBooksSpec);
+        Map<Long, Long> shelfCounts = computeShelfCounts(user, visibleBooksSpec);
         Map<Long, Long> magicShelfCounts = computeMagicShelfCounts(userId);
 
         long totalBookCount = bookRepository.count(visibleBooksSpec);
@@ -80,7 +80,7 @@ public class MenuCountsService {
 
     private Map<Long, Long> computeLibraryCounts(BookLoreUser user, Set<Long> accessibleLibraryIds) {
         Map<Long, Long> counts = new LinkedHashMap<>();
-        List<Library> libraries = libraryService.getLibraries();
+        List<Library> libraries = libraryService.getLibraries(user);
         for (Library library : libraries) {
             if (library != null && library.getId() != null) {
                 counts.put(library.getId(), 0L);
@@ -102,9 +102,9 @@ public class MenuCountsService {
         return counts;
     }
 
-    private Map<Long, Long> computeShelfCounts(Specification<BookEntity> visibleBooksSpec) {
+    private Map<Long, Long> computeShelfCounts(BookLoreUser user, Specification<BookEntity> visibleBooksSpec) {
         Map<Long, Long> counts = new LinkedHashMap<>();
-        for (Shelf shelf : shelfService.getShelves()) {
+        for (Shelf shelf : shelfService.getShelves(user)) {
             if (shelf.getId() != null) {
                 counts.put(shelf.getId(), 0L);
             }
