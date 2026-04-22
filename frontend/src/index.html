@@ -6,10 +6,6 @@
   <title>Grimmory</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <link rel="preconnect" href="https://assets.hardcover.app">
-  <link rel="preconnect" href="https://www.goodreads.com">
-  <link rel="preconnect" href="https://www.amazon.com">
-  <link rel="preconnect" href="https://books.google.com">
   <link rel="dns-prefetch" href="https://assets.hardcover.app">
   <link rel="dns-prefetch" href="https://www.goodreads.com">
   <link rel="dns-prefetch" href="https://www.amazon.com">
@@ -20,9 +16,33 @@
     (function() {
       try {
         const token = localStorage.getItem('accessToken_Internal');
+        
+        // 1. Preload Consolidated Bootstrap (Parallelize with JS load)
+        const bootLink = document.createElement('link');
+        bootLink.rel = 'preload';
+        bootLink.as = 'fetch';
+        bootLink.href = '/api/v1/app/bootstrap';
+        bootLink.crossOrigin = 'use-credentials';
+        document.head.appendChild(bootLink);
+
         if (!token) return;
 
-        const rawCandidate = localStorage.getItem('lcp_book_candidate');
+        // 2. Preload Consolidated Context (Dashboard or specific Book)
+        const path = window.location.pathname;
+        const bookMatch = path.match(/\/book\/(\d+)/);
+        const dashLink = document.createElement('link');
+        dashLink.rel = 'preload';
+        dashLink.as = 'fetch';
+        dashLink.crossOrigin = 'use-credentials';
+
+        if (bookMatch) {
+          dashLink.href = '/api/v1/app/books/' + bookMatch[1] + '/context';
+        } else {
+          dashLink.href = '/api/v1/app/dashboard';
+        }
+        document.head.appendChild(dashLink);
+
+        // 3. Predictive LCP Preload (The cover image)
         if (rawCandidate) {
           const candidate = JSON.parse(rawCandidate);
           const updatedOn = candidate.isAudio ? candidate.audioUpdatedOn : candidate.updatedOn;

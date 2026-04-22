@@ -38,7 +38,9 @@ public class AppBootstrapController {
     )
     @GetMapping
     public ResponseEntity<AppBootstrapResponse> getBootstrap() {
+        log.debug("[Bootstrap] Request received");
         BookLoreUser user = authenticationService.getAuthenticatedUser();
+        log.debug("[Bootstrap] Authenticated user: {}", user != null ? user.getUsername() : "anonymous");
 
         AppBootstrapResponse.AppBootstrapResponseBuilder builder = AppBootstrapResponse.builder()
                 .publicSettings(appSettingService.getPublicSettings())
@@ -46,12 +48,14 @@ public class AppBootstrapController {
 
         if (user != null && user.getId() != null && user.getId() != -1L) {
             try {
+                log.debug("[Bootstrap] Fetching private data for user {}", user.getUsername());
                 builder.user(user)
                         .menuCounts(menuCountsService.getMenuCounts())
                         .libraries(libraryService.getLibraries())
                         .shelves(shelfService.getShelves());
+                log.debug("[Bootstrap] Private data fetched successfully");
             } catch (Exception e) {
-                log.warn("Failed to fetch complete bootstrap data for user {}: {}", user.getUsername(), e.getMessage());
+                log.error("[Bootstrap] Failed to fetch complete bootstrap data for user {}: {}", user.getUsername(), e.getMessage(), e);
                 // Proceed with partial data if possible
                 builder.user(user);
             }

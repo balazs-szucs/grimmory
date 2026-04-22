@@ -1,6 +1,6 @@
 import { computed, inject, Injectable, Injector, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, finalize } from 'rxjs';
+import { Observable, tap, finalize, throwError } from 'rxjs';
 import { RxStompService } from '../websocket/rx-stomp.service';
 import { API_CONFIG } from '../../core/config/api-config';
 import { createRxStompConfig } from '../websocket/rx-stomp.config';
@@ -41,7 +41,10 @@ export class AuthService {
 
   internalRefreshToken(): Observable<{ accessToken: string; refreshToken: string }> {
     const refreshToken = this.getInternalRefreshToken();
-    return this.http.post<{ accessToken: string; refreshToken: string }>(`${this.apiUrl}/refresh`, { refreshToken }).pipe(
+    if (!refreshToken) {
+      return throwError(() => new Error('No refresh token available'));
+    }
+    return this.http.post<{ accessToken: string; refreshToken: string }>(`${this.apiUrl}/refresh`, {refreshToken}).pipe(
       tap((response) => {
         if (response.accessToken && response.refreshToken) {
           this.saveInternalTokens(response.accessToken, response.refreshToken);

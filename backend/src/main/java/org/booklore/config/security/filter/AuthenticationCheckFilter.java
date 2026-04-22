@@ -19,7 +19,7 @@ public class AuthenticationCheckFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
-        if ("/api/v1/app/bootstrap".equals(path)) {
+        if (path != null && path.contains("/api/v1/app/bootstrap")) {
             chain.doFilter(request, response);
             return;
         }
