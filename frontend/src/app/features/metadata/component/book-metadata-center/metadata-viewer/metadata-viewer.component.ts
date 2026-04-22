@@ -46,7 +46,7 @@ import DOMPurify from 'dompurify';
   standalone: true,
   templateUrl: './metadata-viewer.component.html',
   styleUrl: './metadata-viewer.component.scss',
-  imports: [Button, Rating, FormsModule, SplitButton, NgClass, Tooltip, DecimalPipe, ProgressBar, Menu, DatePicker, ProgressSpinner, TieredMenu, Image, TagComponent, MetadataTabsComponent, TranslocoDirective, TranslocoPipe, Dialog, Checkbox, CoverPlaceholderComponent]
+  imports: [Button, Rating, FormsModule, SplitButton, NgClass, Tooltip, DecimalPipe, ProgressBar, Menu, DatePicker, TieredMenu, Image, TagComponent, MetadataTabsComponent, TranslocoDirective, TranslocoPipe, Dialog, Checkbox, CoverPlaceholderComponent]
 })
 export class MetadataViewerComponent implements OnInit, OnChanges, AfterViewChecked {
   private currentBook = signal<Book | null>(null);

@@ -6,7 +6,7 @@ import {HttpClient} from '@angular/common/http';
 import {API_CONFIG} from '../config/api-config';
 import {lastValueFrom} from 'rxjs';
 import {AppBootstrapResponse} from '../../shared/models/app-bootstrap.model';
-import {USER_QUERY_KEY} from '../../features/settings/user-management/user.service';
+import {CURRENT_USER_QUERY_KEY} from '../../features/settings/user-management/user-query-keys';
 import {PUBLIC_SETTINGS_QUERY_KEY} from '../../shared/service/app-settings-query-keys';
 import {MENU_COUNTS_QUERY_KEY} from '../../shared/service/menu-counts.service';
 
@@ -30,7 +30,7 @@ export function initializeAuthFactory() {
     const finalizeAuth = (data?: AppBootstrapResponse) => {
       if (data) {
         // Seed the individual caches with the consolidated data
-        queryClient.setQueryData(USER_QUERY_KEY, data.user);
+        queryClient.setQueryData(CURRENT_USER_QUERY_KEY, data.user);
         queryClient.setQueryData(PUBLIC_SETTINGS_QUERY_KEY, data.publicSettings);
         queryClient.setQueryData(MENU_COUNTS_QUERY_KEY, data.menuCounts);
       }

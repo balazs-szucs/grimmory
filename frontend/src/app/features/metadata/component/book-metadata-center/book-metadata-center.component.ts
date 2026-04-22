@@ -16,6 +16,7 @@ import {MetadataEditorComponent} from './metadata-editor/metadata-editor.compone
 import {MetadataSearcherComponent} from './metadata-searcher/metadata-searcher.component';
 import {SidecarViewerComponent} from './sidecar-viewer/sidecar-viewer.component';
 import {injectQuery} from '@tanstack/angular-query-experimental';
+import {AppBookContextResponse} from '../../../book/model/app-book-context.model';
 
 @Component({
   selector: 'app-book-metadata-center',
@@ -54,7 +55,7 @@ export class BookMetadataCenterComponent implements OnInit, OnDestroy {
     if (bookId == null) {
       return {
         queryKey: ['book-context', -1] as const,
-        queryFn: async (): Promise<import('../../model/app-book-context.model').AppBookContextResponse> => {
+        queryFn: async (): Promise<AppBookContextResponse> => {
           throw new Error('No book selected');
         },
         enabled: false,

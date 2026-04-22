@@ -122,3 +122,71 @@ export interface AppBookSort {
   field: string;
   dir: 'asc' | 'desc';
 }
+
+export interface AppBookDetail extends AppBookSummary {
+  subtitle: string | null;
+  description: string | null;
+  categories: string[];
+  publisher: string | null;
+  publishedDate: string | null;
+  pageCount: number | null;
+  isbn13: string | null;
+  language: string | null;
+  goodreadsRating: number | null;
+  goodreadsReviewCount: number | null;
+  libraryName: string;
+  shelves: AppShelfSummary[];
+  fileTypes: string[];
+  files: AppBookFile[];
+  epubProgress: EpubProgress | null;
+  pdfProgress: PdfProgress | null;
+  cbxProgress: CbxProgress | null;
+  audiobookProgress: AudiobookProgress | null;
+  koreaderProgress: KoreaderProgress | null;
+}
+
+export interface AppShelfSummary {
+  id: number;
+  name: string;
+  color: string | null;
+}
+
+export interface AppBookFile {
+  id: number;
+  fileName: string;
+  fileSizeKb: number;
+  bookType: string;
+}
+
+export interface EpubProgress {
+  cfi: string;
+  href: string;
+  percentage: number;
+  updatedAt: string;
+}
+
+export interface PdfProgress {
+  page: number;
+  percentage: number;
+  updatedAt: string;
+}
+
+export interface CbxProgress {
+  page: number;
+  percentage: number;
+  updatedAt: string;
+}
+
+export interface AudiobookProgress {
+  positionMs: number;
+  trackIndex: number;
+  percentage: number;
+  updatedAt: string;
+}
+
+export interface KoreaderProgress {
+  percentage: number;
+  device: string;
+  deviceId: string;
+  lastSyncTime: string;
+}
