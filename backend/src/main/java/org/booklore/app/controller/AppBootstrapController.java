@@ -7,8 +7,10 @@ import org.booklore.app.dto.AppBootstrapResponse;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.model.dto.BookLoreUser;
 import org.booklore.service.MenuCountsService;
+import org.booklore.service.ShelfService;
 import org.booklore.service.VersionService;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.library.LibraryService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,11 +25,13 @@ public class AppBootstrapController {
     private final AppSettingService appSettingService;
     private final VersionService versionService;
     private final MenuCountsService menuCountsService;
+    private final LibraryService libraryService;
+    private final ShelfService shelfService;
     private final AuthenticationService authenticationService;
 
     @Operation(
             summary = "Get bootstrap data",
-            description = "Retrieve all data needed for application startup (user, settings, version, counts) in a single request.",
+            description = "Retrieve all data needed for application startup (user, settings, version, counts, libraries, shelves) in a single request.",
             operationId = "appGetBootstrap"
     )
     @GetMapping
@@ -40,7 +44,9 @@ public class AppBootstrapController {
 
         if (user != null) {
             builder.user(user)
-                    .menuCounts(menuCountsService.getMenuCounts());
+                    .menuCounts(menuCountsService.getMenuCounts())
+                    .libraries(libraryService.getLibraries())
+                    .shelves(shelfService.getShelves());
         }
 
         return ResponseEntity.ok()

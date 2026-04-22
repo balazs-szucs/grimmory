@@ -9,10 +9,12 @@ import {AppBootstrapResponse} from '../../shared/models/app-bootstrap.model';
 import {CURRENT_USER_QUERY_KEY} from '../../features/settings/user-management/user-query-keys';
 import {PUBLIC_SETTINGS_QUERY_KEY} from '../../shared/service/app-settings-query-keys';
 import {MENU_COUNTS_QUERY_KEY} from '../../shared/service/menu-counts.service';
+import {LIBRARIES_QUERY_KEY} from '../../features/book/service/library-query-keys';
 
 const SETTINGS_TIMEOUT_MS = 10000;
 
 export const BOOTSTRAP_QUERY_KEY = ['app-bootstrap'] as const;
+const SHELVES_QUERY_KEY = ['shelves'] as const;
 
 export function initializeAuthFactory() {
   return () => {
@@ -33,6 +35,8 @@ export function initializeAuthFactory() {
         queryClient.setQueryData(CURRENT_USER_QUERY_KEY, data.user);
         queryClient.setQueryData(PUBLIC_SETTINGS_QUERY_KEY, data.publicSettings);
         queryClient.setQueryData(MENU_COUNTS_QUERY_KEY, data.menuCounts);
+        queryClient.setQueryData(LIBRARIES_QUERY_KEY, [...(data.libraries || [])].sort((a, b) => a.name.localeCompare(b.name)));
+        queryClient.setQueryData(SHELVES_QUERY_KEY, data.shelves || []);
       }
 
       if (authService.getInternalAccessToken()) {
@@ -41,60 +45,43 @@ export function initializeAuthFactory() {
       authInitService.markAsInitialized();
     };
 
-    // If we already have an internal token, we don't want to block bootstrap.
-    if (authService.getInternalAccessToken()) {
-      finalizeAuth();
-
-      // Fetch the bootstrap data in the background to refresh caches and check remote auth
-      queryClient.fetchQuery(bootstrapOptions).then(data => {
-        finalizeAuth(data);
-        if (data?.publicSettings?.remoteAuthEnabled) {
-          authService.remoteLogin().subscribe({
-            error: err => console.error('[Remote Login] background refresh failed:', err)
-          });
-        }
-      }).catch(err => {
-        console.error('[Bootstrap] background refresh failed:', err);
-      });
-
-      return Promise.resolve();
-    }
-
-    const settingsPromise = queryClient.fetchQuery(bootstrapOptions);
+    // If we have a token, we MUST fetch bootstrap data before proceeding to avoid navigation loops.
+    // However, we still use the race with timeout to avoid hanging the app.
+    const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);
     const timeoutPromise = new Promise<null>(resolve =>
       setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)
     );
 
-    return Promise.race([settingsPromise, timeoutPromise])
+    return Promise.race([bootstrapPromise, timeoutPromise])
       .catch(err => {
         console.error('[Auth] Bootstrap fetch failed:', err);
         return null;
       })
       .then(data => {
-      if (!data) {
-        console.warn('[Auth] Bootstrap fetch timed out, falling back to local auth');
-        finalizeAuth();
-        return;
-      }
+        if (!data) {
+          console.warn('[Auth] Bootstrap fetch timed out or failed, proceeding with limited state');
+          finalizeAuth();
+          return;
+        }
 
-      if (data.publicSettings.remoteAuthEnabled) {
-        return new Promise<void>(resolve => {
-          authService.remoteLogin().subscribe({
-            next: () => {
-              finalizeAuth(data);
-              resolve();
-            },
-            error: err => {
-              console.error('[Remote Login] failed:', err);
-              finalizeAuth(data);
-              resolve();
-            }
+        if (data.publicSettings.remoteAuthEnabled && !authService.getInternalAccessToken()) {
+          return new Promise<void>(resolve => {
+            authService.remoteLogin().subscribe({
+              next: () => {
+                finalizeAuth(data);
+                resolve();
+              },
+              error: err => {
+                console.error('[Remote Login] failed:', err);
+                finalizeAuth(data);
+                resolve();
+              }
+            });
           });
-        });
-      } else {
-        finalizeAuth(data);
-        return;
-      }
-    });
+        } else {
+          finalizeAuth(data);
+          return;
+        }
+      });
   };
 }
