@@ -33,6 +33,9 @@ export function initializeLanguage() {
     const lang = detectLanguage(AVAILABLE_LANGS);
     translocoService.setActiveLang(lang);
     localStorage.setItem(LANG_STORAGE_KEY, lang);
+    if (lang === 'en') {
+      return Promise.resolve();
+    }
     return firstValueFrom(translocoService.load(lang));
   };
 }

@@ -13,8 +13,6 @@ export function initializeAuthFactory() {
     const authInitService = inject(AuthInitializationService);
     const queryClient = inject(QueryClient);
 
-    const settingsPromise = queryClient.fetchQuery(appSettingsService.getPublicSettingsQueryOptions());
-
     const finalizeAuth = () => {
       if (authService.getInternalAccessToken()) {
         authService.initializeWebSocketConnection();
@@ -28,7 +26,7 @@ export function initializeAuthFactory() {
       finalizeAuth();
 
       // Still handle the settings result in the background to check for remote auth status
-      settingsPromise.then(publicSettings => {
+      queryClient.fetchQuery(appSettingsService.getPublicSettingsQueryOptions()).then(publicSettings => {
         if (publicSettings?.remoteAuthEnabled) {
           authService.remoteLogin().subscribe({
             error: err => console.error('[Remote Login] background refresh failed:', err)
@@ -38,6 +36,8 @@ export function initializeAuthFactory() {
 
       return Promise.resolve();
     }
+
+    const settingsPromise = queryClient.fetchQuery(appSettingsService.getPublicSettingsQueryOptions());
 
     const timeoutPromise = new Promise<null>(resolve =>
       setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)

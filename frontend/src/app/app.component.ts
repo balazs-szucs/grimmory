@@ -63,8 +63,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private readonly authenticatedEffect = effect(() => {
     const authInitialized = this.authInit.initialized();
     const isAuthenticated = this.authService.isAuthenticated();
-    const bootstrapped = this.bootstrapGate.hasBootstrapped();
-    if (authInitialized && isAuthenticated && bootstrapped && !this.healthFetched) {
+    if (authInitialized && isAuthenticated && !this.healthFetched) {
       this.healthFetched = true;
       this.libraryHealthService.fetchHealth();
     }
