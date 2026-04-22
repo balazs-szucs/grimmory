@@ -3,7 +3,7 @@ import {Button} from "primeng/button";
 import {ActivatedRoute, Router} from "@angular/router";
 import {toSignal} from '@angular/core/rxjs-interop';
 import {DecimalPipe, KeyValuePipe, NgClass, NgStyle} from "@angular/common";
-import {finalize, map, take} from "rxjs/operators";
+import {finalize, map} from "rxjs/operators";
 import {Book, BookType, computeSeriesReadStatus, ReadStatus} from "../../model/book.model";
 import {BookService} from "../../service/book.service";
 import {BookMetadataManageService} from "../../service/book-metadata-manage.service";
@@ -599,10 +599,10 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   openShelfAssigner(): void {
-    this.dialogHelperService.openShelfAssignerDialog(null, this.selectedBooks).then(ref => {
-      this.dialogRef = ref;
-      if (this.dialogRef) {
-        this.dialogRef.onClose.pipe(take(1)).subscribe(result => {
+    this.dialogHelperService.openShelfAssignerDialog(null, this.selectedBooks).then(handle => {
+      this.dialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(result => {
           if (result?.assigned) {
             this.selectedBooks.clear();
           }
@@ -612,10 +612,10 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   lockUnlockMetadata(): void {
-    this.dialogHelperService.openLockUnlockMetadataDialog(this.selectedBooks).then(ref => {
-      this.dialogRef = ref;
-      if (this.dialogRef) {
-        this.dialogRef.onClose.pipe(take(1)).subscribe(() => {
+    this.dialogHelperService.openLockUnlockMetadataDialog(this.selectedBooks).then(handle => {
+      this.dialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(() => {
           this.deselectAllBooks();
         });
       }
@@ -631,14 +631,16 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   fetchMetadata(): void {
-    this.dialogHelperService.openMetadataRefreshDialog(this.selectedBooks);
+    this.dialogHelperService.openMetadataRefreshDialog(this.selectedBooks).then(handle => {
+      this.dialogRef = handle?.ref;
+    });
   }
 
   bulkEditMetadata(): void {
-    this.dialogHelperService.openBulkMetadataEditDialog(this.selectedBooks).then(ref => {
-      this.dialogRef = ref;
-      if (this.dialogRef) {
-        this.dialogRef.onClose.pipe(take(1)).subscribe(() => {
+    this.dialogHelperService.openBulkMetadataEditDialog(this.selectedBooks).then(handle => {
+      this.dialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(() => {
           this.deselectAllBooks();
         });
       }
@@ -646,10 +648,10 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   multiBookEditMetadata(): void {
-    this.dialogHelperService.openMultibookMetadataEditorDialog(this.selectedBooks).then(ref => {
-      this.dialogRef = ref;
-      if (this.dialogRef) {
-        this.dialogRef.onClose.pipe(take(1)).subscribe(() => {
+    this.dialogHelperService.openMultibookMetadataEditorDialog(this.selectedBooks).then(handle => {
+      this.dialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(() => {
           this.deselectAllBooks();
         });
       }
@@ -737,8 +739,8 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   moveFiles() {
-    this.dialogHelperService.openFileMoverDialog(this.selectedBooks).then(ref => {
-      this.dialogRef = ref;
+    this.dialogHelperService.openFileMoverDialog(this.selectedBooks).then(handle => {
+      this.dialogRef = handle?.ref;
     });
   }
 

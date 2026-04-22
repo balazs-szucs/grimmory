@@ -5,7 +5,6 @@ import {TranslocoService} from '@jsverse/transloco';
 import {DialogLauncherService, DialogSize, DialogStyle} from '../../../../shared/services/dialog-launcher.service';
 import {MetadataRefreshType} from '../../../metadata/model/request/metadata-refresh-type.enum';
 import {Book} from '../../model/book.model';
-import {take} from 'rxjs/operators';
 import {createDialogOpenHandle, DialogOpenHandle} from '../../../../shared/models/dialog-open-handle.model';
 
 @Injectable({providedIn: 'root'})
@@ -16,7 +15,7 @@ export class BookDialogHelperService {
   private readonly t = inject(TranslocoService);
 
   /** In-flight dialog opens keyed by intent, to dedupe double-clicks while a chunk loads. */
-  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<any> | null>>();
+  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<unknown> | null>>();
 
   private openDialog(component: Type<unknown>, options: object): DynamicDialogRef | null {
     return this.dialogLauncherService.openDialog(component, options);
@@ -75,7 +74,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openShelfAssignerDialog(book: Book | null, bookIds: Set<number> | null): Promise<DialogOpenHandle<void> | null> {
+  openShelfAssignerDialog(book: Book | null, bookIds: Set<number> | null): Promise<DialogOpenHandle<{ assigned: boolean }> | null> {
     const data: { isMultiBooks: boolean; book?: Book; bookIds?: Set<number> } = {
       isMultiBooks: false,
     };
@@ -241,7 +240,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openBulkBookFileAttacherDialog(sourceBooks: Book[]): Promise<DialogOpenHandle<void> | null> {
+  openBulkBookFileAttacherDialog(sourceBooks: Book[]): Promise<DialogOpenHandle<{ success: boolean }> | null> {
     return this.lazyOpen(
       `bulkBookFileAttacher:${sourceBooks.map(b => b.id).sort((a, b) => a - b).join(',')}`,
       async () => (await import('../book-file-attacher/book-file-attacher.component')).BookFileAttacherComponent,

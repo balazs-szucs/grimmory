@@ -1115,8 +1115,8 @@ export class MetadataEditorComponent implements OnInit {
   }
 
   openCoverSearch() {
-    this.bookDialogHelperService.openCoverSearchDialog(this.currentBookId, 'ebook').then(ref => {
-      ref?.onClose.pipe(
+    this.bookDialogHelperService.openCoverSearchDialog(this.currentBookId, 'ebook').then(handle => {
+      handle?.ref.onClose.pipe(
         take(1),
         filter(result => !!result),
         takeUntilDestroyed(this.destroyRef)
@@ -1206,8 +1206,8 @@ export class MetadataEditorComponent implements OnInit {
   }
 
   openAudiobookCoverSearch() {
-    this.bookDialogHelperService.openCoverSearchDialog(this.currentBookId, 'audiobook').then(ref => {
-      ref?.onClose.pipe(
+    this.bookDialogHelperService.openCoverSearchDialog(this.currentBookId, 'audiobook').then(handle => {
+      handle?.ref.onClose.pipe(
         take(1),
         filter(result => !!result),
         takeUntilDestroyed(this.destroyRef)

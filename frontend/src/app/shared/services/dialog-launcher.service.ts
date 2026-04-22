@@ -6,6 +6,7 @@ import {MetadataRefreshType} from '../../features/metadata/model/request/metadat
 import {BookdropFinalizeResult} from '../../features/bookdrop/service/bookdrop.service';
 import {take} from 'rxjs/operators';
 import {createDialogOpenHandle, DialogOpenHandle} from '../models/dialog-open-handle.model';
+import {IconSelection} from '../service/icon-picker.service';
 
 /**
  * Dialog size classes - use these to control dialog dimensions
@@ -40,7 +41,7 @@ export class DialogLauncherService {
    * re-triggered open while the chunk is still downloading) resolves to the
    * same dialog instead of spawning two copies.
    */
-  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<any> | null>>();
+  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<unknown> | null>>();
 
   private defaultDialogOptions = {
     baseZIndex: 10,
@@ -127,7 +128,7 @@ export class DialogLauncherService {
     );
   }
 
-  openDirectoryPickerDialog(): Promise<DialogOpenHandle<string> | null> {
+  openDirectoryPickerDialog(): Promise<DialogOpenHandle<string[]> | null> {
     return this.lazyOpen(
       'directoryPicker',
       async () => (await import('../components/directory-picker/directory-picker.component')).DirectoryPickerComponent,
@@ -302,7 +303,7 @@ export class DialogLauncherService {
     );
   }
 
-  openIconPickerDialog(): Promise<DialogOpenHandle<string> | null> {
+  openIconPickerDialog(): Promise<DialogOpenHandle<IconSelection> | null> {
     return this.lazyOpen(
       'iconPicker',
       async () => (await import('../components/icon-picker/icon-picker-component')).IconPickerComponent,

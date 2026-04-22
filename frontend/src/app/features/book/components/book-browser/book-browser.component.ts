@@ -1256,8 +1256,8 @@ export class BookBrowserComponent implements AfterViewInit {
   moveFiles(): void {
     const selectedBooks = this.selectedBooks();
     if (selectedBooks.size === 0) return;
-    this.dialogHelperService.openFileMoverDialog(selectedBooks).then(ref => {
-      this.dynamicDialogRef = ref;
+    this.dialogHelperService.openFileMoverDialog(selectedBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
     });
   }
 
@@ -1287,10 +1287,10 @@ export class BookBrowserComponent implements AfterViewInit {
       return;
     }
 
-    this.dialogHelperService.openBulkBookFileAttacherDialog(sourceBooks).then(ref => {
-      this.dynamicDialogRef = ref;
-      if (this.dynamicDialogRef) {
-        this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(result => {
+    this.dialogHelperService.openBulkBookFileAttacherDialog(sourceBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(result => {
           if (result?.success) {
             this.bookSelectionService.deselectAll();
           }
