@@ -45,8 +45,7 @@ export function initializeAuthFactory() {
       authInitService.markAsInitialized();
     };
 
-    // If we have a token, we MUST fetch bootstrap data before proceeding to avoid navigation loops.
-    // However, we still use the race with timeout to avoid hanging the app.
+    // We MUST fetch bootstrap data before proceeding to ensure guards and components have settings/session state.
     const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);
     const timeoutPromise = new Promise<null>(resolve =>
       setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)
@@ -64,7 +63,8 @@ export function initializeAuthFactory() {
           return;
         }
 
-        if (data.publicSettings.remoteAuthEnabled && !authService.getInternalAccessToken()) {
+        // If we have a potential remote auth but no local token, try to login automatically
+        if (data.publicSettings?.remoteAuthEnabled && !authService.getInternalAccessToken()) {
           return new Promise<void>(resolve => {
             authService.remoteLogin().subscribe({
               next: () => {

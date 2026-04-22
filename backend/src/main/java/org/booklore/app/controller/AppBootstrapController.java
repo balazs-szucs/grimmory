@@ -3,6 +3,7 @@ package org.booklore.app.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.booklore.app.dto.AppBootstrapResponse;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.model.dto.BookLoreUser;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @AllArgsConstructor
 @RestController
 @RequestMapping("/api/v1/app/bootstrap")
@@ -42,11 +44,17 @@ public class AppBootstrapController {
                 .publicSettings(appSettingService.getPublicSettings())
                 .version(versionService.getVersionInfo());
 
-        if (user != null) {
-            builder.user(user)
-                    .menuCounts(menuCountsService.getMenuCounts())
-                    .libraries(libraryService.getLibraries())
-                    .shelves(shelfService.getShelves());
+        if (user != null && user.getId() != null && user.getId() != -1L) {
+            try {
+                builder.user(user)
+                        .menuCounts(menuCountsService.getMenuCounts())
+                        .libraries(libraryService.getLibraries())
+                        .shelves(shelfService.getShelves());
+            } catch (Exception e) {
+                log.warn("Failed to fetch complete bootstrap data for user {}: {}", user.getUsername(), e.getMessage());
+                // Proceed with partial data if possible
+                builder.user(user);
+            }
         }
 
         return ResponseEntity.ok()

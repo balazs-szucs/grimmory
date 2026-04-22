@@ -18,6 +18,12 @@ import java.io.IOException;
 public class AuthenticationCheckFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
+        String path = request.getRequestURI();
+        if ("/api/v1/app/bootstrap".equals(path)) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         var auth = SecurityContextHolder.getContext().getAuthentication();
 
         if (auth == null || !auth.isAuthenticated()) {

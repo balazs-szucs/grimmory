@@ -32,7 +32,7 @@ export const AuthInterceptorService: HttpInterceptorFn = (req, next: HttpHandler
 
   return next(authReq).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (error.status === 401 && !isAuthRequest) {
+      if (error.status === 401 && !isAuthRequest && authService.getInternalRefreshToken()) {
         return handle401Error(authService, authReq, next);
       }
       return throwError(() => error);

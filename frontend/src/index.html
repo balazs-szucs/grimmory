@@ -20,35 +20,8 @@
     (function() {
       try {
         const token = localStorage.getItem('accessToken_Internal');
-        
-        // 1. Preload Consolidated Bootstrap (Parallelize with JS load)
-        const bootLink = document.createElement('link');
-        bootLink.rel = 'preload';
-        bootLink.as = 'fetch';
-        bootLink.href = '/api/v1/app/bootstrap';
-        // We use credentials because the backend endpoint is either authenticated
-        // or uses session info to decide what to return.
-        bootLink.crossOrigin = 'use-credentials';
-        document.head.appendChild(bootLink);
-
         if (!token) return;
 
-        // 2. Preload Consolidated Context (Route-aware)
-        const path = window.location.pathname;
-        const bookMatch = path.match(/\/book\/(\d+)/);
-        const dashLink = document.createElement('link');
-        dashLink.rel = 'preload';
-        dashLink.as = 'fetch';
-        dashLink.crossOrigin = 'use-credentials';
-
-        if (bookMatch) {
-          dashLink.href = '/api/v1/app/books/' + bookMatch[1] + '/context';
-        } else {
-          dashLink.href = '/api/v1/app/dashboard';
-        }
-        document.head.appendChild(dashLink);
-
-        // 3. Predictive LCP Preload (The cover image)
         const rawCandidate = localStorage.getItem('lcp_book_candidate');
         if (rawCandidate) {
           const candidate = JSON.parse(rawCandidate);
