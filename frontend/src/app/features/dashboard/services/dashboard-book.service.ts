@@ -1,12 +1,12 @@
-import {computed, effect, inject, Injectable, signal} from '@angular/core';
+import {computed, effect, inject, Injectable} from '@angular/core';
 import {BookService} from '../../book/service/book.service';
-import {Book, BookType, ReadStatus} from '../../book/model/book.model';
+import {Book} from '../../book/model/book.model';
 import {DashboardConfigService} from './dashboard-config.service';
 import {HttpClient} from '@angular/common/http';
 import {API_CONFIG} from '../../../core/config/api-config';
-import {injectQuery, queryOptions} from '@tanstack/angular-query-experimental';
+import {injectQuery} from '@tanstack/angular-query-experimental';
 import {lastValueFrom} from 'rxjs';
-import {AppBookSummary} from '../../book/model/app-book.model';
+import {mapAppBookToBook} from '../../book/model/app-book.model';
 import {AppDashboardResponse} from '../models/app-dashboard.model';
 import {AuthService} from '../../../shared/service/auth.service';
 
@@ -37,7 +37,7 @@ export class DashboardBookService {
     if (!data) return scrollerMap;
 
     for (const [id, summaries] of Object.entries(data.scrollers)) {
-      scrollerMap.set(id, summaries.map(summaryToBook));
+      scrollerMap.set(id, summaries.map(mapAppBookToBook));
     }
 
     return scrollerMap;
@@ -65,46 +65,5 @@ export class DashboardBookService {
       }
     });
   }
-}
-
-/**
- * Maps a server-side AppBookSummary to a Book-shaped object
- * compatible with BookCardComponent's @Input() book property.
- * This is a duplicated utility from AppBooksApiService to avoid circular dependencies.
- */
-function summaryToBook(summary: AppBookSummary): Book {
-  return {
-    id: summary.id,
-    libraryId: summary.libraryId,
-    readStatus: (summary.readStatus as ReadStatus) ?? ReadStatus.UNSET,
-    personalRating: summary.personalRating ?? 0,
-    addedOn: summary.addedOn,
-    lastReadTime: summary.lastReadTime,
-    isPhysical: summary.isPhysical ?? false,
-    fileSizeKb: summary.fileSizeKb ?? undefined,
-    metadataMatchScore: summary.metadataMatchScore,
-    metadata: {
-      bookId: summary.id,
-      title: summary.title,
-      authors: summary.authors ?? [],
-      seriesName: summary.seriesName,
-      seriesNumber: summary.seriesNumber,
-      coverUpdatedOn: summary.coverUpdatedOn,
-      audiobookCoverUpdatedOn: summary.audiobookCoverUpdatedOn,
-      publishedDate: summary.publishedDate ?? undefined,
-      pageCount: summary.pageCount,
-      ageRating: summary.ageRating,
-      contentRating: summary.contentRating,
-    },
-    primaryFile: summary.primaryFileType
-      ? {bookType: summary.primaryFileType as BookType, extension: summary.primaryFileType.toLowerCase()}
-      : null,
-    pdfProgress: summary.readProgress != null
-      ? {page: 0, percentage: summary.readProgress}
-      : null,
-    epubProgress: null,
-    cbxProgress: null,
-    shelves: [],
-  } as unknown as Book;
 }
 

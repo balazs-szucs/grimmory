@@ -22,7 +22,6 @@ import {take, tap} from 'rxjs/operators';
 import {Menu} from 'primeng/menu';
 import {ResetProgressType, ResetProgressTypes} from '../../../../../shared/constants/reset-progress-type';
 import {DatePicker} from 'primeng/datepicker';
-import {ProgressSpinner} from 'primeng/progressspinner';
 import {TieredMenu} from 'primeng/tieredmenu';
 import {Image} from 'primeng/image';
 import {BookDialogHelperService} from '../../../../book/components/book-browser/book-dialog-helper.service';

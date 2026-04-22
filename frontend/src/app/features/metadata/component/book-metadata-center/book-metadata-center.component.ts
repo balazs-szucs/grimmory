@@ -1,7 +1,7 @@
 import {computed, Component, effect, inject, OnDestroy, OnInit, signal} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {UserService} from '../../../settings/user-management/user.service';
-import {Book, BookRecommendation} from '../../../book/model/book.model';
+import {BookRecommendation} from '../../../book/model/book.model';
 import {Subject} from 'rxjs';
 import {distinctUntilChanged, filter, map, takeUntil,} from 'rxjs/operators';
 import {BookService} from '../../../book/service/book.service';
@@ -17,6 +17,7 @@ import {MetadataSearcherComponent} from './metadata-searcher/metadata-searcher.c
 import {SidecarViewerComponent} from './sidecar-viewer/sidecar-viewer.component';
 import {injectQuery} from '@tanstack/angular-query-experimental';
 import {AppBookContextResponse} from '../../../book/model/app-book-context.model';
+import {mapAppBookToBook} from '../../../book/model/app-book.model';
 
 @Component({
   selector: 'app-book-metadata-center',
@@ -65,7 +66,10 @@ export class BookMetadataCenterComponent implements OnInit, OnDestroy {
     return this.bookService.bookContextQueryOptions(bookId);
   });
 
-  readonly book = computed(() => this.contextQuery.data()?.book ?? null);
+  readonly book = computed(() => {
+    const detail = this.contextQuery.data()?.book;
+    return detail ? mapAppBookToBook(detail) : null;
+  });
   readonly context = computed(() => this.contextQuery.data() ?? null);
 
   private readonly fetchRecommendations = effect(() => {

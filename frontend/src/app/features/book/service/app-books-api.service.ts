@@ -10,8 +10,9 @@ import {
   AppBookSummary,
   AppFilterOptions,
   AppPageResponse,
+  mapAppBookToBook,
 } from '../model/app-book.model';
-import {Book, BookType, ReadStatus} from '../model/book.model';
+import {Book} from '../model/book.model';
 
 const PAGE_SIZE = 50;
 
@@ -61,7 +62,7 @@ export class AppBooksApiService {
   readonly books = computed<Book[]>(() => {
     const data = this.booksQuery.data();
     if (!data) return [];
-    return data.pages.flatMap(page => page.content.map(summaryToBook));
+    return data.pages.flatMap(page => page.content.map(mapAppBookToBook));
   }, {
     equal: (a, b) => {
       if (a.length !== b.length) return false;
@@ -228,44 +229,4 @@ export class AppBooksApiService {
 
     return params;
   }
-}
-
-/**
- * Maps a server-side AppBookSummary to a Book-shaped object
- * compatible with BookCardComponent's @Input() book property.
- */
-function summaryToBook(summary: AppBookSummary): Book {
-  return {
-    id: summary.id,
-    libraryId: summary.libraryId,
-    readStatus: (summary.readStatus as ReadStatus) ?? ReadStatus.UNSET,
-    personalRating: summary.personalRating ?? 0,
-    addedOn: summary.addedOn,
-    lastReadTime: summary.lastReadTime,
-    isPhysical: summary.isPhysical ?? false,
-    fileSizeKb: summary.fileSizeKb ?? undefined,
-    metadataMatchScore: summary.metadataMatchScore,
-    metadata: {
-      bookId: summary.id,
-      title: summary.title,
-      authors: summary.authors ?? [],
-      seriesName: summary.seriesName,
-      seriesNumber: summary.seriesNumber,
-      coverUpdatedOn: summary.coverUpdatedOn,
-      audiobookCoverUpdatedOn: summary.audiobookCoverUpdatedOn,
-      publishedDate: summary.publishedDate ?? undefined,
-      pageCount: summary.pageCount,
-      ageRating: summary.ageRating,
-      contentRating: summary.contentRating,
-    },
-    primaryFile: summary.primaryFileType
-      ? {bookType: summary.primaryFileType as BookType, extension: summary.primaryFileType.toLowerCase()}
-      : null,
-    pdfProgress: summary.readProgress != null
-      ? {page: 0, percentage: summary.readProgress}
-      : null,
-    epubProgress: null,
-    cbxProgress: null,
-    shelves: [],
-  } as unknown as Book;
 }

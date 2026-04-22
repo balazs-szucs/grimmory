@@ -34,7 +34,7 @@ public class AppDashboardController {
     @GetMapping
     public ResponseEntity<AppDashboardResponse> getDashboard() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
-        BookLoreUser.UserSettings.DashboardConfig config = user.getSettings().getDashboardConfig();
+        BookLoreUser.UserSettings.DashboardConfig config = user.getUserSettings().getDashboardConfig();
 
         if (config == null || config.getScrollers() == null) {
             return ResponseEntity.ok(new AppDashboardResponse(Map.of()));
@@ -43,27 +43,23 @@ public class AppDashboardController {
         Map<String, List<AppBookSummary>> scrollerData = new HashMap<>();
 
         for (BookLoreUser.UserSettings.ScrollerConfig scroller : config.getScrollers()) {
-            if (scroller.getEnabled() == null || !scroller.getEnabled()) {
+            if (!scroller.isEnabled()) {
                 continue;
             }
 
             List<AppBookSummary> books = switch (scroller.getType()) {
-                case LAST_READ -> mobileBookService.getContinueReading(scroller.getMaxItems());
-                case LAST_LISTENED -> mobileBookService.getContinueListening(scroller.getMaxItems());
-                case RECENTLY_ADDED -> mobileBookService.getRecentlyAdded(scroller.getMaxItems());
-                case RECENTLY_SCANNED -> mobileBookService.getRecentlyScanned(scroller.getMaxItems());
-                case RANDOM -> mobileBookService.getRandomBooks(0, scroller.getMaxItems(), null).getContent();
-                case MAGIC_SHELF -> {
-                    if (scroller.getId() != null) {
-                        try {
-                            long shelfId = Long.parseLong(scroller.getId());
-                            yield mobileBookService.getBooksByMagicShelf(shelfId, 0, scroller.getMaxItems()).getContent();
-                        } catch (NumberFormatException e) {
-                            yield List.of();
-                        }
+                case "LAST_READ" -> mobileBookService.getContinueReading(scroller.getMaxItems());
+                case "LAST_LISTENED" -> mobileBookService.getContinueListening(scroller.getMaxItems());
+                case "LATEST_ADDED", "RECENTLY_ADDED" -> mobileBookService.getRecentlyAdded(scroller.getMaxItems());
+                case "RECENTLY_SCANNED" -> mobileBookService.getRecentlyScanned(scroller.getMaxItems());
+                case "RANDOM" -> mobileBookService.getRandomBooks(0, scroller.getMaxItems(), null).getContent();
+                case "MAGIC_SHELF" -> {
+                    if (scroller.getMagicShelfId() != null) {
+                        yield mobileBookService.getBooksByMagicShelf(scroller.getMagicShelfId(), 0, scroller.getMaxItems()).getContent();
                     }
                     yield List.of();
                 }
+                default -> List.of();
             };
 
             scrollerData.put(scroller.getId(), books);

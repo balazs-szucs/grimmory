@@ -37,8 +37,8 @@ export interface Book extends FileInfo {
   libraryName: string;
   metadata?: BookMetadata;
   shelves?: Shelf[];
-  lastReadTime?: string;
-  addedOn?: string;
+  lastReadTime?: string | null;
+  addedOn?: string | null;
   epubProgress?: EpubProgress;
   pdfProgress?: PdfProgress;
   cbxProgress?: CbxProgress;
@@ -54,7 +54,7 @@ export interface Book extends FileInfo {
   libraryPath?: { id: number };
   alternativeFormats?: AdditionalFile[];
   supplementaryFiles?: AdditionalFile[];
-  isPhysical?: boolean;
+  isPhysical?: boolean | null;
 
   [key: string]: unknown;
 }

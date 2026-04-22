@@ -62,6 +62,7 @@ public class SecurityConfig {
             "/api/v1/auth/remote",     // Remote auth endpoint (must remain public)
             "/api/v1/auth/oidc/**",    // OIDC authentication endpoints
             "/api/v1/public-settings", // Public endpoint for checking OIDC or other app settings
+            "/api/v1/app/bootstrap",   // Consolidated public bootstrap info
             "/api/v1/setup/**",        // Setup wizard endpoints (must remain accessible before initial setup)
             "/api/v1/healthcheck/**"   // Healthcheck endpoints (must remain accessible for Docker healthchecks)
     };

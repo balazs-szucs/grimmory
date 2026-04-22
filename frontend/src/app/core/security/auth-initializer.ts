@@ -65,7 +65,12 @@ export function initializeAuthFactory() {
       setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)
     );
 
-    return Promise.race([settingsPromise, timeoutPromise]).then(data => {
+    return Promise.race([settingsPromise, timeoutPromise])
+      .catch(err => {
+        console.error('[Auth] Bootstrap fetch failed:', err);
+        return null;
+      })
+      .then(data => {
       if (!data) {
         console.warn('[Auth] Bootstrap fetch timed out, falling back to local auth');
         finalizeAuth();
