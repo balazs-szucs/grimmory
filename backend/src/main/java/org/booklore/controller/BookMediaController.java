@@ -16,7 +16,11 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -38,11 +42,13 @@ public class BookMediaController {
     @GetMapping("/book/{bookId}/thumbnail")
     @CheckBookAccess(bookIdParam = "bookId")
     public ResponseEntity<Resource> getBookThumbnail(
-            @Parameter(description = "ID of the book") @PathVariable long bookId) {
+            @Parameter(description = "ID of the book") @PathVariable long bookId,
+            @Parameter(description = "Optional max display width in pixels (smaller JPEG for list/LCP).")
+            @RequestParam(name = "w", required = false) Integer displayWidth) {
         boolean realFile = bookService.hasBookThumbnail(bookId);
         Instant updatedOn = realFile ? bookService.getCoverUpdatedOn(bookId) : null;
 
-        Resource resource = bookService.getBookThumbnail(bookId);
+        Resource resource = bookService.getBookThumbnail(bookId, displayWidth);
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .cacheControl(realFile
@@ -82,11 +88,13 @@ public class BookMediaController {
     @GetMapping("/book/{bookId}/audiobook-thumbnail")
     @CheckBookAccess(bookIdParam = "bookId")
     public ResponseEntity<Resource> getAudiobookThumbnail(
-            @Parameter(description = "ID of the book") @PathVariable long bookId) {
+            @Parameter(description = "ID of the book") @PathVariable long bookId,
+            @Parameter(description = "Optional max display width in pixels (smaller JPEG for list/LCP).")
+            @RequestParam(name = "w", required = false) Integer displayWidth) {
         boolean realFile = bookService.hasAudiobookThumbnail(bookId);
         Instant updatedOn = realFile ? bookService.getAudiobookCoverUpdatedOn(bookId) : null;
 
-        Resource resource = bookService.getAudiobookThumbnail(bookId);
+        Resource resource = bookService.getAudiobookThumbnail(bookId, displayWidth);
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .cacheControl(realFile

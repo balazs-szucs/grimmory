@@ -12,7 +12,7 @@ import { AppComponent } from './app/app.component';
 import Aura from './app/shared/layout/theme-palette-extend';
 import { routes } from './app/app.routes';
 import { AuthInterceptorService } from './app/core/security/auth-interceptor.service';
-import { AuthService, websocketInitializer } from './app/shared/service/auth.service';
+import { AuthService } from './app/shared/service/auth.service';
 import { inject, isDevMode, provideAppInitializer, provideZonelessChangeDetection } from '@angular/core';
 import { initializeAuthFactory } from './app/core/security/auth-initializer';
 import { StartupService } from './app/shared/service/startup.service';
@@ -34,10 +34,6 @@ bootstrapApplication(AppComponent, {
         },
       },
     })),
-    provideAppInitializer(() => {
-      const authService = inject(AuthService);
-      return websocketInitializer(authService)();
-    }),
     provideAppInitializer(() => {
       const startup = inject(StartupService);
       return startup.load();

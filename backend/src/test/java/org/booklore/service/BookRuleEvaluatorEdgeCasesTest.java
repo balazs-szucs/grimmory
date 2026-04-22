@@ -765,7 +765,7 @@ class BookRuleEvaluatorEdgeCasesTest {
         }
 
         @Test
-        void excludesAll_noProgress_withOtherUserProgress_bookExcludedByUserFilter() {
+        void excludesAll_ignoresOtherUsersProgress_onlyCurrentUserReadStatusApplies() {
             BookLoreUserEntity user2 = BookLoreUserEntity.builder()
                     .username("otheruser2")
                     .passwordHash("hash2")

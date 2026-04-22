@@ -68,6 +68,27 @@ public class OpdsBookService {
                 .toList();
     }
 
+    /**
+     * Enforces the same permission gate as {@link #getBooksPage} for OPDS catalog features that
+     * bypass that method (for example, magic-shelf feeds), without coupling domain services like
+     * {@code MagicShelfBookService} to OPDS permissions (REST/mobile use different rules).
+     */
+    public void assertUserMayAccessOpdsCatalog(Long userId) {
+        if (userId == null) {
+            throw ApiError.FORBIDDEN.createException("Authentication required");
+        }
+        BookLoreUserEntity entity = userRepository.findByIdWithDetails(userId)
+                .orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(userId));
+        assertUserMayAccessOpdsCatalogEntity(entity);
+    }
+
+    private void assertUserMayAccessOpdsCatalogEntity(BookLoreUserEntity entity) {
+        if (entity.getPermissions() == null
+                || (!entity.getPermissions().isPermissionAccessOpds() && !entity.getPermissions().isPermissionAdmin())) {
+            throw ApiError.FORBIDDEN.createException("You are not allowed to access this resource");
+        }
+    }
+
     public Page<Book> getBooksPage(Long userId, String query, Long libraryId, Set<Long> shelfIds, int page, int size) {
         if (userId == null) {
             throw ApiError.FORBIDDEN.createException("Authentication required");
@@ -75,11 +96,7 @@ public class OpdsBookService {
 
         BookLoreUserEntity entity = userRepository.findByIdWithDetails(userId)
                 .orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(userId));
-
-        if (entity.getPermissions() == null ||
-                (!entity.getPermissions().isPermissionAccessOpds() && !entity.getPermissions().isPermissionAdmin())) {
-            throw ApiError.FORBIDDEN.createException("You are not allowed to access this resource");
-        }
+        assertUserMayAccessOpdsCatalogEntity(entity);
 
         BookLoreUser user = bookLoreUserTransformer.toDTO(entity);
         boolean isAdmin = user.getPermissions().isAdmin();

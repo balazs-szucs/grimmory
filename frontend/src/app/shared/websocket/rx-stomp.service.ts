@@ -1,4 +1,4 @@
-import {inject, Injectable} from '@angular/core';
+import {DestroyRef, inject, Injectable} from '@angular/core';
 import {RxStomp, RxStompConfig} from '@stomp/rx-stomp';
 import {AuthService} from '../service/auth.service';
 import {createRxStompConfig} from './rx-stomp.config';
@@ -25,6 +25,9 @@ export class RxStompService extends RxStomp {
 
   private setupBfCacheListeners(): void {
     if (typeof globalThis === 'undefined' || !('window' in globalThis)) return;
+
+    const destroyRef = inject(DestroyRef);
+    const win = globalThis.window;
 
     const handleSuspend = () => {
       if (this.active) {
@@ -53,10 +56,19 @@ export class RxStompService extends RxStomp {
       }
     };
 
-    globalThis.window.addEventListener('pagehide', handleSuspend);
-    globalThis.window.addEventListener('freeze', handleSuspend);
+    const onResume = () => handleResume(true);
+    const onPageShow = (event: PageTransitionEvent) => handleResume(event.persisted);
 
-    globalThis.window.addEventListener('resume', () => handleResume(true));
-    globalThis.window.addEventListener('pageshow', (event) => handleResume(event.persisted));
+    win.addEventListener('pagehide', handleSuspend);
+    win.addEventListener('freeze', handleSuspend);
+    win.addEventListener('resume', onResume);
+    win.addEventListener('pageshow', onPageShow);
+
+    destroyRef.onDestroy(() => {
+      win.removeEventListener('pagehide', handleSuspend);
+      win.removeEventListener('freeze', handleSuspend);
+      win.removeEventListener('resume', onResume);
+      win.removeEventListener('pageshow', onPageShow);
+    });
   }
 }

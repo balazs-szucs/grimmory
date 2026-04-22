@@ -246,6 +246,7 @@ public class AppBookService {
 
         Specification<BookEntity> spec = AppBookSpecification.combine(
                 AppBookSpecification.notDeleted(),
+                AppBookSpecification.hasDigitalFile(),
                 AppBookSpecification.inLibraries(accessibleLibraryIds),
                 AppBookSpecification.searchText(query)
         );
@@ -309,6 +310,7 @@ public class AppBookService {
 
         Specification<BookEntity> spec = AppBookSpecification.combine(
                 AppBookSpecification.notDeleted(),
+                AppBookSpecification.hasDigitalFile(),
                 AppBookSpecification.inLibraries(accessibleLibraryIds),
                 AppBookSpecification.addedWithinDays(30)
         );
@@ -797,6 +799,7 @@ public class AppBookService {
 
         List<Specification<BookEntity>> specs = new ArrayList<>();
         specs.add(AppBookSpecification.notDeleted());
+        specs.add(AppBookSpecification.hasDigitalFile());
 
         if (accessibleLibraryIds != null) {
             if (req.libraryId() != null && accessibleLibraryIds.contains(req.libraryId())) {

@@ -33,6 +33,15 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -278,17 +287,71 @@ public class BookService {
         return bookUpdateService.assignShelvesToBooks(bookIds, shelfIdsToAssign, shelfIdsToUnassign);
     }
 
+    private static final int THUMBNAIL_DISPLAY_MAX_WIDTH = 800;
+
     public Resource getBookThumbnail(long bookId) {
+        return getBookThumbnail(bookId, null);
+    }
+
+    /**
+     * Serves a stored thumbnail, optionally downscaled for mobile/list grids (query {@code w} on the API).
+     */
+    public Resource getBookThumbnail(long bookId, Integer displayWidthPx) {
+        int maxW = clampThumbnailDisplayWidth(displayWidthPx);
         Path thumbnailPath = Paths.get(fileService.getThumbnailFile(bookId));
         try {
-            if (Files.exists(thumbnailPath)) {
-                return new UrlResource(thumbnailPath.toUri());
-            } else {
+            if (!Files.exists(thumbnailPath)) {
                 return new ClassPathResource("static/images/missing-cover.jpg");
+            }
+            if (maxW <= 0) {
+                return new UrlResource(thumbnailPath.toUri());
+            }
+            BufferedImage image = ImageIO.read(thumbnailPath.toFile());
+            if (image == null) {
+                return new ClassPathResource("static/images/missing-cover.jpg");
+            }
+            try {
+                if (image.getWidth() <= maxW) {
+                    return new UrlResource(thumbnailPath.toUri());
+                }
+                int h = (int) Math.round((double) image.getHeight() * maxW / image.getWidth());
+                BufferedImage scaled = FileService.resizeImage(image, maxW, h);
+                try {
+                    byte[] bytes = FileService.writeJpegWithQualityToByteArray(scaled, 0.6f);
+                    return new ByteArrayResource(bytes);
+                } finally {
+                    scaled.flush();
+                }
+            } finally {
+                image.flush();
             }
         } catch (MalformedURLException e) {
             throw new RuntimeException("Failed to load book cover for bookId=" + bookId, e);
+        } catch (IOException e) {
+            log.warn("Failed to build resized thumbnail for bookId={}: {}", bookId, e.getMessage());
+            return getBookThumbnailDirect(thumbnailPath);
         }
+    }
+
+    private static int clampThumbnailDisplayWidth(Integer widthPx) {
+        if (widthPx == null) {
+            return 0;
+        }
+        if (widthPx < 1) {
+            return 0;
+        }
+        return Math.min(widthPx, THUMBNAIL_DISPLAY_MAX_WIDTH);
+    }
+
+    private Resource getBookThumbnailDirect(Path thumbnailPath) {
+        try {
+            if (Files.exists(thumbnailPath)) {
+                return new UrlResource(thumbnailPath.toUri());
+            }
+        } catch (MalformedURLException e) {
+            throw new RuntimeException("Failed to load book thumbnail from " + thumbnailPath, e);
+        }
+        return new ClassPathResource("static/images/missing-cover.jpg");
     }
 
     public boolean hasBookThumbnail(long bookId) {
@@ -340,15 +403,50 @@ public class BookService {
     }
 
     public Resource getAudiobookThumbnail(long bookId) {
+        return getAudiobookThumbnail(bookId, null);
+    }
+
+    public Resource getAudiobookThumbnail(long bookId, Integer displayWidthPx) {
+        int maxW = clampThumbnailDisplayWidth(displayWidthPx);
         Path thumbnailPath = Paths.get(fileService.getAudiobookThumbnailFile(bookId));
         try {
-            if (Files.exists(thumbnailPath)) {
-                return new UrlResource(thumbnailPath.toUri());
-            } else {
+            if (!Files.exists(thumbnailPath)) {
                 return getMissingCoverResource();
+            }
+            if (maxW <= 0) {
+                return new UrlResource(thumbnailPath.toUri());
+            }
+            BufferedImage image = ImageIO.read(thumbnailPath.toFile());
+            if (image == null) {
+                return getMissingCoverResource();
+            }
+            try {
+                if (image.getWidth() <= maxW) {
+                    return new UrlResource(thumbnailPath.toUri());
+                }
+                int h = (int) Math.round((double) image.getHeight() * maxW / image.getWidth());
+                BufferedImage scaled = FileService.resizeImage(image, maxW, h);
+                try {
+                    byte[] bytes = FileService.writeJpegWithQualityToByteArray(scaled, 0.6f);
+                    return new ByteArrayResource(bytes);
+                } finally {
+                    scaled.flush();
+                }
+            } finally {
+                image.flush();
             }
         } catch (MalformedURLException e) {
             throw new RuntimeException("Failed to load audiobook thumbnail for bookId=" + bookId, e);
+        } catch (IOException e) {
+            log.warn("Failed to build resized audiobook thumbnail for bookId={}: {}", bookId, e.getMessage());
+            try {
+                if (Files.exists(thumbnailPath)) {
+                    return new UrlResource(thumbnailPath.toUri());
+                }
+            } catch (MalformedURLException ex) {
+                throw new RuntimeException("Failed to load audiobook thumbnail for bookId=" + bookId, ex);
+            }
+            return getMissingCoverResource();
         }
     }
 

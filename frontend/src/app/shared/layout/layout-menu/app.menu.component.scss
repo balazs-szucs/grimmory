@@ -151,3 +151,46 @@
     animation: none;
   }
 }
+
+// Skeleton placeholder for the magic-shelves block, sized from the last-known
+// row count (persisted in localStorage) so the menu reserves the same height
+// it had on the previous session and avoids CLS when the shelves arrive.
+.menu-skeleton-group {
+  list-style: none;
+  padding: 0.25rem 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.menu-skeleton-header,
+.menu-skeleton-row {
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--p-content-border-color);
+  animation: menu-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.menu-skeleton-header {
+  width: 45%;
+  height: 0.75rem;
+  margin-bottom: 0.25rem;
+  opacity: 0.75;
+}
+
+.menu-skeleton-row {
+  height: 1.25rem;
+  width: 92%;
+}
+
+@keyframes menu-skeleton-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-skeleton-header,
+  .menu-skeleton-row {
+    animation: none;
+  }
+}

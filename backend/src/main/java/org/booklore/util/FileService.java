@@ -26,6 +26,7 @@ import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -282,12 +283,29 @@ public class FileService {
     }
 
     private static void writeJpegWithQuality(BufferedImage img, File file, float quality) throws IOException {
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(file)) {
+            writeJpegWithQuality(img, ios, quality);
+        }
+    }
+
+    /**
+     * Encodes a JPEG in memory (for example, on-the-fly thumbnail width variants).
+     */
+    public static byte[] writeJpegWithQualityToByteArray(BufferedImage img, float quality) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.min(2_000_000, img.getWidth() * img.getHeight() + 1024));
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(baos)) {
+            writeJpegWithQuality(img, ios, quality);
+        }
+        return baos.toByteArray();
+    }
+
+    private static void writeJpegWithQuality(BufferedImage img, ImageOutputStream ios, float quality) throws IOException {
         Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName(IMAGE_FORMAT);
         if (!writers.hasNext()) {
             throw new IOException("No JPEG image writer is available");
         }
         ImageWriter writer = writers.next();
-        try (ImageOutputStream ios = ImageIO.createImageOutputStream(file)) {
+        try {
             writer.setOutput(ios);
             ImageWriteParam param = writer.getDefaultWriteParam();
             if (param.canWriteCompressed()) {

@@ -335,6 +335,7 @@ public class OpdsFeedService {
         Page<Book> booksPage;
 
         if (magicShelfId != null) {
+            opdsBookService.assertUserMayAccessOpdsCatalog(userId);
             booksPage = magicShelfBookService.getBooksByMagicShelfId(userId, magicShelfId, page - 1, size);
         } else if (author != null && !author.isBlank()) {
             booksPage = opdsBookService.getBooksByAuthorName(userId, author, page - 1, size);

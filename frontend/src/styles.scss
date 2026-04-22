@@ -1,17 +1,5 @@
 @use "sass:meta";
 @import "primeicons/primeicons.css";
-
-@font-face {
-  font-family: primeicons;
-  font-display: swap;
-  src:
-    url("primeicons/fonts/primeicons.woff2") format("woff2"),
-    url("primeicons/fonts/primeicons.woff") format("woff"),
-    url("primeicons/fonts/primeicons.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-}
-
 @include meta.load-css("assets/styles/tokens.css");
 @include meta.load-css("assets/styles/reset");
 @include meta.load-css("assets/layout/styles/global");
