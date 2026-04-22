@@ -11,6 +11,7 @@ import {Router} from '@angular/router';
 import {BookSocketService} from './book-socket.service';
 import {BookPatchService} from './book-patch.service';
 import {TranslocoService} from '@jsverse/transloco';
+import {BootstrapGateService} from '../../../shared/service/bootstrap-gate.service';
 import {injectQuery, queryOptions, QueryClient} from '@tanstack/angular-query-experimental';
 import {
   BOOKS_QUERY_KEY,
@@ -39,11 +40,19 @@ export class BookService {
   private bookPatchService = inject(BookPatchService);
   private queryClient = inject(QueryClient);
   private readonly t = inject(TranslocoService);
+  private readonly bootstrapGate = inject(BootstrapGateService);
   private readonly token = this.authService.token;
 
+  /**
+   * The full `/api/v1/books` payload is ~1s on large libraries; keeping it
+   * gated on `BootstrapGateService.hasBootstrapped()` moves it off the
+   * bootstrap critical path. Sidebar counts come from the lighter
+   * `/api/v1/books/menu-counts` endpoint, so the browser can render the
+   * first route before this request completes.
+   */
   private booksQuery = injectQuery(() => ({
     ...this.getBooksQueryOptions(),
-    enabled: !!this.token(),
+    enabled: !!this.token() && this.bootstrapGate.hasBootstrapped(),
   }));
 
   books = computed(() => this.booksQuery.data() ?? []);

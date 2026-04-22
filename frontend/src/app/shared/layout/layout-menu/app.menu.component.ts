@@ -4,9 +4,10 @@ import { AppMenuitemComponent } from './app.menuitem.component';
 import { LibraryService } from '../../../features/book/service/library.service';
 import { LibraryHealthService } from '../../../features/book/service/library-health.service';
 import { ShelfService } from '../../../features/book/service/shelf.service';
-import { BookService } from '../../../features/book/service/book.service';
 import { LibraryShelfMenuService } from '../../../features/book/service/library-shelf-menu.service';
 import { VersionService } from '../../service/version.service';
+import { MenuCountsService } from '../../service/menu-counts.service';
+import { BootstrapGateService } from '../../service/bootstrap-gate.service';
 import { UserService } from '../../../features/settings/user-management/user.service';
 import { MagicShelfService } from '../../../features/magic-shelf/service/magic-shelf.service';
 import { SeriesDataService } from '../../../features/series-browser/service/series-data.service';
@@ -51,8 +52,8 @@ export class AppMenuComponent {
   private readonly libraryService = inject(LibraryService);
   private readonly libraryHealthService = inject(LibraryHealthService);
   private readonly shelfService = inject(ShelfService);
-  private readonly bookService = inject(BookService);
   private readonly versionService = inject(VersionService);
+  private readonly menuCountsService = inject(MenuCountsService);
   private readonly libraryShelfMenuService = inject(LibraryShelfMenuService);
   private readonly dialogLauncherService = inject(DialogLauncherService);
   private readonly messageService = inject(MessageService);
@@ -62,12 +63,22 @@ export class AppMenuComponent {
   private readonly authorService = inject(AuthorService);
   private readonly t = inject(TranslocoService);
   private readonly localStorageService = inject(LocalStorageService);
+  private readonly bootstrapGate = inject(BootstrapGateService);
 
   private readonly activeLang = toSignal(this.t.langChanges$, {initialValue: this.t.getActiveLang()});
   private readonly currentUser = this.userService.currentUser;
   private readonly allAuthors = this.authorService.allAuthors;
 
-  readonly versionInfo = toSignal(this.versionService.getVersion(), { initialValue: null });
+  readonly versionInfo = signal<{current: string; latest: string} | null>(null);
+  private readonly versionFetchEffect = effect(() => {
+    if (!this.bootstrapGate.hasBootstrapped() || this.versionInfo()) {
+      return;
+    }
+    this.versionService.getVersion().subscribe({
+      next: info => this.versionInfo.set(info),
+      error: err => console.warn('Failed to fetch version info', err)
+    });
+  });
 
   librarySortField = signal<'name' | 'id'>('name');
   librarySortOrder = signal<'asc' | 'desc'>('desc');
@@ -77,55 +88,28 @@ export class AppMenuComponent {
   magicShelfSortOrder = signal<'asc' | 'desc'>('asc');
   sidebarWidth = this.localStorageService.get<number>('sidebarWidth') ?? 225;
 
-  private readonly libraryBookCounts = computed(() => {
-    const counts = new Map<number, number>();
-    for (const book of this.bookService.books()) {
-      if (book.libraryId != null) {
-        counts.set(book.libraryId, (counts.get(book.libraryId) ?? 0) + 1);
-      }
+  private readonly libraryBookCounts = this.menuCountsService.libraryCounts;
+  private readonly shelfBookCounts = this.menuCountsService.shelfCounts;
+  private readonly unshelvedBookCount = this.menuCountsService.unshelvedBookCount;
+  private readonly magicShelfBookCounts = this.menuCountsService.magicShelfCounts;
+
+  // Skeleton row count cached across sessions so the first paint after the
+  // shelves endpoint returns does not shift the menu layout. Falls back to a
+  // small constant on first-ever load.
+  private static readonly MAGIC_SHELF_SKELETON_KEY = 'magicShelfSkeletonRows';
+  readonly magicShelvesPending = this.magicShelfService.isShelvesLoading;
+  readonly magicShelfSkeletonRows = signal<number>(
+    Math.max(1, Math.min(10, this.localStorageService.get<number>(AppMenuComponent.MAGIC_SHELF_SKELETON_KEY) ?? 3))
+  );
+  readonly magicShelfSkeletonSlots = computed<number[]>(() =>
+    Array.from({length: this.magicShelvesPending() ? this.magicShelfSkeletonRows() : 0}, (_, i) => i)
+  );
+  private readonly persistMagicShelfCount = effect(() => {
+    const count = this.magicShelfService.shelves().length;
+    if (count > 0 && count !== this.magicShelfSkeletonRows()) {
+      this.magicShelfSkeletonRows.set(count);
+      this.localStorageService.set(AppMenuComponent.MAGIC_SHELF_SKELETON_KEY, count);
     }
-    return counts;
-  });
-
-  private readonly shelfBookCounts = computed(() => {
-    const currentUserId = this.currentUser()?.id;
-    const counts = new Map<number, number>();
-    let unshelvedCount = 0;
-
-    for (const book of this.bookService.books()) {
-      if (!book.shelves || book.shelves.length === 0) {
-        unshelvedCount++;
-      } else {
-        for (const shelf of book.shelves) {
-          if (shelf.id != null) {
-            counts.set(shelf.id, (counts.get(shelf.id) ?? 0) + 1);
-          }
-        }
-      }
-    }
-
-    // For shelves not owned by the current user, fall back to the shelf's bookCount field
-    for (const shelf of this.shelfService.shelves()) {
-      if (shelf.userId !== currentUserId && shelf.id != null) {
-        counts.set(shelf.id, shelf.bookCount || 0);
-      }
-    }
-
-    counts.set(-1, unshelvedCount); // sentinel key for unshelved count
-    return counts;
-  });
-
-  private readonly magicShelfBookCounts = computed(() => {
-    const counts = new Map<number, number>();
-    const shelves = this.magicShelfService.shelves();
-    if (shelves.length === 0) return counts;
-
-    for (const shelf of shelves) {
-      if (shelf.id != null) {
-        counts.set(shelf.id, this.magicShelfService.getBookCountValue(shelf.id));
-      }
-    }
-    return counts;
   });
 
   readonly homeMenu = computed<NavItem[]>(() => {
@@ -145,7 +129,7 @@ export class AppMenuComponent {
             type: 'allBooks',
             icon: 'pi pi-fw pi-book',
             routerLink: ['/all-books'],
-            bookCount: this.bookService.books().length,
+            bookCount: this.menuCountsService.totalBookCount(),
           },
           {
             label: this.t.translate('layout.menu.series'),
@@ -195,7 +179,7 @@ export class AppMenuComponent {
           icon: library.icon || undefined,
           iconType: this.toNavIconType(library.iconType),
           routerLink: [`/library/${library.id}/books`],
-          bookCount: libCounts.get(library.id ?? 0) ?? 0,
+          bookCount: libCounts[library.id ?? 0] ?? 0,
           unhealthy: this.libraryHealthService.isUnhealthy(library.id ?? 0),
         })),
       },
@@ -225,7 +209,7 @@ export class AppMenuComponent {
           iconType: this.toNavIconType(shelf.iconType),
           contextMenuItems: this.libraryShelfMenuService.initializeMagicShelfMenuItems(shelf),
           routerLink: [`/magic-shelf/${shelf.id}/books`],
-          bookCount: this.magicShelfBookCounts().get(shelf.id ?? 0) ?? 0,
+          bookCount: this.magicShelfBookCounts()[shelf.id ?? 0] ?? 0,
         })),
       },
     ];
@@ -255,7 +239,7 @@ export class AppMenuComponent {
       icon: shelf.icon || undefined,
       iconType: this.toNavIconType(shelf.iconType),
       routerLink: [`/shelf/${shelf.id}/books`],
-      bookCount: shelfCounts.get(shelf.id ?? 0) ?? 0,
+      bookCount: shelfCounts[shelf.id ?? 0] ?? 0,
     }));
 
     const items: NavItem[] = [{
@@ -264,7 +248,7 @@ export class AppMenuComponent {
       icon: 'pi pi-inbox',
       iconType: 'PRIME_NG',
       routerLink: ['/unshelved-books'],
-      bookCount: shelfCounts.get(-1) ?? 0,
+      bookCount: this.unshelvedBookCount(),
     }];
 
     if (koboShelf) {
@@ -274,7 +258,7 @@ export class AppMenuComponent {
         icon: koboShelf.icon || undefined,
         iconType: this.toNavIconType(koboShelf.iconType),
         routerLink: [`/shelf/${koboShelf.id}/books`],
-        bookCount: shelfCounts.get(koboShelf.id ?? 0) ?? 0,
+        bookCount: shelfCounts[koboShelf.id ?? 0] ?? 0,
       });
     }
 

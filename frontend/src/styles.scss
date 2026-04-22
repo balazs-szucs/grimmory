@@ -21,6 +21,7 @@ html {
 }
 
 :root {
+  // theme-locked: book-format brand colors are semantic and must not shift with theme tokens.
   --book-type-pdf-color: #dc2626;
   --book-type-epub-color: #16a34a;
   --book-type-cbx-color: #3b82f6;
@@ -69,13 +70,13 @@ html {
 }
 
 .chart-info-icon {
-  color: rgb(255 255 255 / 35%);
+  color: color-mix(in srgb, var(--p-text-color) 35%, transparent);
   font-size: 0.9rem;
   cursor: help;
   transition: color 0.2s ease;
 
   &:hover {
-    color: rgb(255 255 255 / 80%);
+    color: color-mix(in srgb, var(--p-text-color) 80%, transparent);
   }
 }
 
@@ -128,6 +129,7 @@ html {
   }
 }
 
+// theme-locked: progress-bar state colors are semantic (per-reader status).
 .progress-incomplete .p-progressbar-value {
   background-color: #3b82f6;
 }

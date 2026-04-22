@@ -4,6 +4,7 @@ import {map} from 'rxjs/operators';
 import {BookdropFileApiService} from './bookdrop-file-api.service';
 import {AuthService} from '../../../shared/service/auth.service';
 import {UserService} from '../../settings/user-management/user.service';
+import {BootstrapGateService} from '../../../shared/service/bootstrap-gate.service';
 
 export interface BookdropFileNotification {
   pendingCount: number;
@@ -30,12 +31,14 @@ export class BookdropFileService implements OnDestroy {
   private authService = inject(AuthService);
   private subscriptions = new Subscription();
   private userService = inject(UserService);
+  private bootstrapGate = inject(BootstrapGateService);
   private hasInitialized = false;
 
   constructor() {
     effect(() => {
       const user = this.userService.currentUser();
-      if (this.hasInitialized || !user) {
+      const bootstrapped = this.bootstrapGate.hasBootstrapped();
+      if (this.hasInitialized || !user || !bootstrapped) {
         return;
       }
       this.hasInitialized = true;

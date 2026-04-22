@@ -11,7 +11,8 @@ export class StartupService {
 
   load(): Promise<void> {
     if (this.authService.token()) {
-      return this.queryClient.fetchQuery(this.userService.getUserQueryOptions()).then(() => undefined);
+      // Trigger user profile fetch in the background without blocking the startup chain.
+      void this.queryClient.prefetchQuery(this.userService.getUserQueryOptions());
     }
 
     return Promise.resolve();

@@ -6,10 +6,12 @@ import {BOOKS_QUERY_KEY, bookDetailQueryPrefix, bookRecommendationsQueryPrefix} 
 
 const APP_BOOKS_QUERY_PREFIX = ['app-books'] as const;
 const APP_FILTER_OPTIONS_QUERY_PREFIX = ['app-filter-options'] as const;
+const MENU_COUNTS_QUERY_KEY = ['menuCounts'] as const;
 
 export function invalidateAppBooksQueries(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({queryKey: APP_BOOKS_QUERY_PREFIX});
   void queryClient.invalidateQueries({queryKey: APP_FILTER_OPTIONS_QUERY_PREFIX});
+  void queryClient.invalidateQueries({queryKey: MENU_COUNTS_QUERY_KEY, exact: true});
 }
 
 // --- Full invalidation (refetches from server) ---

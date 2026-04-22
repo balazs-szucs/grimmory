@@ -7,6 +7,7 @@ import {AuthService} from '../../../shared/service/auth.service';
 import {BookdropFileApiService} from './bookdrop-file-api.service';
 import {BookdropFileNotification, BookdropFileService} from './bookdrop-file.service';
 import {UserService} from '../../settings/user-management/user.service';
+import {BootstrapGateService} from '../../../shared/service/bootstrap-gate.service';
 
 describe('BookdropFileService', () => {
   let getNotification: ReturnType<typeof vi.fn>;
@@ -38,6 +39,10 @@ describe('BookdropFileService', () => {
         {provide: BookdropFileApiService, useValue: {getNotification}},
         {provide: AuthService, useValue: {token}},
         {provide: UserService, useValue: {currentUser}},
+        {
+          provide: BootstrapGateService,
+          useValue: {hasBootstrapped: signal(true), markBootstrapped: vi.fn()},
+        },
       ],
     });
   });

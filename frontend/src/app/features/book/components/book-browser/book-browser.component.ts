@@ -495,6 +495,50 @@ export class BookBrowserComponent implements AfterViewInit {
     }
   });
 
+  /**
+   * Auto-fetches additional pages when the collapsed book list is shorter than the viewport.
+   *
+   * Without this, toggling series-collapse on a library whose first page
+   * collapses from 50 to a handful of group rows leaves the footer "Showing
+   * 50 items (series collapsed)" frozen forever: the IntersectionObserver
+   * sentinel never enters the viewport because there is no scroll to trigger
+   * it. Safety cap prevents runaway on pathological libraries where every
+   * page collapses to nothing.
+   */
+  private autoFetchAttempts = 0;
+  private lastAutoFetchContextKey: string | null = null;
+  private readonly AUTO_FETCH_MAX_ATTEMPTS = 20;
+  private readonly fillViewportAfterCollapseEffect = effect(() => {
+    const books = this.pipelineInputs();
+    const contextKey = this.booksContextKey();
+
+    if (contextKey !== this.lastAutoFetchContextKey) {
+      this.lastAutoFetchContextKey = contextKey;
+      this.autoFetchAttempts = 0;
+    }
+
+    untracked(() => {
+      if (!this.scrollContainer || this.currentViewMode() !== VIEW_MODES.GRID) {
+        return;
+      }
+      if (!this.appBooksApi.hasNextPage() || this.appBooksApi.isFetchingNextPage()) {
+        return;
+      }
+      if (this.autoFetchAttempts >= this.AUTO_FETCH_MAX_ATTEMPTS) {
+        return;
+      }
+      const viewportHeight = this.scrollContainer.clientHeight;
+      if (viewportHeight <= 0) {
+        return;
+      }
+      const rendered = this.renderedHeight();
+      if (rendered <= viewportHeight && books.length > 0) {
+        this.autoFetchAttempts += 1;
+        this.appBooksApi.fetchNextPage();
+      }
+    });
+  });
+
   @ViewChild(BookTableComponent)
   bookTableComponent!: BookTableComponent;
   @ViewChild(BookFilterComponent, {static: true})

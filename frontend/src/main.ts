@@ -3,8 +3,9 @@ import { DialogService } from 'primeng/dynamicdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { RxStompService } from './app/shared/websocket/rx-stomp.service';
 import { rxStompServiceFactory } from './app/shared/websocket/rx-stomp-service-factory';
-import { provideRouter, RouteReuseStrategy } from '@angular/router';
+import { provideRouter, RouteReuseStrategy, withPreloading } from '@angular/router';
 import { CustomReuseStrategy } from './app/core/custom-reuse-strategy';
+import { PostBootstrapPreloadingStrategy } from './app/core/routing/post-bootstrap-preloading-strategy';
 import { providePrimeNG } from 'primeng/config';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
@@ -43,7 +44,7 @@ bootstrapApplication(AppComponent, {
     }),
     provideHttpClient(withInterceptors([AuthInterceptorService])),
     provideAppInitializer(initializeAuthFactory()),
-    provideRouter(routes),
+    provideRouter(routes, withPreloading(PostBootstrapPreloadingStrategy)),
     DialogService,
     MessageService,
     ConfirmationService,

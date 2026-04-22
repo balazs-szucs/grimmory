@@ -47,7 +47,14 @@
     </ul>
 
     <ul class="layout-menu">
-      @if (magicShelfMenu(); as magicShelfMenu) {
+      @if (magicShelvesPending() && magicShelfSkeletonSlots().length > 0) {
+        <li class="menu-skeleton-group" aria-hidden="true">
+          <div class="menu-skeleton-header"></div>
+          @for (slot of magicShelfSkeletonSlots(); track slot) {
+            <div class="menu-skeleton-row"></div>
+          }
+        </li>
+      } @else if (magicShelfMenu(); as magicShelfMenu) {
         @for (item of magicShelfMenu; track item.label; let i = $index) {
           <li app-menuitem [item]="item" [index]="i" [root]="true" menuKey="magicShelf"></li>
         }

@@ -45,17 +45,21 @@
         </div>
         <div class="toolbar-actions">
           <div class="toolbar-icons">
-            @if (isFilterActive()) {
-            <button type="button" class="topbar-items topbar-item" (click)="clearFilter()" [attr.aria-label]="t('tooltip.clearFilters')">
-              <i class="pi pi-filter-slash filter-clear-icon" [pTooltip]="t('tooltip.clearFilters')"
-                tooltipPosition="top">
-              </i>
-            </button>
-            }
+            <div class="toolbar-slot" [attr.data-inactive]="!isFilterActive() || null">
+              <button type="button" class="topbar-items topbar-item" (click)="clearFilter()"
+                [attr.aria-label]="t('tooltip.clearFilters')" [attr.aria-hidden]="!isFilterActive() ? 'true' : null"
+                [attr.tabindex]="isFilterActive() ? null : -1">
+                <i class="pi pi-filter-slash filter-clear-icon" [pTooltip]="t('tooltip.clearFilters')"
+                  tooltipPosition="top">
+                </i>
+              </button>
+            </div>
 
-            @if (currentViewMode() === 'table') {
-            <div>
-              <button type="button" class="topbar-items topbar-item" (click)="columnPopover.toggle($event)" [attr.aria-label]="t('tooltip.visibleColumns')">
+            <div class="toolbar-slot" [attr.data-inactive]="currentViewMode() !== 'table' || null">
+              <button type="button" class="topbar-items topbar-item" (click)="columnPopover.toggle($event)"
+                [attr.aria-label]="t('tooltip.visibleColumns')"
+                [attr.aria-hidden]="currentViewMode() !== 'table' ? 'true' : null"
+                [attr.tabindex]="currentViewMode() === 'table' ? null : -1">
                 <i class="pi pi-eye" [pTooltip]="t('tooltip.visibleColumns')" tooltipPosition="top">
                 </i>
               </button>
@@ -73,7 +77,6 @@
                 </div>
               </p-popover>
             </div>
-            }
             <button type="button" class="topbar-items topbar-item" (click)="toggleTableGrid()" [attr.aria-label]="t('tooltip.toggleView')">
               <i [class]="viewIcon()" [pTooltip]="t('tooltip.toggleView')" tooltipPosition="top">
               </i>
@@ -334,7 +337,7 @@
     </button>
     }
     <app-book-filter [showFilter]="showFilter()" class="filter-overlay-container" [ngClass]="{ 'active': showFilter() }"
-      [style.display]="showFilter() ? '' : 'none'" (filterSelected)="onFilterSelected($event)"
+      (filterSelected)="onFilterSelected($event)"
       (filterModeChanged)="onFilterModeChanged($event)">
     </app-book-filter>
 

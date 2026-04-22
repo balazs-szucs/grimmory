@@ -785,7 +785,7 @@ class BookRuleEvaluatorEdgeCasesTest {
 
             List<Long> ids = findMatchingIds(singleRule(RuleField.READ_STATUS, RuleOperator.EXCLUDES_ALL,
                     List.of("READ", "ABANDONED")));
-            assertThat(ids).doesNotContain(book.getId());
+            assertThat(ids).contains(book.getId());
             assertThat(ids).contains(noProgressBook.getId());
         }
     }

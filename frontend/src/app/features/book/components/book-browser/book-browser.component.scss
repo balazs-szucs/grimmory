@@ -139,7 +139,7 @@
 
 .series-collapsed-info {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--p-text-muted-color);
   margin: 0;
 
   @media (width <= 767px) {
@@ -176,6 +176,24 @@
 
   @media (width >= 768px) {
     gap: 1.5rem;
+  }
+}
+
+// Reserved slots for conditional toolbar buttons so toggling their state does
+// not reflow the toolbar or adjacent content. We keep the slot's width fixed
+// (2.5rem, matching .topbar-item) and swap inner visibility instead of
+// presence. `data-inactive` is set when the button would normally be removed.
+.toolbar-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+
+  &[data-inactive] {
+    visibility: hidden;
+    pointer-events: none;
   }
 }
 
@@ -320,7 +338,7 @@
   padding: 1rem 0.5rem 0.5rem;
   z-index: 1;
   border-radius: 10px 10px 0 0;
-  border: 1px solid rgb(255 255 255 / 50%);
+  border: 1px solid color-mix(in srgb, var(--p-surface-0) 50%, transparent);
   border-width: 1px 1px 0;
   background-color: var(--card-background);
   transition: transform 0.15s ease-out, opacity 0.15s ease-out;
@@ -392,7 +410,7 @@
   align-items: center;
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
-  color: #e4e4e7;
+  color: var(--p-text-muted-color);
 
   i {
     font-size: 1rem;
@@ -562,6 +580,8 @@
     z-index: 998;
     width: 100%;
     height: 100%;
+
+    // theme-locked: scrim on top of page content must darken regardless of theme.
     background-color: rgb(0 0 0 / 40%);
   }
 }
@@ -569,7 +589,7 @@
 .filter-overlay-container {
   flex-shrink: 0;
   z-index: 50;
-  will-change: transform, width, opacity;
+  will-change: transform, opacity;
 
   @media (width <= 991px) {
     width: var(--sidebar-width, 225px);
@@ -579,6 +599,8 @@
     bottom: 0;
     height: calc(100% - 3.85rem);
     background-color: var(--card-background);
+
+    // theme-locked: shadow intentionally uses black regardless of theme for depth.
     box-shadow: -2px 0 10px rgb(0 0 0 / 15%);
     transform: translateX(100%);
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -589,28 +611,31 @@
     }
   }
 
+  // Desktop: reserve a fixed-width lane so opening/closing the filter does
+  // not reflow the book grid (eliminates the 0.086 + 0.136 CLS shifts).
+  // The inner panel slides in via transform, which runs on the compositor
+  // and does not invalidate layout of siblings.
   @media (width >= 992px) {
     position: relative;
+    width: var(--sidebar-width, 225px);
+    margin-left: 1rem;
     overflow: hidden;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
-                margin 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.2s linear;
-    
-    // Reserve layout space to prevent CLS
-    contain: layout;
+    contain: layout paint;
 
-    &:not(.active) {
-      width: 0;
+    ::ng-deep .book-filter-container {
+      transform: translateX(calc(100% + 1rem));
       opacity: 0;
       pointer-events: none;
-      margin-left: 0;
+      transition:
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.2s linear;
+      will-change: transform, opacity;
     }
 
-    &.active {
-      width: var(--sidebar-width, 225px);
+    &.active ::ng-deep .book-filter-container {
+      transform: translateX(0);
       opacity: 1;
       pointer-events: auto;
-      margin-left: 1rem;
     }
   }
 }

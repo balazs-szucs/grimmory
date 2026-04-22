@@ -1,7 +1,6 @@
 import {ChangeDetectionStrategy, Component, computed, inject} from '@angular/core';
 import {Button} from 'primeng/button';
 import {DashboardScrollerComponent} from '../dashboard-scroller/dashboard-scroller.component';
-import {BookService} from '../../../book/service/book.service';
 import {UserService} from '../../../settings/user-management/user.service';
 import {ProgressSpinner} from 'primeng/progressspinner';
 import {Tooltip} from 'primeng/tooltip';
@@ -31,7 +30,6 @@ import {Book} from '../../../book/model/book.model';
 })
 export class MainDashboardComponent {
 
-  private readonly bookService = inject(BookService);
   private readonly libraryService = inject(LibraryService);
   private readonly dialogLauncher = inject(DialogLauncherService);
   protected readonly userService = inject(UserService);
@@ -42,7 +40,7 @@ export class MainDashboardComponent {
   protected readonly overlayPreferenceService = inject(BookCardOverlayPreferenceService);
 
   readonly dashboardConfig = this.dashboardConfigService.config;
-  readonly isBooksLoading = this.bookService.isBooksLoading;
+  readonly isInitialLoading = this.libraryService.isLibrariesLoading;
   readonly isLibrariesEmpty = computed(() =>
     !this.libraryService.isLibrariesLoading() && this.libraryService.libraries().length === 0
   );

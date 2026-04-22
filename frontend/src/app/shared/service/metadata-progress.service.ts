@@ -3,6 +3,7 @@ import {BehaviorSubject, Subject, Subscription} from 'rxjs';
 import {MetadataBatchProgressNotification} from '../model/metadata-batch-progress.model';
 import {MetadataTaskService} from '../../features/book/service/metadata-task';
 import {UserService} from '../../features/settings/user-management/user.service';
+import {BootstrapGateService} from './bootstrap-gate.service';
 
 @Injectable({providedIn: 'root'})
 export class MetadataProgressService implements OnDestroy {
@@ -16,6 +17,7 @@ export class MetadataProgressService implements OnDestroy {
 
   private metadataTaskService = inject(MetadataTaskService);
   private userService = inject(UserService);
+  private bootstrapGate = inject(BootstrapGateService);
 
   private subscriptions = new Subscription();
   private hasInitialized = false;
@@ -23,7 +25,8 @@ export class MetadataProgressService implements OnDestroy {
   constructor() {
     effect(() => {
       const user = this.userService.currentUser();
-      if (this.hasInitialized || !user) {
+      const bootstrapped = this.bootstrapGate.hasBootstrapped();
+      if (this.hasInitialized || !user || !bootstrapped) {
         return;
       }
       this.hasInitialized = true;

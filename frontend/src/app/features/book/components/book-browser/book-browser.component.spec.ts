@@ -499,6 +499,68 @@ describe('BookBrowserComponent', () => {
     expect(collapseBooksSpy).toHaveBeenCalled();
   });
 
+  it('auto-fetches the next page when the collapsed book list is shorter than the viewport', () => {
+    const {component} = createHarness();
+    const appBooksApi = TestBed.inject(AppBooksApiService);
+    const filter = TestBed.inject(SeriesCollapseFilter);
+
+    vi.spyOn(filter, 'collapseBooks').mockImplementation((items: Book[]) => items.slice(0, 1));
+
+    vi.runOnlyPendingTimers();
+    TestBed.flushEffects();
+
+    // @ts-expect-error test helper
+    appBooksApi.setHasNextPage(true);
+    const fetchNextPageSpy = vi.spyOn(appBooksApi, 'fetchNextPage');
+
+    const mockElement = {
+      scrollTop: 0,
+      clientHeight: 10000,
+      clientWidth: 1000,
+      scrollHeight: 200,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement;
+
+    component.scrollContainerRef = {nativeElement: mockElement} as ElementRef<HTMLElement>;
+
+    vi.runOnlyPendingTimers();
+    TestBed.flushEffects();
+
+    expect(fetchNextPageSpy).toHaveBeenCalled();
+  });
+
+  it('stops the auto-fetch loop once hasNextPage is false', () => {
+    const {component} = createHarness();
+    const appBooksApi = TestBed.inject(AppBooksApiService);
+    const filter = TestBed.inject(SeriesCollapseFilter);
+
+    vi.spyOn(filter, 'collapseBooks').mockImplementation((items: Book[]) => items.slice(0, 1));
+
+    vi.runOnlyPendingTimers();
+    TestBed.flushEffects();
+
+    // @ts-expect-error test helper
+    appBooksApi.setHasNextPage(false);
+    const fetchNextPageSpy = vi.spyOn(appBooksApi, 'fetchNextPage');
+
+    const mockElement = {
+      scrollTop: 0,
+      clientHeight: 10000,
+      clientWidth: 1000,
+      scrollHeight: 200,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement;
+
+    component.scrollContainerRef = {nativeElement: mockElement} as ElementRef<HTMLElement>;
+
+    vi.runOnlyPendingTimers();
+    TestBed.flushEffects();
+
+    expect(fetchNextPageSpy).not.toHaveBeenCalled();
+  });
+
   it('triggers next page fetch when scrolled near the bottom of rendered content', async () => {
     const {component} = createHarness();
     const appBooksApi = TestBed.inject(AppBooksApiService);

@@ -14,6 +14,25 @@ export function initializeAuthFactory() {
     const queryClient = inject(QueryClient);
 
     const settingsPromise = queryClient.fetchQuery(appSettingsService.getPublicSettingsQueryOptions());
+
+    // If we already have an internal token, we don't want to block bootstrap on public-settings.
+    // We can assume internal auth for now and let the settings fetch complete in the background.
+    if (authService.getInternalAccessToken()) {
+      websocketInitializer(authService)();
+      authInitService.markAsInitialized();
+
+      // Still handle the settings result in the background to check for remote auth status
+      settingsPromise.then(publicSettings => {
+        if (publicSettings?.remoteAuthEnabled) {
+          authService.remoteLogin().subscribe({
+            error: err => console.error('[Remote Login] background refresh failed:', err)
+          });
+        }
+      });
+
+      return Promise.resolve();
+    }
+
     const timeoutPromise = new Promise<null>(resolve =>
       setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)
     );

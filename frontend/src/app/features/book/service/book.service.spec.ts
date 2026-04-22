@@ -5,10 +5,13 @@ import {TranslocoService} from '@jsverse/transloco';
 import {MessageService} from 'primeng/api';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
+import {signal} from '@angular/core';
+
 import {createAuthServiceStub, createQueryClientHarness, flushSignalAndQueryEffects, flushQueryAsync} from '../../../core/testing/query-testing';
 import type {Book, BookMetadata} from '../model/book.model';
 import type {Shelf} from '../model/shelf.model';
 import {AuthService} from '../../../shared/service/auth.service';
+import {BootstrapGateService} from '../../../shared/service/bootstrap-gate.service';
 import {BookPatchService} from './book-patch.service';
 import {BOOKS_QUERY_KEY} from './book-query-keys';
 import {BookSocketService} from './book-socket.service';
@@ -101,6 +104,10 @@ describe('BookService', () => {
           useValue: {
             translate: vi.fn((key: string) => key),
           },
+        },
+        {
+          provide: BootstrapGateService,
+          useValue: {hasBootstrapped: signal(true), markBootstrapped: vi.fn()},
         },
       ],
     });

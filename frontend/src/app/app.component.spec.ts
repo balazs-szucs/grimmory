@@ -17,6 +17,7 @@ import { LibraryService } from "./features/book/service/library.service";
 import { LibraryHealthService } from "./features/book/service/library-health.service";
 import { LibraryLoadingService } from "./features/library-creator/library-loading.service";
 import { AuthService } from "./shared/service/auth.service";
+import { BootstrapGateService } from "./shared/service/bootstrap-gate.service";
 import { ConfirmationService } from "primeng/api";
 import { MessageService } from "primeng/api";
 
@@ -114,6 +115,10 @@ describe("AppComponent", () => {
         { provide: LibraryHealthService, useValue: libraryHealthService },
         { provide: LibraryLoadingService, useValue: libraryLoadingService },
         { provide: AuthService, useValue: authService },
+        {
+          provide: BootstrapGateService,
+          useValue: { hasBootstrapped: signal(true), markBootstrapped: vi.fn() },
+        },
         ConfirmationService,
         MessageService],
     });

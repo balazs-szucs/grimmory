@@ -6,6 +6,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {MetadataBatchProgressNotification, MetadataBatchStatus} from '../model/metadata-batch-progress.model';
 import {MetadataTaskService} from '../../features/book/service/metadata-task';
 import {UserService} from '../../features/settings/user-management/user.service';
+import {BootstrapGateService} from './bootstrap-gate.service';
 import {MetadataProgressService} from './metadata-progress.service';
 
 describe('MetadataProgressService', () => {
@@ -52,6 +53,10 @@ describe('MetadataProgressService', () => {
         {
           provide: UserService,
           useValue: {currentUser},
+        },
+        {
+          provide: BootstrapGateService,
+          useValue: {hasBootstrapped: signal(true), markBootstrapped: vi.fn()},
         },
       ],
     });

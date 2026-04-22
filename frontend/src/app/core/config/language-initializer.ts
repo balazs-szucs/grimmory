@@ -1,6 +1,5 @@
 import {inject} from '@angular/core';
 import {TranslocoService} from '@jsverse/transloco';
-import {firstValueFrom} from 'rxjs';
 import {AVAILABLE_LANGS} from './transloco-loader';
 
 // TODO(grimmory-cleanup): Remove after the Booklore-to-Grimmory localStorage migration window closes.
@@ -33,6 +32,8 @@ export function initializeLanguage() {
     const lang = detectLanguage(AVAILABLE_LANGS);
     translocoService.setActiveLang(lang);
     localStorage.setItem(LANG_STORAGE_KEY, lang);
-    return firstValueFrom(translocoService.load(lang));
+    // Don't return the promise to avoid blocking bootstrap. 
+    // Transloco handles missing translations during load with fallback or empty strings.
+    return Promise.resolve();
   };
 }
