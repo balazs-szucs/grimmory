@@ -758,6 +758,83 @@
   font-weight: 500;
 }
 
+// Skeleton Loader Styles
+.skeleton-container {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.skeleton-cover-box {
+  width: 250px;
+  height: 350px;
+  background: var(--p-surface-800);
+  border-radius: 12px;
+  animation: viewer-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+.skeleton-title-line {
+  width: 70%;
+  height: 2rem;
+  background: var(--p-surface-800);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+  animation: viewer-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+.skeleton-author-line {
+  width: 40%;
+  height: 1.25rem;
+  background: var(--p-surface-800);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  animation: viewer-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+.skeleton-grid-box {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.skeleton-grid-item {
+  width: 80%;
+  height: 1rem;
+  background: var(--p-surface-800);
+  border-radius: 4px;
+  animation: viewer-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+.skeleton-header-line {
+  width: 150px;
+  height: 1.25rem;
+  background: var(--p-surface-800);
+  border-radius: 4px;
+  animation: viewer-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+.skeleton-desc-line {
+  width: 100%;
+  height: 0.875rem;
+  background: var(--p-surface-800);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  animation: viewer-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+
+  &.half { width: 60%; }
+}
+
+@keyframes viewer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
 ::ng-deep p-togglebutton.my-visibility-toggle span[data-pc-section="label"] {
   display: none;
   padding: 0 !important;

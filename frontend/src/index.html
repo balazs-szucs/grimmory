@@ -16,6 +16,47 @@
   <link rel="dns-prefetch" href="https://books.google.com">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
   <link rel="preload" href="media/primeicons-4GST5W3O.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <script>
+    (function() {
+      try {
+        const token = localStorage.getItem('accessToken_Internal');
+        if (!token) return;
+
+        // 1. Preload User Profile (Parallelize with JS load)
+        const userLink = document.createElement('link');
+        userLink.rel = 'preload';
+        userLink.as = 'fetch';
+        userLink.href = '/api/v1/users/me';
+        userLink.crossOrigin = 'anonymous';
+        document.head.appendChild(userLink);
+
+        // 2. Preload Main Book List (The primary bottleneck)
+        const booksLink = document.createElement('link');
+        booksLink.rel = 'preload';
+        booksLink.as = 'fetch';
+        booksLink.href = '/api/v1/books?stripForListView=true&includeDescription=false';
+        booksLink.crossOrigin = 'anonymous';
+        document.head.appendChild(booksLink);
+
+        // 3. Predictive LCP Preload (The cover image)
+        const rawCandidate = localStorage.getItem('lcp_book_candidate');
+        if (rawCandidate) {
+          const candidate = JSON.parse(rawCandidate);
+          const updatedOn = candidate.isAudio ? candidate.audioUpdatedOn : candidate.updatedOn;
+          if (updatedOn) {
+            const endpoint = candidate.isAudio ? 'audiobook-thumbnail' : 'thumbnail';
+            const imageUrl = '/api/v1/media/book/' + candidate.id + '/' + endpoint + '?' + updatedOn + '&w=240&token=' + token;
+            const imgLink = document.createElement('link');
+            imgLink.rel = 'preload';
+            imgLink.as = 'image';
+            imgLink.href = imageUrl;
+            imgLink.fetchPriority = 'high';
+            document.head.appendChild(imgLink);
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
 </head>
 

@@ -4,12 +4,14 @@ import {UserService} from '../../features/settings/user-management/user.service'
 import {QueryClient} from '@tanstack/angular-query-experimental';
 import {BookService} from '../../features/book/service/book.service';
 import {API_CONFIG} from '../../core/config/api-config';
+import {AppSettingsService} from './app-settings.service';
 
 @Injectable({providedIn: 'root'})
 export class StartupService {
   private authService = inject(AuthService);
   private userService = inject(UserService);
   private bookService = inject(BookService);
+  private settingsService = inject(AppSettingsService);
   private queryClient = inject(QueryClient);
 
   load(): Promise<void> {
@@ -21,9 +23,24 @@ export class StartupService {
       void this.queryClient.prefetchQuery(this.userService.getUserQueryOptions());
       // Trigger the heavy book list fetch immediately to get it moving in parallel with chunk loading.
       void this.queryClient.prefetchQuery(this.bookService.getBooksQueryOptions());
+      // Prefetch app settings early
+      void this.queryClient.prefetchQuery(this.settingsService.getPublicSettingsQueryOptions());
+
+      // If we are landing on a book-specific route, prefetch that specific book metadata
+      const bookId = this.detectBookIdFromUrl();
+      if (bookId) {
+        void this.queryClient.prefetchQuery(this.bookService.bookDetailQueryOptions(bookId, true));
+      }
     }
 
     return Promise.resolve();
+  }
+
+  private detectBookIdFromUrl(): number | null {
+    const path = window.location.pathname;
+    // Matches /book/123, /pdf-reader/book/123, etc.
+    const match = path.match(/\/book\/(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
   }
 
   private predictivePreloadLcp(token: string): void {

@@ -1002,8 +1002,30 @@
     </p-dialog>
   </div>
 } @else {
-  <div class="loading-state" *transloco="let t; prefix: 'metadata.viewer'">
-    <p-progressSpinner strokeWidth="4" fill="transparent" animationDuration=".8s"></p-progressSpinner>
-    <p class="loading-text">{{ t('loadingBookDetails') }}</p>
+  <div class="metadata-viewer-container skeleton-container">
+    <div class="metadata-header">
+      <div class="cover-section">
+        <div class="skeleton-cover-box"></div>
+      </div>
+      <div class="info-section">
+        <div class="title-group">
+          <div class="skeleton-title-line"></div>
+          <div class="skeleton-author-line"></div>
+        </div>
+        <div class="skeleton-grid-box">
+          @for (i of [1,2,3,4,5,6]; track i) {
+            <div class="skeleton-grid-item"></div>
+          }
+        </div>
+      </div>
+    </div>
+    <div class="description-section">
+      <div class="section-header skeleton-header-line"></div>
+      <div class="description-body">
+        <div class="skeleton-desc-line"></div>
+        <div class="skeleton-desc-line"></div>
+        <div class="skeleton-desc-line half"></div>
+      </div>
+    </div>
   </div>
 }
