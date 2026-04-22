@@ -116,7 +116,7 @@ export class BookService {
     });
   }
 
-  private getBooksQueryOptions() {
+  getBooksQueryOptions() {
     return queryOptions({
       queryKey: BOOKS_QUERY_KEY,
       queryFn: () => lastValueFrom(this.http.get<Book[]>(this.url, {params: {stripForListView: true}})),

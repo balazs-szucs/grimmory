@@ -22,7 +22,6 @@ import {Book} from '../../../book/model/book.model';
   imports: [
     Button,
     DashboardScrollerComponent,
-    ProgressSpinner,
     Tooltip,
     TranslocoDirective
   ],
