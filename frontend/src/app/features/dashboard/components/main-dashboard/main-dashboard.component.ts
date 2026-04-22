@@ -2,7 +2,6 @@ import {ChangeDetectionStrategy, Component, computed, inject} from '@angular/cor
 import {Button} from 'primeng/button';
 import {DashboardScrollerComponent} from '../dashboard-scroller/dashboard-scroller.component';
 import {UserService} from '../../../settings/user-management/user.service';
-import {ProgressSpinner} from 'primeng/progressspinner';
 import {Tooltip} from 'primeng/tooltip';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {DashboardConfigService} from '../../services/dashboard-config.service';

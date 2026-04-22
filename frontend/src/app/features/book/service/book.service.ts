@@ -119,7 +119,11 @@ export class BookService {
   getBooksQueryOptions() {
     return queryOptions({
       queryKey: BOOKS_QUERY_KEY,
-      queryFn: () => lastValueFrom(this.http.get<Book[]>(this.url, {params: {stripForListView: true}})),
+      queryFn: () => lastValueFrom(this.http.get<Book[]>(this.url, {
+        params: new HttpParams()
+          .set('stripForListView', 'true')
+          .set('includeDescription', 'false')
+      })),
       staleTime: 5 * 60_000,
     });
   }

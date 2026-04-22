@@ -1,4 +1,4 @@
-import {computed, inject, Injectable} from '@angular/core';
+import {computed, effect, inject, Injectable} from '@angular/core';
 import {BookService} from '../../book/service/book.service';
 import {Book, ReadStatus} from '../../book/model/book.model';
 import {MagicShelfService} from '../../magic-shelf/service/magic-shelf.service';
@@ -38,6 +38,29 @@ export class DashboardBookService {
 
     return scrollerMap;
   });
+
+  constructor() {
+    // Track the LCP candidate (first book in the first scroller) to preload it next session.
+    effect(() => {
+      const map = this.scrollerBooksMap();
+      const config = this.configService.config();
+      if (map.size === 0) return;
+
+      const firstEnabledScroller = config.scrollers.find(s => s.enabled);
+      if (!firstEnabledScroller) return;
+
+      const firstBook = map.get(firstEnabledScroller.id)?.[0];
+      if (firstBook) {
+        const candidate = {
+          id: firstBook.id,
+          updatedOn: firstBook.metadata?.coverUpdatedOn,
+          audioUpdatedOn: firstBook.metadata?.audiobookCoverUpdatedOn,
+          isAudio: firstBook.primaryFile?.bookType === 'AUDIOBOOK'
+        };
+        localStorage.setItem('lcp_book_candidate', JSON.stringify(candidate));
+      }
+    });
+  }
 
   private getBooksForConfig(config: ScrollerConfig, books: Book[], magicShelves: {id?: number | null; filterJson: string}[]): Book[] {
     switch (config.type) {
