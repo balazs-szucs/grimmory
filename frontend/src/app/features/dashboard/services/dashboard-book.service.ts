@@ -1,39 +1,43 @@
-import {computed, effect, inject, Injectable} from '@angular/core';
+import {computed, effect, inject, Injectable, signal} from '@angular/core';
 import {BookService} from '../../book/service/book.service';
-import {Book, ReadStatus} from '../../book/model/book.model';
-import {MagicShelfService} from '../../magic-shelf/service/magic-shelf.service';
-import {BookRuleEvaluatorService} from '../../magic-shelf/service/book-rule-evaluator.service';
-import {SortService} from '../../book/service/sort.service';
-import {ScrollerConfig, ScrollerType} from '../models/dashboard-config.model';
-import {SortDirection, SortOption} from '../../book/model/sort.model';
+import {Book, BookType, ReadStatus} from '../../book/model/book.model';
 import {DashboardConfigService} from './dashboard-config.service';
-import {GroupRule} from '../../magic-shelf/component/magic-shelf-component';
-
-const DEFAULT_MAX_ITEMS = 20;
+import {HttpClient} from '@angular/common/http';
+import {API_CONFIG} from '../../../core/config/api-config';
+import {injectQuery, queryOptions} from '@tanstack/angular-query-experimental';
+import {lastValueFrom} from 'rxjs';
+import {AppBookSummary} from '../../book/model/app-book.model';
+import {AppDashboardResponse} from '../models/app-dashboard.model';
+import {AuthService} from '../../../shared/service/auth.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DashboardBookService {
+  private readonly http = inject(HttpClient);
+  private readonly authService = inject(AuthService);
   private readonly bookService = inject(BookService);
-  private readonly magicShelfService = inject(MagicShelfService);
-  private readonly ruleEvaluatorService = inject(BookRuleEvaluatorService);
-  private readonly sortService = inject(SortService);
   private readonly configService = inject(DashboardConfigService);
 
+  private readonly dashboardUrl = `${API_CONFIG.BASE_URL}/api/v1/app/dashboard`;
+
+  readonly dashboardQuery = injectQuery(() => ({
+    queryKey: ['app-dashboard', this.configService.config()] as const,
+    queryFn: () => lastValueFrom(this.http.get<AppDashboardResponse>(this.dashboardUrl)),
+    enabled: !!this.authService.token(),
+    staleTime: 2 * 60_000,
+  }));
+
   /**
-   * Computed map of scroller ID to its filtered book list.
-   * This centralizes all dashboard filtering logic and keeps it reactive.
+   * Computed map of scroller ID to its book list, fetched from the consolidated backend endpoint.
    */
   readonly scrollerBooksMap = computed(() => {
-    const config = this.configService.config();
-    const books = this.bookService.books();
-    const shelves = this.magicShelfService.shelves();
+    const data = this.dashboardQuery.data();
     const scrollerMap = new Map<string, Book[]>();
+    if (!data) return scrollerMap;
 
-    for (const scroller of config.scrollers) {
-      if (!scroller.enabled) continue;
-      scrollerMap.set(scroller.id, this.getBooksForConfig(scroller, books, shelves));
+    for (const [id, summaries] of Object.entries(data.scrollers)) {
+      scrollerMap.set(id, summaries.map(summaryToBook));
     }
 
     return scrollerMap;
@@ -61,131 +65,46 @@ export class DashboardBookService {
       }
     });
   }
-
-  private getBooksForConfig(config: ScrollerConfig, books: Book[], magicShelves: {id?: number | null; filterJson: string}[]): Book[] {
-    switch (config.type) {
-      case ScrollerType.LAST_READ:
-        return this.getLastReadBooks(books, config.maxItems || DEFAULT_MAX_ITEMS);
-      case ScrollerType.LAST_LISTENED:
-        return this.getLastListenedBooks(books, config.maxItems || DEFAULT_MAX_ITEMS);
-      case ScrollerType.LATEST_ADDED:
-        return this.getLatestAddedBooks(books, config.maxItems || DEFAULT_MAX_ITEMS);
-      case ScrollerType.RANDOM:
-        return this.getRandomBooks(books, config.maxItems || DEFAULT_MAX_ITEMS);
-      case ScrollerType.MAGIC_SHELF:
-        return this.getMagicShelfBooks(config, books, magicShelves);
-      default:
-        return [];
-    }
-  }
-
-  private getLastReadBooks(books: Book[], maxItems: number): Book[] {
-    const recentBooks = books.filter(book =>
-      book.lastReadTime &&
-      (book.readStatus === ReadStatus.READING || book.readStatus === ReadStatus.RE_READING || book.readStatus === ReadStatus.PAUSED) &&
-      this.hasEbookProgress(book)
-    );
-
-    return recentBooks.sort((a, b) => {
-      const aTime = new Date(a.lastReadTime!).getTime();
-      const bTime = new Date(b.lastReadTime!).getTime();
-      return bTime - aTime;
-    }).slice(0, maxItems);
-  }
-
-  private getLastListenedBooks(books: Book[], maxItems: number): Book[] {
-    const recentBooks = books.filter(book =>
-      book.lastReadTime &&
-      (book.readStatus === ReadStatus.READING || book.readStatus === ReadStatus.RE_READING || book.readStatus === ReadStatus.PAUSED) &&
-      book.audiobookProgress
-    );
-
-    return recentBooks.sort((a, b) => {
-      const aTime = new Date(a.lastReadTime!).getTime();
-      const bTime = new Date(b.lastReadTime!).getTime();
-      return bTime - aTime;
-    }).slice(0, maxItems);
-  }
-
-  private hasEbookProgress(book: Book): boolean {
-    return !!(book.epubProgress || book.pdfProgress || book.cbxProgress || book.koreaderProgress || book.koboProgress);
-  }
-
-  private getLatestAddedBooks(books: Book[], maxItems: number): Book[] {
-    const addedBooks = books.filter(book => book.addedOn);
-
-    return addedBooks.sort((a, b) => {
-      const aTime = new Date(a.addedOn!).getTime();
-      const bTime = new Date(b.addedOn!).getTime();
-      return bTime - aTime;
-    }).slice(0, maxItems);
-  }
-
-  private getRandomBooks(books: Book[], maxItems: number): Book[] {
-    const excludedStatuses = new Set<ReadStatus>([
-      ReadStatus.READ,
-      ReadStatus.PARTIALLY_READ,
-      ReadStatus.READING,
-      ReadStatus.PAUSED,
-      ReadStatus.WONT_READ,
-      ReadStatus.ABANDONED
-    ]);
-
-    const candidates = books.filter(book =>
-      !book.readStatus || !excludedStatuses.has(book.readStatus)
-    );
-
-    return this.shuffleBooks(candidates, maxItems);
-  }
-
-  private getMagicShelfBooks(
-    config: ScrollerConfig,
-    books: Book[],
-    magicShelves: {id?: number | null; filterJson: string}[]
-  ): Book[] {
-    const shelf = magicShelves.find(currentShelf => currentShelf.id === config.magicShelfId);
-    if (!shelf) {
-      return [];
-    }
-
-    let group: GroupRule;
-    try {
-      group = JSON.parse(shelf.filterJson);
-    } catch (e) {
-      console.error('Invalid filter JSON', e);
-      return [];
-    }
-
-    let filteredBooks = books.filter(book =>
-      this.ruleEvaluatorService.evaluateGroup(book, group, books)
-    );
-
-    if (config.sortField && config.sortDirection) {
-      const sortOption = this.createSortOption(config.sortField, config.sortDirection);
-      filteredBooks = this.sortService.applySort(filteredBooks, sortOption);
-    }
-
-    if (config.maxItems) {
-      filteredBooks = filteredBooks.slice(0, config.maxItems);
-    }
-
-    return filteredBooks;
-  }
-
-  private createSortOption(field: string, direction: string): SortOption {
-    return {
-      field,
-      direction: direction === 'asc' ? SortDirection.ASCENDING : SortDirection.DESCENDING,
-      label: ''
-    };
-  }
-
-  private shuffleBooks(books: Book[], maxItems: number): Book[] {
-    const shuffled = [...books];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled.slice(0, maxItems);
-  }
 }
+
+/**
+ * Maps a server-side AppBookSummary to a Book-shaped object
+ * compatible with BookCardComponent's @Input() book property.
+ * This is a duplicated utility from AppBooksApiService to avoid circular dependencies.
+ */
+function summaryToBook(summary: AppBookSummary): Book {
+  return {
+    id: summary.id,
+    libraryId: summary.libraryId,
+    readStatus: (summary.readStatus as ReadStatus) ?? ReadStatus.UNSET,
+    personalRating: summary.personalRating ?? 0,
+    addedOn: summary.addedOn,
+    lastReadTime: summary.lastReadTime,
+    isPhysical: summary.isPhysical ?? false,
+    fileSizeKb: summary.fileSizeKb ?? undefined,
+    metadataMatchScore: summary.metadataMatchScore,
+    metadata: {
+      bookId: summary.id,
+      title: summary.title,
+      authors: summary.authors ?? [],
+      seriesName: summary.seriesName,
+      seriesNumber: summary.seriesNumber,
+      coverUpdatedOn: summary.coverUpdatedOn,
+      audiobookCoverUpdatedOn: summary.audiobookCoverUpdatedOn,
+      publishedDate: summary.publishedDate ?? undefined,
+      pageCount: summary.pageCount,
+      ageRating: summary.ageRating,
+      contentRating: summary.contentRating,
+    },
+    primaryFile: summary.primaryFileType
+      ? {bookType: summary.primaryFileType as BookType, extension: summary.primaryFileType.toLowerCase()}
+      : null,
+    pdfProgress: summary.readProgress != null
+      ? {page: 0, percentage: summary.readProgress}
+      : null,
+    epubProgress: null,
+    cbxProgress: null,
+    shelves: [],
+  } as unknown as Book;
+}
+

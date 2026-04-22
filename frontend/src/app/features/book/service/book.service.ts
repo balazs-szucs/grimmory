@@ -139,6 +139,14 @@ export class BookService {
     });
   }
 
+  bookContextQueryOptions(bookId: number) {
+    return queryOptions({
+      queryKey: ['book-context', bookId] as const,
+      queryFn: () => lastValueFrom(this.http.get<import('../model/app-book-context.model').AppBookContextResponse>(`${API_CONFIG.BASE_URL}/api/v1/app/books/${bookId}/context`)),
+      staleTime: 5 * 60_000,
+    });
+  }
+
   ensureBookDetail(bookId: number, withDescription: boolean): Promise<Book> {
     return this.queryClient.ensureQueryData(this.bookDetailQueryOptions(bookId, withDescription));
   }

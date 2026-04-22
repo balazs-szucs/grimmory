@@ -26,10 +26,10 @@ export class StartupService {
       // Prefetch app settings early
       void this.queryClient.prefetchQuery(this.settingsService.getPublicSettingsQueryOptions());
 
-      // If we are landing on a book-specific route, prefetch that specific book metadata
+      // If we are landing on a book-specific route, prefetch that specific book context
       const bookId = this.detectBookIdFromUrl();
       if (bookId) {
-        void this.queryClient.prefetchQuery(this.bookService.bookDetailQueryOptions(bookId, true));
+        void this.queryClient.prefetchQuery(this.bookService.bookContextQueryOptions(bookId));
       }
     }
 

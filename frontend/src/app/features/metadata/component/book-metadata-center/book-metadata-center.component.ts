@@ -48,22 +48,25 @@ export class BookMetadataCenterComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
 
   private currentBookId = signal<number | null>(this.config?.data?.bookId ?? null);
-  private bookQuery = injectQuery(() => {
+  private contextQuery = injectQuery(() => {
     const bookId = this.currentBookId();
 
     if (bookId == null) {
       return {
-        queryKey: ['books', 'detail', -1, true] as const,
-        queryFn: async (): Promise<Book> => {
+        queryKey: ['book-context', -1] as const,
+        queryFn: async (): Promise<import('../../model/app-book-context.model').AppBookContextResponse> => {
           throw new Error('No book selected');
         },
         enabled: false,
       };
     }
 
-    return this.bookService.bookDetailQueryOptions(bookId, true);
+    return this.bookService.bookContextQueryOptions(bookId);
   });
-  readonly book = computed(() => this.bookQuery.data() ?? null);
+
+  readonly book = computed(() => this.contextQuery.data()?.book ?? null);
+  readonly context = computed(() => this.contextQuery.data() ?? null);
+
   private readonly fetchRecommendations = effect(() => {
     const bookId = this.currentBookId();
     if (bookId == null) {

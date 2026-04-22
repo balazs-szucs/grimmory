@@ -30,13 +30,20 @@
         userLink.crossOrigin = 'anonymous';
         document.head.appendChild(userLink);
 
-        // 2. Preload Main Book List (The primary bottleneck)
-        const booksLink = document.createElement('link');
-        booksLink.rel = 'preload';
-        booksLink.as = 'fetch';
-        booksLink.href = '/api/v1/books?stripForListView=true&includeDescription=false';
-        booksLink.crossOrigin = 'anonymous';
-        document.head.appendChild(booksLink);
+        // 2. Preload Consolidated Context (Dashboard or specific Book)
+        const path = window.location.pathname;
+        const bookMatch = path.match(/\/book\/(\d+)/);
+        const dashLink = document.createElement('link');
+        dashLink.rel = 'preload';
+        dashLink.as = 'fetch';
+        dashLink.crossOrigin = 'anonymous';
+
+        if (bookMatch) {
+          dashLink.href = '/api/v1/app/books/' + bookMatch[1] + '/context';
+        } else {
+          dashLink.href = '/api/v1/app/dashboard';
+        }
+        document.head.appendChild(dashLink);
 
         // 3. Predictive LCP Preload (The cover image)
         const rawCandidate = localStorage.getItem('lcp_book_candidate');
