@@ -8,6 +8,7 @@ import {BookMetadataManageService} from '../../service/book-metadata-manage.serv
 import {debounceTime, distinctUntilChanged, filter, map, take} from 'rxjs/operators';
 import {combineLatest, finalize} from 'rxjs';
 import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {DialogOpenHandle} from '../../../../shared/models/dialog-open-handle.model';
 import {Library} from '../../model/library.model';
 import {SortDirection, SortOption} from '../../model/sort.model';
 import {Book} from '../../model/book.model';
@@ -1101,10 +1102,10 @@ export class BookBrowserComponent implements AfterViewInit {
   openShelfAssigner(): void {
     const selectedBooks = this.selectedBooks();
     if (selectedBooks.size === 0) return;
-    this.dialogHelperService.openShelfAssignerDialog(null, selectedBooks).then(ref => {
-      this.dynamicDialogRef = ref;
-      if (this.dynamicDialogRef) {
-        this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(result => {
+    this.dialogHelperService.openShelfAssignerDialog(null, selectedBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(result => {
           if (result?.assigned) {
             this.bookSelectionService.deselectAll();
           }
@@ -1116,10 +1117,10 @@ export class BookBrowserComponent implements AfterViewInit {
   lockUnlockMetadata(): void {
     const selectedBooks = this.selectedBooks();
     if (selectedBooks.size === 0) return;
-    this.dialogHelperService.openLockUnlockMetadataDialog(selectedBooks).then(ref => {
-      this.dynamicDialogRef = ref;
-      if (this.dynamicDialogRef) {
-        this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(() => {
+    this.dialogHelperService.openLockUnlockMetadataDialog(selectedBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
+      if (handle) {
+        handle.result.then(() => {
           this.bookSelectionService.deselectAll();
         });
       }
@@ -1138,33 +1139,33 @@ export class BookBrowserComponent implements AfterViewInit {
   fetchMetadata(): void {
     const selectedBooks = this.selectedBooks();
     if (selectedBooks.size === 0) return;
-    this.dialogHelperService.openMetadataRefreshDialog(selectedBooks).then(ref => {
-      this.dynamicDialogRef = ref;
-      this.handleDialogClose();
+    this.dialogHelperService.openMetadataRefreshDialog(selectedBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
+      this.handleDialogClose(handle);
     });
   }
 
   bulkEditMetadata(): void {
     const selectedBooks = this.selectedBooks();
     if (selectedBooks.size === 0) return;
-    this.dialogHelperService.openBulkMetadataEditDialog(selectedBooks).then(ref => {
-      this.dynamicDialogRef = ref;
-      this.handleDialogClose();
+    this.dialogHelperService.openBulkMetadataEditDialog(selectedBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
+      this.handleDialogClose(handle);
     });
   }
 
   multiBookEditMetadata(): void {
     const selectedBooks = this.selectedBooks();
     if (selectedBooks.size === 0) return;
-    this.dialogHelperService.openMultibookMetadataEditorDialog(selectedBooks).then(ref => {
-      this.dynamicDialogRef = ref;
-      this.handleDialogClose();
+    this.dialogHelperService.openMultibookMetadataEditorDialog(selectedBooks).then(handle => {
+      this.dynamicDialogRef = handle?.ref;
+      this.handleDialogClose(handle);
     });
   }
 
-  private handleDialogClose(): void {
-    if (this.dynamicDialogRef) {
-      this.dynamicDialogRef.onClose.pipe(take(1)).subscribe(() => {
+  private handleDialogClose(handle: DialogOpenHandle<void> | null): void {
+    if (handle) {
+      handle.result.then(() => {
         this.bookSelectionService.deselectAll();
       });
     }
