@@ -53,7 +53,8 @@ export class ShelfService {
   private getShelvesQueryOptions() {
     return queryOptions({
       queryKey: SHELVES_QUERY_KEY,
-      queryFn: () => lastValueFrom(this.http.get<Shelf[]>(this.url))
+      queryFn: () => lastValueFrom(this.http.get<Shelf[]>(this.url)),
+      staleTime: 5 * 60_000,
     });
   }
 

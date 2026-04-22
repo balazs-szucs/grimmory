@@ -30,7 +30,9 @@ export function initializeAuthFactory() {
     });
 
     const finalizeAuth = (data?: AppBootstrapResponse) => {
+      console.log('[Auth] Finalizing auth with data:', data ? 'present' : 'missing');
       if (data) {
+        console.log('[Auth] Seeding caches: user=', data.user?.username, 'libraries=', data.libraries?.length, 'shelves=', data.shelves?.length);
         // Seed the individual caches with the consolidated data
         queryClient.setQueryData(CURRENT_USER_QUERY_KEY, data.user);
         queryClient.setQueryData(PUBLIC_SETTINGS_QUERY_KEY, data.publicSettings);
@@ -40,15 +42,20 @@ export function initializeAuthFactory() {
       }
 
       if (authService.getInternalAccessToken()) {
+        console.log('[Auth] Found internal access token, initializing WS');
         authService.initializeWebSocketConnection();
       }
       authInitService.markAsInitialized();
     };
 
+    console.log('[Auth] Starting consolidated bootstrap fetch...');
     // We MUST fetch bootstrap data before proceeding to ensure guards and components have settings/session state.
     const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);
     const timeoutPromise = new Promise<null>(resolve =>
-      setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)
+      setTimeout(() => {
+        console.warn('[Auth] Bootstrap fetch reached 10s timeout');
+        resolve(null);
+      }, SETTINGS_TIMEOUT_MS)
     );
 
     return Promise.race([bootstrapPromise, timeoutPromise])
@@ -58,10 +65,12 @@ export function initializeAuthFactory() {
       })
       .then(data => {
         if (!data) {
-          console.warn('[Auth] Bootstrap fetch timed out or failed, proceeding with limited state');
+          console.warn('[Auth] Proceeding with limited state due to bootstrap failure/timeout');
           finalizeAuth();
           return;
         }
+
+        console.log('[Auth] Bootstrap data received successfully');
 
         // If we have a potential remote auth but no local token, try to login automatically
         if (data.publicSettings?.remoteAuthEnabled && !authService.getInternalAccessToken()) {

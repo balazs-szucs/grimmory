@@ -11,21 +11,12 @@
   <link rel="dns-prefetch" href="https://www.amazon.com">
   <link rel="dns-prefetch" href="https://books.google.com">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
+  <link rel="preconnect" href="https://booklore.szucsb.eu">
   <link rel="preload" href="media/primeicons-4GST5W3O.woff2" as="font" type="font/woff2" crossorigin="anonymous">
   <script>
     (function() {
       try {
         const token = localStorage.getItem('accessToken_Internal');
-
-        // 1. Preload Consolidated Bootstrap (Parallelize with JS load)
-        const bootLink = document.createElement('link');
-        bootLink.rel = 'preload';
-        bootLink.as = 'fetch';
-        bootLink.href = '/api/v1/app/bootstrap';
-        // 'anonymous' maps to 'same-origin' credentials, matching Angular's default.
-        bootLink.crossOrigin = 'anonymous';
-        document.head.appendChild(bootLink);
-
         if (!token) return;
 
         // 2. Predictive LCP Preload (The cover image)

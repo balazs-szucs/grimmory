@@ -58,7 +58,8 @@ export class LibraryService {
       queryFn: async () => {
         const libraries = await lastValueFrom(this.http.get<Library[]>(this.url));
         return this.sortLibraries(libraries);
-      }
+      },
+      staleTime: 5 * 60_000,
     });
   }
 
