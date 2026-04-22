@@ -76,7 +76,9 @@ public class BookController {
             @RequestParam(required = false, defaultValue = "false") boolean withDescription,
             @Parameter(description = "Remove other metadata fields from the response")
             @RequestParam(required = false, defaultValue = "true") boolean stripForListView) {
-        return ResponseEntity.ok(bookService.getBookDTOs(withDescription, stripForListView));
+        return ResponseEntity.ok()
+                .header("Cache-Control", "private, max-age=60")
+                .body(bookService.getBookDTOs(withDescription, stripForListView));
     }
 
     @Operation(summary = "Get menu counts",
@@ -84,7 +86,9 @@ public class BookController {
     @ApiResponse(responseCode = "200", description = "Menu counts returned successfully")
     @GetMapping("/menu-counts")
     public ResponseEntity<MenuCountsResponse> getMenuCounts() {
-        return ResponseEntity.ok(menuCountsService.getMenuCounts());
+        return ResponseEntity.ok()
+                .header("Cache-Control", "private, max-age=60")
+                .body(menuCountsService.getMenuCounts());
     }
 
     @Operation(summary = "Get books (paginated)", description = "Retrieve a paginated list of books. Supports sorting via 'sort' parameter (e.g. sort=metadata.title,asc).")

@@ -181,16 +181,17 @@
   border-radius: 50%;
   background-color: #ef4444;
   animation: pulse 2s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 rgb(239 68 68 / 70%);
+    transform: scale(1);
   }
 
   50% {
-    opacity: 0.85;
-    box-shadow: 0 0 0 5px rgb(239 68 68 / 0%);
+    opacity: 0.7;
+    transform: scale(1.4);
   }
 }

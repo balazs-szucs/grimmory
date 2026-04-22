@@ -6,6 +6,7 @@
 
 .home-menu-section {
   position: relative;
+  min-height: 120px; /* Reserve space for Home, All Books, and Recent items */
 
   .sidebar-width-btn {
     position: absolute;

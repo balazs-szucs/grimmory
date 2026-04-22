@@ -43,6 +43,8 @@
   gap: 0.75rem;
   margin-left: auto;
   padding-left: 1rem;
+  min-height: 2.5rem; /* Reserve vertical space */
+  min-width: 440px;   /* Reserve horizontal space for the typical action groups */
 
   @media (width >= 768px) {
     display: flex;
@@ -52,6 +54,7 @@
 .topbar-action-group {
   display: flex;
   gap: 1rem;
+  min-height: 2.5rem;
 }
 
 .topbar-icon {
