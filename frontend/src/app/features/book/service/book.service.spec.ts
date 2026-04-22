@@ -148,8 +148,13 @@ describe('BookService', () => {
     ];
 
     expect(service.books()).toEqual([]);
-    expect(service.isBooksLoading()).toBe(true);
+    expect(service.isBooksLoading()).toBe(false);
     expect(service.booksError()).toBeNull();
+
+    service.requestMetadata();
+    flushSignalAndQueryEffects();
+
+    expect(service.isBooksLoading()).toBe(true);
 
     const request = httpTestingController.expectOne(req => req.url.endsWith('/api/v1/books'));
     expect(request.request.method).toBe('GET');
@@ -181,6 +186,7 @@ describe('BookService', () => {
     httpTestingController.expectNone(req => req.url.endsWith('/api/v1/books'));
 
     authService.token.set('token-123');
+    service.requestMetadata();
     flushSignalAndQueryEffects();
 
     const request = httpTestingController.expectOne(req => req.url.endsWith('/api/v1/books'));
@@ -195,6 +201,8 @@ describe('BookService', () => {
 
   it('surfaces query errors through booksError and clears the loading flag', async () => {
     setup();
+    service.requestMetadata();
+    flushSignalAndQueryEffects();
 
     const request = httpTestingController.expectOne(req => req.url.endsWith('/api/v1/books'));
     request.flush({message: 'boom'}, {status: 500, statusText: 'Server Error'});
@@ -207,6 +215,8 @@ describe('BookService', () => {
 
   it('removes a shelf from the cached books query without disturbing other shelf assignments', async () => {
     setup();
+    service.requestMetadata();
+    flushSignalAndQueryEffects();
 
     const targetShelf = buildShelf(10, {name: 'Favorites'});
     const untouchedShelf = buildShelf(11, {name: 'Archive'});
@@ -233,6 +243,8 @@ describe('BookService', () => {
 
   it('removes the books query cache when the auth token is cleared', async () => {
     setup();
+    service.requestMetadata();
+    flushSignalAndQueryEffects();
 
     const removeQueriesSpy = vi.spyOn(queryClientHarness.queryClient, 'removeQueries');
 

@@ -97,7 +97,7 @@ export class BookService {
     return error instanceof Error ? error.message : 'Failed to load books';
   });
 
-  isBooksLoading = computed(() => !!this.token() && this.booksQuery.isPending());
+  isBooksLoading = computed(() => this.booksQuery.isFetching());
 
   constructor() {
     effect(() => {
