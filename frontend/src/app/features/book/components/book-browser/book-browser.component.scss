@@ -80,6 +80,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  contain: layout;
 }
 
 // Header bar
@@ -568,6 +569,7 @@
 .filter-overlay-container {
   flex-shrink: 0;
   z-index: 50;
+  will-change: transform, width, opacity;
 
   @media (width <= 991px) {
     width: var(--sidebar-width, 225px);
@@ -579,22 +581,26 @@
     background-color: var(--card-background);
     box-shadow: -2px 0 10px rgb(0 0 0 / 15%);
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1001;
 
     &.active {
       transform: translateX(0);
-      margin-left: 0;
     }
   }
 
   @media (width >= 992px) {
     position: relative;
     overflow: hidden;
-    flex-shrink: 0;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+                margin 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s linear;
+    
+    // Reserve layout space to prevent CLS
+    contain: layout;
 
     &:not(.active) {
-      width: 0 !important;
+      width: 0;
       opacity: 0;
       pointer-events: none;
       margin-left: 0;

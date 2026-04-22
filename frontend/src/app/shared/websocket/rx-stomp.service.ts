@@ -22,7 +22,7 @@ export class RxStompService extends RxStomp {
   }
 
   private setupBfCacheListeners(): void {
-    if (typeof globalThis.window === 'undefined') return;
+    if (globalThis.window === undefined) return;
 
     globalThis.window.addEventListener('pagehide', () => {
       if (this.active) {

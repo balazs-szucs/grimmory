@@ -44,7 +44,7 @@ export class DialogLauncherService {
     return this.dialogService.open(component, {
       ...this.defaultDialogOptions,
       ...options,
-    }) as DynamicDialogRef | null;
+    });
   }
 
   async openDashboardSettingsDialog(): Promise<DynamicDialogRef | null> {
