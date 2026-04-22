@@ -16,35 +16,21 @@
     (function() {
       try {
         const token = localStorage.getItem('accessToken_Internal');
-        
+
         // 1. Preload Consolidated Bootstrap (Parallelize with JS load)
         const bootLink = document.createElement('link');
         bootLink.rel = 'preload';
         bootLink.as = 'fetch';
         bootLink.href = '/api/v1/app/bootstrap';
-        bootLink.crossOrigin = 'use-credentials';
+        // 'anonymous' maps to 'same-origin' credentials, matching Angular's default.
+        bootLink.crossOrigin = 'anonymous';
         document.head.appendChild(bootLink);
 
         if (!token) return;
 
-        // 2. Preload Consolidated Context (Dashboard or specific Book)
-        const path = window.location.pathname;
-        const bookMatch = path.match(/\/book\/(\d+)/);
-        const dashLink = document.createElement('link');
-        dashLink.rel = 'preload';
-        dashLink.as = 'fetch';
-        dashLink.crossOrigin = 'use-credentials';
-
-        if (bookMatch) {
-          dashLink.href = '/api/v1/app/books/' + bookMatch[1] + '/context';
-        } else {
-          dashLink.href = '/api/v1/app/dashboard';
-        }
-        document.head.appendChild(dashLink);
-
-        // 3. Predictive LCP Preload (The cover image)
+        // 2. Predictive LCP Preload (The cover image)
+        const rawCandidate = localStorage.getItem('lcp_book_candidate');
         if (rawCandidate) {
-          const candidate = JSON.parse(rawCandidate);
           const updatedOn = candidate.isAudio ? candidate.audioUpdatedOn : candidate.updatedOn;
           if (updatedOn) {
             const endpoint = candidate.isAudio ? 'audiobook-thumbnail' : 'thumbnail';

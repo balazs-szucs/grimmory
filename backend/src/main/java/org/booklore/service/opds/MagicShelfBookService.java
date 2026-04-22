@@ -74,8 +74,7 @@ public class MagicShelfBookService {
         try {
             GroupRule groupRule = objectMapper.readValue(access.shelf().getFilterJson(), GroupRule.class);
             Specification<BookEntity> specification = ruleEvaluatorService.toSpecification(groupRule, userId)
-                    .and(AppBookSpecification.notDeleted())
-                    .and(AppBookSpecification.hasDigitalFile());
+                    .and(AppBookSpecification.notDeleted());
             
             if (access.user() == null) {
                 return specification;

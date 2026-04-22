@@ -3,6 +3,7 @@ package org.booklore.app.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.booklore.app.dto.AppBookSummary;
 import org.booklore.app.dto.AppDashboardResponse;
 import org.booklore.app.service.AppBookService;
@@ -21,6 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/app/dashboard")
 @Tag(name = "App Dashboard", description = "Consolidated endpoints for the app dashboard experience")
+@Slf4j
 public class AppDashboardController {
 
     private final AppBookService mobileBookService;
@@ -47,19 +49,25 @@ public class AppDashboardController {
                 continue;
             }
 
-            List<AppBookSummary> books = switch (scroller.getType()) {
-                case "LAST_READ" -> mobileBookService.getContinueReading(scroller.getMaxItems());
-                case "LAST_LISTENED" -> mobileBookService.getContinueListening(scroller.getMaxItems());
-                case "LATEST_ADDED", "RECENTLY_ADDED" -> mobileBookService.getRecentlyAdded(scroller.getMaxItems());
-                case "RECENTLY_SCANNED" -> mobileBookService.getRecentlyScanned(scroller.getMaxItems());
-                case "RANDOM" -> mobileBookService.getRandomBooks(0, scroller.getMaxItems(), null).getContent();
-                case "MAGIC_SHELF" -> {
+            String type = scroller.getType();
+            if (type == null) continue;
+
+            List<AppBookSummary> books = switch (type) {
+                case "lastRead", "LAST_READ" -> mobileBookService.getContinueReading(scroller.getMaxItems());
+                case "lastListened", "LAST_LISTENED" -> mobileBookService.getContinueListening(scroller.getMaxItems());
+                case "latestAdded", "LATEST_ADDED", "RECENTLY_ADDED" -> mobileBookService.getRecentlyAdded(scroller.getMaxItems());
+                case "recentlyScanned", "RECENTLY_SCANNED" -> mobileBookService.getRecentlyScanned(scroller.getMaxItems());
+                case "random", "RANDOM" -> mobileBookService.getRandomBooks(0, scroller.getMaxItems(), null).getContent();
+                case "magicShelf", "MAGIC_SHELF" -> {
                     if (scroller.getMagicShelfId() != null) {
                         yield mobileBookService.getBooksByMagicShelf(scroller.getMagicShelfId(), 0, scroller.getMaxItems()).getContent();
                     }
                     yield List.of();
                 }
-                default -> List.of();
+                default -> {
+                    log.warn("[Dashboard] Unknown scroller type: {}", type);
+                    yield List.of();
+                }
             };
 
             scrollerData.put(scroller.getId(), books);

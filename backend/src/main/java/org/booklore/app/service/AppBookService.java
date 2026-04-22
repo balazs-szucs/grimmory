@@ -310,9 +310,7 @@ public class AppBookService {
 
         Specification<BookEntity> spec = AppBookSpecification.combine(
                 AppBookSpecification.notDeleted(),
-                AppBookSpecification.hasDigitalFile(),
-                AppBookSpecification.inLibraries(accessibleLibraryIds),
-                AppBookSpecification.addedWithinDays(30)
+                AppBookSpecification.inLibraries(accessibleLibraryIds)
         );
 
         Pageable pageable = PageRequest.of(0, maxItems, Sort.by(Sort.Direction.DESC, "addedOn"));
@@ -1084,7 +1082,6 @@ public class AppBookService {
     private Specification<BookEntity> buildBaseSpecification(Set<Long> accessibleLibraryIds, Long libraryId) {
         List<Specification<BookEntity>> specs = new ArrayList<>();
         specs.add(AppBookSpecification.notDeleted());
-        specs.add(AppBookSpecification.hasDigitalFile());
 
         if (accessibleLibraryIds != null) {
             if (libraryId != null && !accessibleLibraryIds.contains(libraryId)) {
