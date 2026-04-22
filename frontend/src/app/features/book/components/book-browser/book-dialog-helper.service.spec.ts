@@ -6,6 +6,8 @@ import {TranslocoService} from '@jsverse/transloco';
 import {DialogLauncherService} from '../../../../shared/services/dialog-launcher.service';
 import {BookDialogHelperService} from './book-dialog-helper.service';
 
+import {of} from 'rxjs';
+
 describe('BookDialogHelperService', () => {
   let service: BookDialogHelperService;
   let dialogLauncherService: {openDialog: ReturnType<typeof vi.fn>};
@@ -14,7 +16,10 @@ describe('BookDialogHelperService', () => {
 
   beforeEach(() => {
     dialogLauncherService = {
-      openDialog: vi.fn(() => ({id: 'dialog-ref'})),
+      openDialog: vi.fn(() => ({
+        id: 'dialog-ref',
+        onClose: of(undefined)
+      })),
     };
     messageService.add.mockClear();
 
@@ -44,7 +49,8 @@ describe('BookDialogHelperService', () => {
         data: {bookId: 42},
       })
     );
-    expect(dialogRef).toEqual({id: 'dialog-ref'});
+    expect(dialogRef?.ref).toEqual(expect.objectContaining({id: 'dialog-ref'}));
+    expect(dialogRef?.result).toBeInstanceOf(Promise);
   });
 
   it('returns null instead of opening the shelf assigner when no inputs are provided', async () => {

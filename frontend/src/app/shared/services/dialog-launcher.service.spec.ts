@@ -8,8 +8,13 @@ import {DashboardSettingsComponent} from '../../features/dashboard/components/da
 import {LibraryCreatorComponent} from '../../features/library-creator/library-creator.component';
 import {DialogLauncherService, DialogSize, DialogStyle} from './dialog-launcher.service';
 
+import {of} from 'rxjs';
+
 describe('DialogLauncherService', () => {
-  const dialogRef = {close: vi.fn()};
+  const dialogRef = {
+    close: vi.fn(),
+    onClose: of(undefined)
+  };
   const dialogService = {
     open: vi.fn(() => dialogRef),
   };
