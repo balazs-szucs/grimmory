@@ -4,7 +4,6 @@ import {MessageService} from 'primeng/api';
 import {TranslocoService} from '@jsverse/transloco';
 import {MetadataRefreshType} from '../../features/metadata/model/request/metadata-refresh-type.enum';
 import {BookdropFinalizeResult} from '../../features/bookdrop/service/bookdrop.service';
-import {take} from 'rxjs/operators';
 import {createDialogOpenHandle, DialogOpenHandle} from '../models/dialog-open-handle.model';
 import {IconSelection} from '../service/icon-picker.service';
 
@@ -41,7 +40,8 @@ export class DialogLauncherService {
    * re-triggered open while the chunk is still downloading) resolves to the
    * same dialog instead of spawning two copies.
    */
-  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<unknown> | null>>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<any> | null>>();
 
   private defaultDialogOptions = {
     baseZIndex: 10,

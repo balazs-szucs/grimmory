@@ -15,7 +15,8 @@ export class BookDialogHelperService {
   private readonly t = inject(TranslocoService);
 
   /** In-flight dialog opens keyed by intent, to dedupe double-clicks while a chunk loads. */
-  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<unknown> | null>>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<any> | null>>();
 
   private openDialog(component: Type<unknown>, options: object): DynamicDialogRef | null {
     return this.dialogLauncherService.openDialog(component, options);
