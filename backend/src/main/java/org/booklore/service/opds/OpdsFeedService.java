@@ -335,7 +335,6 @@ public class OpdsFeedService {
         Page<Book> booksPage;
 
         if (magicShelfId != null) {
-            opdsBookService.assertUserMayAccessOpdsCatalog(userId);
             booksPage = magicShelfBookService.getBooksByMagicShelfId(userId, magicShelfId, page - 1, size);
         } else if (author != null && !author.isBlank()) {
             booksPage = opdsBookService.getBooksByAuthorName(userId, author, page - 1, size);
@@ -751,7 +750,9 @@ public class OpdsFeedService {
         if (details == null || details.getOpdsUserV2() == null) {
             throw ApiError.FORBIDDEN.createException("OPDS authentication required");
         }
-        return details.getOpdsUserV2().getUserId();
+        Long userId = details.getOpdsUserV2().getUserId();
+        opdsBookService.assertUserMayAccessOpdsCatalog(userId);
+        return userId;
     }
 
     private OpdsSortOrder getSortOrder() {

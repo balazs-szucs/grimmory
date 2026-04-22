@@ -5,6 +5,7 @@ import {TranslocoService} from '@jsverse/transloco';
 import {MetadataRefreshType} from '../../features/metadata/model/request/metadata-refresh-type.enum';
 import {BookdropFinalizeResult} from '../../features/bookdrop/service/bookdrop.service';
 import {take} from 'rxjs/operators';
+import {createDialogOpenHandle, DialogOpenHandle} from '../models/dialog-open-handle.model';
 
 /**
  * Dialog size classes - use these to control dialog dimensions
@@ -39,7 +40,7 @@ export class DialogLauncherService {
    * re-triggered open while the chunk is still downloading) resolves to the
    * same dialog instead of spawning two copies.
    */
-  private readonly inflightOpens = new Map<string, Promise<DynamicDialogRef | null>>();
+  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<any> | null>>();
 
   private defaultDialogOptions = {
     baseZIndex: 10,
@@ -65,11 +66,11 @@ export class DialogLauncherService {
    *     when a stale client hits a redeployed or offline chunk),
    *   - double-open guard (concurrent calls with the same key share a promise).
    */
-  private lazyOpen(
+  private lazyOpen<T>(
     key: string,
     importer: () => Promise<Type<unknown>>,
     options: object,
-  ): Promise<DynamicDialogRef | null> {
+  ): Promise<DialogOpenHandle<T> | null> {
     const existing = this.inflightOpens.get(key);
     if (existing) {
       return existing;
@@ -82,10 +83,11 @@ export class DialogLauncherService {
           this.inflightOpens.delete(key);
           return null;
         }
-        ref.onClose.pipe(take(1)).subscribe(() => {
+        const handle = createDialogOpenHandle<T>(ref);
+        handle.result.then(() => {
           this.inflightOpens.delete(key);
         });
-        return ref;
+        return handle;
       })
       .catch(error => {
         console.error(`[DialogLauncher] Failed to load chunk for "${key}"`, error);
@@ -103,7 +105,7 @@ export class DialogLauncherService {
     return promise;
   }
 
-  openDashboardSettingsDialog(): Promise<DynamicDialogRef | null> {
+  openDashboardSettingsDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'dashboardSettings',
       async () => (await import('../../features/dashboard/components/dashboard-settings/dashboard-settings.component')).DashboardSettingsComponent,
@@ -114,7 +116,7 @@ export class DialogLauncherService {
     );
   }
 
-  openLibraryCreateDialog(): Promise<DynamicDialogRef | null> {
+  openLibraryCreateDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'libraryCreate',
       async () => (await import('../../features/library-creator/library-creator.component')).LibraryCreatorComponent,
@@ -125,7 +127,7 @@ export class DialogLauncherService {
     );
   }
 
-  openDirectoryPickerDialog(): Promise<DynamicDialogRef | null> {
+  openDirectoryPickerDialog(): Promise<DialogOpenHandle<string> | null> {
     return this.lazyOpen(
       'directoryPicker',
       async () => (await import('../components/directory-picker/directory-picker.component')).DirectoryPickerComponent,
@@ -136,7 +138,7 @@ export class DialogLauncherService {
     );
   }
 
-  openLibraryEditDialog(libraryId: number): Promise<DynamicDialogRef | null> {
+  openLibraryEditDialog(libraryId: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `libraryEdit:${libraryId}`,
       async () => (await import('../../features/library-creator/library-creator.component')).LibraryCreatorComponent,
@@ -151,7 +153,7 @@ export class DialogLauncherService {
     );
   }
 
-  openLibraryMetadataFetchDialog(libraryId: number): Promise<DynamicDialogRef | null> {
+  openLibraryMetadataFetchDialog(libraryId: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `libraryMetadataFetch:${libraryId}`,
       async () => (await import('../../features/metadata/component/metadata-options-dialog/metadata-fetch-options/metadata-fetch-options.component')).MetadataFetchOptionsComponent,
@@ -166,7 +168,7 @@ export class DialogLauncherService {
     );
   }
 
-  openShelfEditDialog(shelfId: number): Promise<DynamicDialogRef | null> {
+  openShelfEditDialog(shelfId: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `shelfEdit:${shelfId}`,
       async () => (await import('../../features/book/components/shelf-edit-dialog/shelf-edit-dialog.component')).ShelfEditDialogComponent,
@@ -180,7 +182,7 @@ export class DialogLauncherService {
     );
   }
 
-  openFileUploadDialog(): Promise<DynamicDialogRef | null> {
+  openFileUploadDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'fileUpload',
       async () => (await import('../components/book-uploader/book-uploader.component')).BookUploaderComponent,
@@ -191,7 +193,7 @@ export class DialogLauncherService {
     );
   }
 
-  openCreateUserDialog(): Promise<DynamicDialogRef | null> {
+  openCreateUserDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'createUser',
       async () => (await import('../../features/settings/user-management/create-user-dialog/create-user-dialog.component')).CreateUserDialogComponent,
@@ -202,7 +204,7 @@ export class DialogLauncherService {
     );
   }
 
-  openUserProfileDialog(): Promise<DynamicDialogRef | null> {
+  openUserProfileDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'userProfile',
       async () => (await import('../../features/settings/user-profile-dialog/user-profile-dialog.component')).UserProfileDialogComponent,
@@ -213,7 +215,7 @@ export class DialogLauncherService {
     );
   }
 
-  openMagicShelfCreateDialog(): Promise<DynamicDialogRef | null> {
+  openMagicShelfCreateDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'magicShelfCreate',
       async () => (await import('../../features/magic-shelf/component/magic-shelf-component')).MagicShelfComponent,
@@ -224,7 +226,7 @@ export class DialogLauncherService {
     );
   }
 
-  openMagicShelfEditDialog(shelfId: number): Promise<DynamicDialogRef | null> {
+  openMagicShelfEditDialog(shelfId: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `magicShelfEdit:${shelfId}`,
       async () => (await import('../../features/magic-shelf/component/magic-shelf-component')).MagicShelfComponent,
@@ -239,7 +241,7 @@ export class DialogLauncherService {
     );
   }
 
-  openVersionChangelogDialog(): Promise<DynamicDialogRef | null> {
+  openVersionChangelogDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'versionChangelog',
       async () => (await import('../layout/layout-menu/version-changelog-dialog/version-changelog-dialog.component')).VersionChangelogDialogComponent,
@@ -250,7 +252,7 @@ export class DialogLauncherService {
     );
   }
 
-  openEmailRecipientDialog(): Promise<DynamicDialogRef | null> {
+  openEmailRecipientDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'emailRecipient',
       async () => (await import('../../features/settings/email-v2/create-email-recipient-dialog/create-email-recipient-dialog.component')).CreateEmailRecipientDialogComponent,
@@ -261,7 +263,7 @@ export class DialogLauncherService {
     );
   }
 
-  openEmailProviderDialog(): Promise<DynamicDialogRef | null> {
+  openEmailProviderDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'emailProvider',
       async () => (await import('../../features/settings/email-v2/create-email-provider-dialog/create-email-provider-dialog.component')).CreateEmailProviderDialogComponent,
@@ -272,7 +274,7 @@ export class DialogLauncherService {
     );
   }
 
-  openBookdropFinalizeResultDialog(result: BookdropFinalizeResult): Promise<DynamicDialogRef | null> {
+  openBookdropFinalizeResultDialog(result: BookdropFinalizeResult): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'bookdropFinalizeResult',
       async () => (await import('../../features/bookdrop/component/bookdrop-finalize-result-dialog/bookdrop-finalize-result-dialog.component')).BookdropFinalizeResultDialogComponent,
@@ -286,7 +288,7 @@ export class DialogLauncherService {
     );
   }
 
-  openMetadataReviewDialog(taskId: string): Promise<DynamicDialogRef | null> {
+  openMetadataReviewDialog(taskId: string): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `metadataReview:${taskId}`,
       async () => (await import('../../features/metadata/component/metadata-review-dialog/metadata-review-dialog-component')).MetadataReviewDialogComponent,
@@ -300,7 +302,7 @@ export class DialogLauncherService {
     );
   }
 
-  openIconPickerDialog(): Promise<DynamicDialogRef | null> {
+  openIconPickerDialog(): Promise<DialogOpenHandle<string> | null> {
     return this.lazyOpen(
       'iconPicker',
       async () => (await import('../components/icon-picker/icon-picker-component')).IconPickerComponent,

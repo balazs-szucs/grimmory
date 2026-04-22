@@ -3,6 +3,7 @@ package org.booklore.service.kobo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.security.service.AuthenticationService;
+import org.booklore.exception.ApiError;
 import org.booklore.mapper.KoboReadingStateMapper;
 import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.dto.KoboSyncSettings;
@@ -59,6 +60,7 @@ public class KoboReadingStateService {
 
     @Transactional
     public KoboReadingStateResponse saveReadingState(List<KoboReadingState> readingStates) {
+        assertUserMaySyncKobo();
         normalizePutTimestamps(readingStates);
         List<KoboReadingState> koboReadingStates = saveAll(readingStates);
 
@@ -125,11 +127,13 @@ public class KoboReadingStateService {
 
     @Transactional
     public void deleteReadingState(Long bookId) {
+        assertUserMaySyncKobo();
         Long userId = authenticationService.getAuthenticatedUser().getId();
         repository.findByEntitlementIdAndUserId(String.valueOf(bookId), userId).ifPresent(repository::delete);
     }
 
     public List<KoboReadingState> getReadingState(String entitlementId) {
+        assertUserMaySyncKobo();
         Long userId = authenticationService.getAuthenticatedUser().getId();
         Optional<KoboReadingState> readingState = repository.findByEntitlementIdAndUserId(entitlementId, userId)
                 .map(mapper::toDto)
@@ -539,5 +543,16 @@ public class KoboReadingStateService {
         if (progressPercent >= finishedThreshold) return ReadStatus.READ;
         if (progressPercent >= readingThreshold) return ReadStatus.READING;
         return ReadStatus.UNREAD;
+    }
+
+    private void assertUserMaySyncKobo() {
+        BookLoreUser user = authenticationService.getAuthenticatedUser();
+        if (user == null) {
+            throw ApiError.FORBIDDEN.createException("Kobo authentication required");
+        }
+        if (user.getPermissions() == null
+                || (!user.getPermissions().isCanSyncKobo() && !user.getPermissions().isAdmin())) {
+            throw ApiError.FORBIDDEN.createException("You are not allowed to sync with Kobo");
+        }
     }
 }

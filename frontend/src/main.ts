@@ -34,12 +34,14 @@ bootstrapApplication(AppComponent, {
         },
       },
     })),
-    provideAppInitializer(() => {
-      const startup = inject(StartupService);
-      return startup.load();
+    provideAppInitializer(async () => {
+      await Promise.all([
+        inject(StartupService).load(),
+        initializeAuthFactory()(),
+        initializeLanguage()(),
+      ]);
     }),
     provideHttpClient(withInterceptors([AuthInterceptorService])),
-    provideAppInitializer(initializeAuthFactory()),
     provideRouter(routes, withPreloading(PostBootstrapPreloadingStrategy)),
     DialogService,
     MessageService,
@@ -63,7 +65,6 @@ bootstrapApplication(AppComponent, {
       },
       loader: TranslocoInlineLoader,
     }),
-    provideAppInitializer(initializeLanguage()),
     providePrimeNG({
       theme: {
         preset: Aura,

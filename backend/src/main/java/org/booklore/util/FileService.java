@@ -111,6 +111,10 @@ public class FileService {
         return Paths.get(appProperties.getPathConfig(), IMAGES_DIR, String.valueOf(bookId), AUDIOBOOK_COVER_FILENAME).toString();
     }
 
+    public String getThumbnailVariantFile(long bookId, int width) {
+        return Paths.get(appProperties.getPathConfig(), IMAGES_DIR, String.valueOf(bookId), "thumbnail_" + width + ".jpg").toString();
+    }
+
     public String getAuthorImagesFolder(long authorId) {
         return Paths.get(appProperties.getPathConfig(), AUTHOR_IMAGES_DIR, String.valueOf(authorId)).toString();
     }

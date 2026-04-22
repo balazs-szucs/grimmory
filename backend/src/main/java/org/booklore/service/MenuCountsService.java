@@ -16,6 +16,14 @@ import org.booklore.service.opds.MagicShelfBookService;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
+import java.util.*;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Root;
+import org.booklore.model.entity.ShelfEntity;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -44,6 +52,7 @@ public class MenuCountsService {
     private final ShelfService shelfService;
     private final MagicShelfService magicShelfService;
     private final MagicShelfBookService magicShelfBookService;
+    private final EntityManager entityManager;
 
     public MenuCountsResponse getMenuCounts() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
@@ -59,7 +68,7 @@ public class MenuCountsService {
             visibleBooksSpec = visibleBooksSpec.and(AppBookSpecification.inLibraries(accessibleLibraryIds));
         }
 
-        Map<Long, Long> libraryCounts = computeLibraryCounts();
+        Map<Long, Long> libraryCounts = computeLibraryCounts(user, accessibleLibraryIds);
         Map<Long, Long> shelfCounts = computeShelfCounts(visibleBooksSpec);
         Map<Long, Long> magicShelfCounts = computeMagicShelfCounts(userId);
 
@@ -69,31 +78,50 @@ public class MenuCountsService {
         return new MenuCountsResponse(libraryCounts, shelfCounts, magicShelfCounts, totalBookCount, unshelvedBookCount);
     }
 
-    private Map<Long, Long> computeLibraryCounts() {
+    private Map<Long, Long> computeLibraryCounts(BookLoreUser user, Set<Long> accessibleLibraryIds) {
         Map<Long, Long> counts = new LinkedHashMap<>();
-        for (Library library : libraryService.getLibraries()) {
-            if (library == null || library.getId() == null) {
-                continue;
+        List<Library> libraries = libraryService.getLibraries();
+        for (Library library : libraries) {
+            if (library != null && library.getId() != null) {
+                counts.put(library.getId(), 0L);
             }
-            long count = bookRepository.count(
-                    AppBookSpecification.notDeleted().and(AppBookSpecification.inLibrary(library.getId()))
-            );
-            counts.put(library.getId(), count);
         }
+
+        String jpql = "SELECT b.library.id, COUNT(b) FROM BookEntity b WHERE (b.deleted IS NULL OR b.deleted = false)";
+        if (accessibleLibraryIds != null) {
+            jpql += " AND b.library.id IN :libIds";
+        }
+        jpql += " GROUP BY b.library.id";
+
+        var query = entityManager.createQuery(jpql, Tuple.class);
+        if (accessibleLibraryIds != null) {
+            query.setParameter("libIds", accessibleLibraryIds);
+        }
+
+        query.getResultList().forEach(t -> counts.put(t.get(0, Long.class), t.get(1, Long.class)));
         return counts;
     }
 
     private Map<Long, Long> computeShelfCounts(Specification<BookEntity> visibleBooksSpec) {
         Map<Long, Long> counts = new LinkedHashMap<>();
         for (Shelf shelf : shelfService.getShelves()) {
-            if (shelf.getId() == null) {
-                continue;
+            if (shelf.getId() != null) {
+                counts.put(shelf.getId(), 0L);
             }
-            long count = bookRepository.count(
-                    visibleBooksSpec.and(AppBookSpecification.inShelf(shelf.getId()))
-            );
-            counts.put(shelf.getId(), count);
         }
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Tuple> cq = cb.createTupleQuery();
+        Root<BookEntity> root = cq.from(BookEntity.class);
+        Join<BookEntity, ShelfEntity> shelfJoin = root.join("shelves");
+
+        cq.multiselect(shelfJoin.get("id"), cb.count(root));
+        cq.where(visibleBooksSpec.toPredicate(root, cq, cb));
+        cq.groupBy(shelfJoin.get("id"));
+
+        entityManager.createQuery(cq).getResultList().forEach(t ->
+                counts.put(t.get(0, Long.class), t.get(1, Long.class)));
+
         return counts;
     }
 

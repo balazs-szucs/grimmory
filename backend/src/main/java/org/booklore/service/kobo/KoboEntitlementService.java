@@ -3,6 +3,8 @@ package org.booklore.service.kobo;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.security.service.AuthenticationService;
+import org.booklore.exception.ApiError;
+import org.booklore.model.dto.BookLoreUser;
 import org.booklore.mapper.KoboReadingStateMapper;
 import org.booklore.model.dto.kobo.*;
 import org.booklore.model.dto.settings.KoboSettings;
@@ -53,6 +55,7 @@ public class KoboEntitlementService {
     private final KoboSettingsService koboSettingsService;
 
     public List<NewEntitlement> generateNewEntitlements(Set<Long> bookIds, String token) {
+        assertUserMaySyncKobo();
         List<BookEntity> books = bookQueryService.findAllWithMetadataByIds(bookIds);
 
         return books.stream()
@@ -68,7 +71,7 @@ public class KoboEntitlementService {
     }
 
     public List<? extends Entitlement> generateChangedEntitlements(Set<Long> bookIds, String token, boolean removed) {
-
+        assertUserMaySyncKobo();
         List<BookEntity> books = bookQueryService.findAllWithMetadataByIds(bookIds);
 
 
@@ -115,6 +118,7 @@ public class KoboEntitlementService {
     }
 
     public List<KoboTagWrapper> generateTags() {
+        assertUserMaySyncKobo();
         Long userId = authenticationService.getAuthenticatedUser().getId();
         Set<Long> koboBookIDs = shelfRepository.findByUserIdAndName(userId, ShelfType.KOBO.getName())
                 .orElseThrow(() -> new NoSuchElementException("Kobo shelf not found for user: " + userId))
@@ -276,6 +280,7 @@ public class KoboEntitlementService {
     }
 
     public KoboBookMetadata getMetadataForBook(long bookId, String token) {
+        assertUserMaySyncKobo();
         Optional<BookEntity> book = bookQueryService.findAllWithMetadataByIds(Set.of(bookId))
                 .stream()
                 .filter(koboCompatibilityService::isBookSupportedForKobo)
@@ -373,6 +378,17 @@ public class KoboEntitlementService {
                                 .build()
                 ))
                 .build();
+    }
+
+    private void assertUserMaySyncKobo() {
+        BookLoreUser user = authenticationService.getAuthenticatedUser();
+        if (user == null) {
+            throw ApiError.FORBIDDEN.createException("Kobo authentication required");
+        }
+        if (user.getPermissions() == null
+                || (!user.getPermissions().isCanSyncKobo() && !user.getPermissions().isAdmin())) {
+            throw ApiError.FORBIDDEN.createException("You are not allowed to sync with Kobo");
+        }
     }
 
     private OffsetDateTime getCurrentUtc() {

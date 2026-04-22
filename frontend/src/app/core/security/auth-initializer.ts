@@ -15,11 +15,17 @@ export function initializeAuthFactory() {
 
     const settingsPromise = queryClient.fetchQuery(appSettingsService.getPublicSettingsQueryOptions());
 
+    const finalizeAuth = () => {
+      if (authService.getInternalAccessToken()) {
+        authService.initializeWebSocketConnection();
+      }
+      authInitService.markAsInitialized();
+    };
+
     // If we already have an internal token, we don't want to block bootstrap on public-settings.
     // We can assume internal auth for now and let the settings fetch complete in the background.
     if (authService.getInternalAccessToken()) {
-      websocketInitializer(authService)();
-      authInitService.markAsInitialized();
+      finalizeAuth();
 
       // Still handle the settings result in the background to check for remote auth status
       settingsPromise.then(publicSettings => {
@@ -40,7 +46,7 @@ export function initializeAuthFactory() {
     return Promise.race([settingsPromise, timeoutPromise]).then(publicSettings => {
       if (!publicSettings) {
         console.warn('[Auth] Public settings fetch timed out, falling back to local auth');
-        authInitService.markAsInitialized();
+        finalizeAuth();
         return;
       }
 
@@ -48,21 +54,18 @@ export function initializeAuthFactory() {
         return new Promise<void>(resolve => {
           authService.remoteLogin().subscribe({
             next: () => {
-              authInitService.markAsInitialized();
+              finalizeAuth();
               resolve();
             },
             error: err => {
               console.error('[Remote Login] failed:', err);
-              authInitService.markAsInitialized();
+              finalizeAuth();
               resolve();
             }
           });
         });
       } else {
-        if (authService.getInternalAccessToken()) {
-          websocketInitializer(authService)();
-        }
-        authInitService.markAsInitialized();
+        finalizeAuth();
         return;
       }
     });

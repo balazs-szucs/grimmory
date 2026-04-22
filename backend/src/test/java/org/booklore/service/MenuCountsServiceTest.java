@@ -11,6 +11,7 @@ import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.library.LibraryService;
 import org.booklore.service.opds.MagicShelfBookService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,14 +21,20 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.Set;
+import java.util.LinkedHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.Tuple;
+import jakarta.persistence.criteria.*;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -39,6 +46,7 @@ class MenuCountsServiceTest {
     @Mock private ShelfService shelfService;
     @Mock private MagicShelfService magicShelfService;
     @Mock private MagicShelfBookService magicShelfBookService;
+    @Mock private EntityManager entityManager;
 
     private MenuCountsService service;
 
@@ -50,8 +58,13 @@ class MenuCountsServiceTest {
                 libraryService,
                 shelfService,
                 magicShelfService,
-                magicShelfBookService
+                magicShelfBookService,
+                entityManager
         );
+        
+        lenient().when(libraryService.getLibraries()).thenReturn(Collections.emptyList());
+        lenient().when(shelfService.getShelves()).thenReturn(Collections.emptyList());
+        lenient().when(magicShelfService.getUserShelves()).thenReturn(Collections.emptyList());
     }
 
     @Test
@@ -73,9 +86,51 @@ class MenuCountsServiceTest {
         when(libraryService.getLibraries()).thenReturn(List.of(library(1L), library(2L)));
         when(shelfService.getShelves()).thenReturn(List.of(shelf(10L), shelf(11L)));
         when(magicShelfService.getUserShelves()).thenReturn(List.of(magicShelf(20L), magicShelf(21L)));
+        
+        // Mock Library Counts JPQL
+        TypedQuery<Tuple> libraryQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(anyString(), any(Class.class))).thenReturn(libraryQuery);
+        Tuple libT1 = mock(Tuple.class);
+        when(libT1.get(0, Long.class)).thenReturn(1L);
+        when(libT1.get(1, Long.class)).thenReturn(100L);
+        Tuple libT2 = mock(Tuple.class);
+        when(libT2.get(0, Long.class)).thenReturn(2L);
+        when(libT2.get(1, Long.class)).thenReturn(50L);
+        when(libraryQuery.getResultList()).thenReturn(Arrays.asList(libT1, libT2));
+
+        // Mock Shelf Counts Criteria
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery<Tuple> cq = mock(CriteriaQuery.class);
+        Root<BookEntity> root = mock(Root.class);
+        Join shelfJoin = mock(Join.class);
+        Path idPath = mock(Path.class);
+        
+        when(entityManager.getCriteriaBuilder()).thenReturn(cb);
+        when(cb.count(any())).thenReturn(mock(Expression.class));
+        when(cb.createTupleQuery()).thenReturn(cq);
+        when(cb.count(any())).thenReturn(mock(Expression.class));
+        when(cq.from(BookEntity.class)).thenReturn(root);
+        when(cq.multiselect(any(), any())).thenReturn(cq);
+        when(cq.where(any(Predicate.class))).thenReturn(cq);
+        when(cq.groupBy(any(Expression.class))).thenReturn(cq);
+        when(root.join(eq("shelves"))).thenReturn(shelfJoin);
+        when(shelfJoin.get("id")).thenReturn(idPath);
+        when(cq.multiselect(any(), any())).thenReturn(cq);
+        when(cq.where(any(Predicate.class))).thenReturn(cq);
+        when(cq.groupBy(any(Expression.class))).thenReturn(cq);
+        
+        TypedQuery<Tuple> shelfQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(cq)).thenReturn(shelfQuery);
+        Tuple shelfT1 = mock(Tuple.class);
+        when(shelfT1.get(0, Long.class)).thenReturn(10L);
+        when(shelfT1.get(1, Long.class)).thenReturn(7L);
+        Tuple shelfT2 = mock(Tuple.class);
+        when(shelfT2.get(0, Long.class)).thenReturn(11L);
+        when(shelfT2.get(1, Long.class)).thenReturn(3L);
+        when(shelfQuery.getResultList()).thenReturn(List.of(shelfT1, shelfT2));
 
         when(bookRepository.count(any(Specification.class)))
-                .thenReturn(100L, 50L, 7L, 3L, 9L, 2L, 150L, 40L);
+                .thenReturn(9L, 2L, 150L, 40L); // magic counts (2) + total + unshelved
 
         @SuppressWarnings("unchecked")
         Specification<BookEntity> magicSpec1 = mock(Specification.class);
@@ -104,6 +159,29 @@ class MenuCountsServiceTest {
         when(magicShelfBookService.toSpecification(7L, 99L))
                 .thenThrow(new RuntimeException("broken rule"));
 
+        // Mock empty results for libraries/shelves
+        TypedQuery<Tuple> emptyQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(anyString(), eq(Tuple.class))).thenReturn(emptyQuery);
+        when(emptyQuery.getResultList()).thenReturn(Collections.emptyList());
+        
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery<Tuple> cq = mock(CriteriaQuery.class);
+        Root<BookEntity> root = mock(Root.class);
+        Join shelfJoin = mock(Join.class);
+        when(entityManager.getCriteriaBuilder()).thenReturn(cb);
+        when(cb.count(any())).thenReturn(mock(Expression.class));
+        when(cb.createTupleQuery()).thenReturn(cq);
+        when(cq.from(BookEntity.class)).thenReturn(root);
+        when(cq.multiselect(any(), any())).thenReturn(cq);
+        when(cq.where(any(Predicate.class))).thenReturn(cq);
+        when(cq.groupBy(any(Expression.class))).thenReturn(cq);
+        when(root.join(anyString())).thenReturn(shelfJoin);
+        when(shelfJoin.get(anyString())).thenReturn(mock(Path.class));
+        
+        TypedQuery<Tuple> emptyCriteriaQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(cq)).thenReturn(emptyCriteriaQuery);
+        when(emptyCriteriaQuery.getResultList()).thenReturn(Collections.emptyList());
+
         when(bookRepository.count(any(Specification.class))).thenReturn(0L, 0L);
 
         MenuCountsResponse response = service.getMenuCounts();
@@ -120,7 +198,38 @@ class MenuCountsServiceTest {
         when(shelfService.getShelves()).thenReturn(List.of(shelf(10L)));
         when(magicShelfService.getUserShelves()).thenReturn(List.of());
 
-        when(bookRepository.count(any(Specification.class))).thenReturn(25L, 4L, 25L, 12L);
+        // Mock Library Counts (JPQL)
+        TypedQuery<Tuple> libraryQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(anyString(), any(Class.class))).thenReturn(libraryQuery);
+        Tuple libT1 = mock(Tuple.class);
+        when(libT1.get(0, Long.class)).thenReturn(1L);
+        when(libT1.get(1, Long.class)).thenReturn(25L);
+        when(libraryQuery.getResultList()).thenReturn(Collections.singletonList(libT1));
+        when(libraryQuery.setParameter(anyString(), any())).thenReturn(libraryQuery);
+
+        // Mock Shelf Counts
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        CriteriaQuery<Tuple> cq = mock(CriteriaQuery.class);
+        Root<BookEntity> root = mock(Root.class);
+        Join shelfJoin = mock(Join.class);
+        when(entityManager.getCriteriaBuilder()).thenReturn(cb);
+        when(cb.count(any())).thenReturn(mock(Expression.class));
+        when(cb.createTupleQuery()).thenReturn(cq);
+        when(cq.from(BookEntity.class)).thenReturn(root);
+        when(cq.multiselect(any(), any())).thenReturn(cq);
+        when(cq.where(any(Predicate.class))).thenReturn(cq);
+        when(cq.groupBy(any(Expression.class))).thenReturn(cq);
+        when(root.join(anyString())).thenReturn(shelfJoin);
+        when(shelfJoin.get(anyString())).thenReturn(mock(Path.class));
+
+        TypedQuery<Tuple> shelfQuery = mock(TypedQuery.class);
+        when(entityManager.createQuery(cq)).thenReturn(shelfQuery);
+        Tuple shelfT1 = mock(Tuple.class);
+        when(shelfT1.get(0, Long.class)).thenReturn(10L);
+        when(shelfT1.get(1, Long.class)).thenReturn(4L);
+        when(shelfQuery.getResultList()).thenReturn(List.of(shelfT1));
+
+        when(bookRepository.count(any(Specification.class))).thenReturn(25L, 12L);
 
         MenuCountsResponse response = service.getMenuCounts();
 

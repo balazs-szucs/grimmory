@@ -27,6 +27,9 @@ public class BookLoreUser {
     private UserSettings userSettings;
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class UserPermissions {
         private boolean isAdmin;
         private boolean canUpload;

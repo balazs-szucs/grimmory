@@ -306,6 +306,12 @@ public class BookService {
             if (maxW <= 0) {
                 return new UrlResource(thumbnailPath.toUri());
             }
+
+            Path variantPath = Paths.get(fileService.getThumbnailVariantFile(bookId, maxW));
+            if (Files.exists(variantPath)) {
+                return new UrlResource(variantPath.toUri());
+            }
+
             BufferedImage image = ImageIO.read(thumbnailPath.toFile());
             if (image == null) {
                 return new ClassPathResource("static/images/missing-cover.jpg");
@@ -318,6 +324,7 @@ public class BookService {
                 BufferedImage scaled = FileService.resizeImage(image, maxW, h);
                 try {
                     byte[] bytes = FileService.writeJpegWithQualityToByteArray(scaled, 0.6f);
+                    Files.write(variantPath, bytes);
                     return new ByteArrayResource(bytes);
                 } finally {
                     scaled.flush();
@@ -416,6 +423,17 @@ public class BookService {
             if (maxW <= 0) {
                 return new UrlResource(thumbnailPath.toUri());
             }
+
+            // Audiobook variants also use the same logic, but we prefix them to avoid collisions if needed.
+            // For now, they share the same thumbnail variant file path logic as books, which is fine as they are in different folders if they were books,
+            // but audiobook-thumbnail.jpg is in the same folder as thumbnail.jpg.
+            // Let's use a specific name for audiobook variants.
+            Path variantPath = thumbnailPath.getParent().resolve("audiobook-thumbnail_" + maxW + ".jpg");
+
+            if (Files.exists(variantPath)) {
+                return new UrlResource(variantPath.toUri());
+            }
+
             BufferedImage image = ImageIO.read(thumbnailPath.toFile());
             if (image == null) {
                 return getMissingCoverResource();
@@ -428,6 +446,7 @@ public class BookService {
                 BufferedImage scaled = FileService.resizeImage(image, maxW, h);
                 try {
                     byte[] bytes = FileService.writeJpegWithQualityToByteArray(scaled, 0.6f);
+                    Files.write(variantPath, bytes);
                     return new ByteArrayResource(bytes);
                 } finally {
                     scaled.flush();

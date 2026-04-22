@@ -6,6 +6,7 @@ import {DialogLauncherService, DialogSize, DialogStyle} from '../../../../shared
 import {MetadataRefreshType} from '../../../metadata/model/request/metadata-refresh-type.enum';
 import {Book} from '../../model/book.model';
 import {take} from 'rxjs/operators';
+import {createDialogOpenHandle, DialogOpenHandle} from '../../../../shared/models/dialog-open-handle.model';
 
 @Injectable({providedIn: 'root'})
 export class BookDialogHelperService {
@@ -15,17 +16,17 @@ export class BookDialogHelperService {
   private readonly t = inject(TranslocoService);
 
   /** In-flight dialog opens keyed by intent, to dedupe double-clicks while a chunk loads. */
-  private readonly inflightOpens = new Map<string, Promise<DynamicDialogRef | null>>();
+  private readonly inflightOpens = new Map<string, Promise<DialogOpenHandle<any> | null>>();
 
   private openDialog(component: Type<unknown>, options: object): DynamicDialogRef | null {
     return this.dialogLauncherService.openDialog(component, options);
   }
 
-  private lazyOpen(
+  private lazyOpen<T>(
     key: string,
     importer: () => Promise<Type<unknown>>,
     options: object,
-  ): Promise<DynamicDialogRef | null> {
+  ): Promise<DialogOpenHandle<T> | null> {
     const existing = this.inflightOpens.get(key);
     if (existing) {
       return existing;
@@ -38,10 +39,11 @@ export class BookDialogHelperService {
           this.inflightOpens.delete(key);
           return null;
         }
-        ref.onClose.pipe(take(1)).subscribe(() => {
+        const handle = createDialogOpenHandle<T>(ref);
+        handle.result.then(() => {
           this.inflightOpens.delete(key);
         });
-        return ref;
+        return handle;
       })
       .catch(error => {
         console.error(`[BookDialogHelper] Failed to load chunk for "${key}"`, error);
@@ -59,7 +61,7 @@ export class BookDialogHelperService {
     return promise;
   }
 
-  openBookDetailsDialog(bookId: number): Promise<DynamicDialogRef | null> {
+  openBookDetailsDialog(bookId: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `bookDetails:${bookId}`,
       async () => (await import('../../../metadata/component/book-metadata-center/book-metadata-center.component')).BookMetadataCenterComponent,
@@ -73,7 +75,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openShelfAssignerDialog(book: Book | null, bookIds: Set<number> | null): Promise<DynamicDialogRef | null> {
+  openShelfAssignerDialog(book: Book | null, bookIds: Set<number> | null): Promise<DialogOpenHandle<void> | null> {
     const data: { isMultiBooks: boolean; book?: Book; bookIds?: Set<number> } = {
       isMultiBooks: false,
     };
@@ -99,7 +101,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openShelfCreatorDialog(): Promise<DynamicDialogRef | null> {
+  openShelfCreatorDialog(): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       'shelfCreator',
       async () => (await import('../shelf-creator/shelf-creator.component')).ShelfCreatorComponent,
@@ -110,7 +112,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openLockUnlockMetadataDialog(bookIds: Set<number>): Promise<DynamicDialogRef | null> {
+  openLockUnlockMetadataDialog(bookIds: Set<number>): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `lockUnlockMetadata:${[...bookIds].sort((a, b) => a - b).join(',')}`,
       async () => (await import('./lock-unlock-metadata-dialog/lock-unlock-metadata-dialog.component')).LockUnlockMetadataDialogComponent,
@@ -124,7 +126,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openMetadataRefreshDialog(bookIds: Set<number>): Promise<DynamicDialogRef | null> {
+  openMetadataRefreshDialog(bookIds: Set<number>): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `metadataRefresh:${[...bookIds].sort((a, b) => a - b).join(',')}`,
       async () => (await import('../../../metadata/component/multi-book-metadata-fetch/multi-book-metadata-fetch-component')).MultiBookMetadataFetchComponent,
@@ -139,7 +141,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openBulkMetadataEditDialog(bookIds: Set<number>): Promise<DynamicDialogRef | null> {
+  openBulkMetadataEditDialog(bookIds: Set<number>): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `bulkMetadataEdit:${[...bookIds].sort((a, b) => a - b).join(',')}`,
       async () => (await import('../../../metadata/component/bulk-metadata-update/bulk-metadata-update-component')).BulkMetadataUpdateComponent,
@@ -153,7 +155,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openMultibookMetadataEditorDialog(bookIds: Set<number>): Promise<DynamicDialogRef | null> {
+  openMultibookMetadataEditorDialog(bookIds: Set<number>): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `multiBookMetadataEditor:${[...bookIds].sort((a, b) => a - b).join(',')}`,
       async () => (await import('../../../metadata/component/multi-book-metadata-editor/multi-book-metadata-editor-component')).MultiBookMetadataEditorComponent,
@@ -167,7 +169,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openFileMoverDialog(bookIds: Set<number>): Promise<DynamicDialogRef | null> {
+  openFileMoverDialog(bookIds: Set<number>): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `fileMover:${[...bookIds].sort((a, b) => a - b).join(',')}`,
       async () => (await import('../../../../shared/components/file-mover/file-mover-component')).FileMoverComponent,
@@ -182,7 +184,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openCustomSendDialog(book: Book): Promise<DynamicDialogRef | null> {
+  openCustomSendDialog(book: Book): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `customSend:${book.id}`,
       async () => (await import('../book-sender/book-sender.component')).BookSenderComponent,
@@ -196,7 +198,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openCoverSearchDialog(bookId: number, coverType?: 'ebook' | 'audiobook'): Promise<DynamicDialogRef | null> {
+  openCoverSearchDialog(bookId: number, coverType?: 'ebook' | 'audiobook'): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `coverSearch:${bookId}:${coverType ?? 'ebook'}`,
       async () => (await import('../../../metadata/component/cover-search/cover-search.component')).CoverSearchComponent,
@@ -211,7 +213,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openAdditionalFileUploaderDialog(book: Book): Promise<DynamicDialogRef | null> {
+  openAdditionalFileUploaderDialog(book: Book): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `additionalFileUploader:${book.id}`,
       async () => (await import('../additional-file-uploader/additional-file-uploader.component')).AdditionalFileUploaderComponent,
@@ -225,7 +227,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openBookFileAttacherDialog(sourceBook: Book): Promise<DynamicDialogRef | null> {
+  openBookFileAttacherDialog(sourceBook: Book): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `bookFileAttacher:${sourceBook.id}`,
       async () => (await import('../book-file-attacher/book-file-attacher.component')).BookFileAttacherComponent,
@@ -239,7 +241,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openBulkBookFileAttacherDialog(sourceBooks: Book[]): Promise<DynamicDialogRef | null> {
+  openBulkBookFileAttacherDialog(sourceBooks: Book[]): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `bulkBookFileAttacher:${sourceBooks.map(b => b.id).sort((a, b) => a - b).join(',')}`,
       async () => (await import('../book-file-attacher/book-file-attacher.component')).BookFileAttacherComponent,
@@ -253,7 +255,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openDuplicateMergerDialog(libraryId: number): Promise<DynamicDialogRef | null> {
+  openDuplicateMergerDialog(libraryId: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `duplicateMerger:${libraryId}`,
       async () => (await import('../duplicate-merger/duplicate-merger.component')).DuplicateMergerComponent,
@@ -267,7 +269,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openAddPhysicalBookDialog(libraryId?: number): Promise<DynamicDialogRef | null> {
+  openAddPhysicalBookDialog(libraryId?: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `addPhysicalBook:${libraryId ?? 'none'}`,
       async () => (await import('../add-physical-book-dialog/add-physical-book-dialog.component')).AddPhysicalBookDialogComponent,
@@ -281,7 +283,7 @@ export class BookDialogHelperService {
     );
   }
 
-  openBulkIsbnImportDialog(libraryId?: number): Promise<DynamicDialogRef | null> {
+  openBulkIsbnImportDialog(libraryId?: number): Promise<DialogOpenHandle<void> | null> {
     return this.lazyOpen(
       `bulkIsbnImport:${libraryId ?? 'none'}`,
       async () => (await import('../bulk-isbn-import-dialog/bulk-isbn-import-dialog.component')).BulkIsbnImportDialogComponent,

@@ -112,8 +112,11 @@ class KoboEntitlementServiceTest {
 
     @BeforeEach
     void setUp() {
-        BookLoreUser.UserPermissions permissions = new BookLoreUser.UserPermissions();
-        user = BookLoreUser.builder().permissions(permissions).build();
+        user = BookLoreUser.builder()
+                .id(1L)
+                .permissions(BookLoreUser.UserPermissions.builder().canSyncKobo(true).build())
+                .build();
+        when(authenticationService.getAuthenticatedUser()).thenReturn(user);
     }
 
     @Test
