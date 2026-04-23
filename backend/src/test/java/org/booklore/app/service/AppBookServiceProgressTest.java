@@ -20,9 +20,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.booklore.repository.BookRepository;
+import org.booklore.repository.LibraryRepository;
 import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserBookFileProgressRepository;
 import org.booklore.repository.UserBookProgressRepository;
+import org.booklore.repository.UserRepository;
 import org.booklore.service.book.BookService;
 import org.booklore.service.opds.MagicShelfBookService;
 
@@ -39,8 +41,10 @@ import static org.mockito.Mockito.*;
 class AppBookServiceProgressTest {
 
     @Mock private BookRepository bookRepository;
+    @Mock private LibraryRepository libraryRepository;
     @Mock private UserBookProgressRepository userBookProgressRepository;
     @Mock private UserBookFileProgressRepository userBookFileProgressRepository;
+    @Mock private UserRepository userRepository;
     @Mock private ShelfRepository shelfRepository;
     @Mock private AuthenticationService authenticationService;
     @Mock private AppBookMapper mobileBookMapper;
@@ -57,8 +61,8 @@ class AppBookServiceProgressTest {
     @BeforeEach
     void setUp() {
         service = new AppBookService(
-                bookRepository, userBookProgressRepository, userBookFileProgressRepository,
-                shelfRepository, authenticationService, mobileBookMapper,
+                bookRepository, libraryRepository, userBookProgressRepository, userBookFileProgressRepository,
+                userRepository, shelfRepository, authenticationService, mobileBookMapper,
                 bookService, magicShelfBookService, entityManager
         );
     }
@@ -73,7 +77,7 @@ class AppBookServiceProgressTest {
         mockBookWithLibrary(bookId, libraryId);
 
         UpdateProgressRequest request = new UpdateProgressRequest();
-        request.setFileProgress(new BookFileProgress(1L, "pos", "href", 0.5f, null));
+        request.setFileProgress(new BookFileProgress(1L, "pos", "href", 0.5f, null, null));
 
         service.updateBookProgress(bookId, request);
 
@@ -92,7 +96,7 @@ class AppBookServiceProgressTest {
         mockBookWithLibrary(bookId, libraryId);
 
         UpdateProgressRequest request = new UpdateProgressRequest();
-        request.setFileProgress(new BookFileProgress(1L, null, null, 0.75f, null));
+        request.setFileProgress(new BookFileProgress(1L, null, null, 0.75f, null, null));
 
         service.updateBookProgress(bookId, request);
 
@@ -118,7 +122,7 @@ class AppBookServiceProgressTest {
         mockBookWithLibrary(bookId, libraryId);
 
         UpdateProgressRequest request = new UpdateProgressRequest();
-        request.setFileProgress(new BookFileProgress(1L, null, null, 0.5f, null));
+        request.setFileProgress(new BookFileProgress(1L, null, null, 0.5f, null, null));
 
         assertThrows(APIException.class, () -> service.updateBookProgress(bookId, request));
         verify(bookService, never()).updateReadProgress(any());
@@ -130,7 +134,7 @@ class AppBookServiceProgressTest {
         mockBookWithLibrary(bookId, libraryId);
 
         UpdateProgressRequest request = new UpdateProgressRequest();
-        request.setFileProgress(new BookFileProgress(1L, null, null, 0.5f, null));
+        request.setFileProgress(new BookFileProgress(1L, null, null, 0.5f, null, null));
 
         service.updateBookProgress(bookId, request);
 
@@ -147,7 +151,7 @@ class AppBookServiceProgressTest {
         when(bookRepository.findByIdWithBookFiles(bookId)).thenReturn(Optional.empty());
 
         UpdateProgressRequest request = new UpdateProgressRequest();
-        request.setFileProgress(new BookFileProgress(1L, null, null, 0.5f, null));
+        request.setFileProgress(new BookFileProgress(1L, null, null, 0.5f, null, null));
 
         assertThrows(APIException.class, () -> service.updateBookProgress(bookId, request));
         verify(bookService, never()).updateReadProgress(any());
