@@ -67,9 +67,7 @@ public class EpubReaderController {
                 "application/vnd.ms-fontobject".equals(contentType)) {
             response.setHeader("Access-Control-Allow-Origin", "*");
         }
-        // Defense in depth for untrusted EPUB resources. See Foliate's security guidance:
-        // https://github.com/johnfactotum/foliate-js#security
-        response.setHeader("Content-Security-Policy", "script-src 'none'");
+
         response.setHeader("Cache-Control", "private, max-age=3600");
 
         try {

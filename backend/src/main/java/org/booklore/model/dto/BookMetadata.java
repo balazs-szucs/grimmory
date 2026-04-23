@@ -68,6 +68,7 @@ public class BookMetadata {
     private String thumbnailUrl;
     private List<BookReview> bookReviews;
     private Double rating;
+    private Integer reviewCount;
     private Boolean isFixedLayout;
 
     private Boolean allMetadataLocked;

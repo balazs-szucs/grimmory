@@ -167,6 +167,35 @@ class OpdsFeedServiceTest {
     }
 
     @Test
+    void generateCatalogFeed_withMagicShelfId_enforcesOpdsAccessAndCallsMagicShelfService() {
+        mockAuthenticatedUser();
+
+        when(request.getParameter("libraryId")).thenReturn(null);
+        when(request.getParameter("shelfId")).thenReturn(null);
+        when(request.getParameter("shelfIds")).thenReturn(null);
+        when(request.getParameter("magicShelfId")).thenReturn("7");
+        when(request.getParameter("q")).thenReturn(null);
+        when(request.getParameter("author")).thenReturn(null);
+        when(request.getParameter("series")).thenReturn(null);
+        when(request.getParameter("page")).thenReturn(null);
+        when(request.getParameter("size")).thenReturn(null);
+        when(request.getRequestURI()).thenReturn("/api/v1/opds/catalog");
+        when(request.getQueryString()).thenReturn("magicShelfId=7");
+
+        Page<Book> page = new PageImpl<>(Collections.emptyList(), PageRequest.of(0, 50), 0);
+        when(magicShelfBookService.getBooksByMagicShelfId(TEST_USER_ID, 7L, 0, 50)).thenReturn(page);
+        when(magicShelfBookService.getMagicShelfName(7L)).thenReturn("Test Magic - Magic Shelf");
+        when(opdsBookService.applySortOrder(any(), any())).thenReturn(page);
+
+        String xml = opdsFeedService.generateCatalogFeed(request);
+
+        assertThat(xml).contains("Test Magic - Magic Shelf");
+        verify(opdsBookService).assertUserMayAccessOpdsCatalog(TEST_USER_ID);
+        verify(magicShelfBookService).getBooksByMagicShelfId(TEST_USER_ID, 7L, 0, 50);
+        verify(opdsBookService, never()).getBooksPage(any(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
     void generateCatalogFeed_shouldHandleEmptyPage() {
         mockAuthenticatedUser();
 

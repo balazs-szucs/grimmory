@@ -216,6 +216,11 @@ public class BookQueryService {
             m.setExternalUrl(null);
             m.setThumbnailUrl(null);
             m.setProvider(null);
+            m.setPublishedDate(null);
+            m.setPageCount(null);
+            m.setLanguage(null);
+            m.setRating(null);
+            m.setReviewCount(null);
             if (m.getAudiobookMetadata() != null) {
                 m.getAudiobookMetadata().setChapters(null);
             }
@@ -227,6 +232,13 @@ public class BookQueryService {
             m.setAudibleRating(null);
             m.setAudibleReviewCount(null);
             m.setLubimyczytacRating(null);
+            m.setAmazonRating(null);
+            m.setAmazonReviewCount(null);
+            m.setGoodreadsRating(null);
+            m.setGoodreadsReviewCount(null);
+            m.setHardcoverRating(null);
+            m.setHardcoverReviewCount(null);
+            m.setRanobedbRating(null);
 
             // Strip empty metadata collections
             if (m.getMoods() != null && m.getMoods().isEmpty()) m.setMoods(null);
@@ -281,9 +293,17 @@ public class BookQueryService {
             }
         }
 
-        // Strip empty book-level collections
-        if (dto.getAlternativeFormats() != null && dto.getAlternativeFormats().isEmpty()) dto.setAlternativeFormats(null);
-        if (dto.getSupplementaryFiles() != null && dto.getSupplementaryFiles().isEmpty()) dto.setSupplementaryFiles(null);
+        // Strip book-level collections and fields
+        dto.setAlternativeFormats(null);
+        dto.setSupplementaryFiles(null);
+        dto.setLibraryName(null);
+        dto.setLibraryPath(null);
+
+        if (dto.getPrimaryFile() != null) {
+            dto.getPrimaryFile().setFilePath(null);
+            dto.getPrimaryFile().setFileSubPath(null);
+            dto.getPrimaryFile().setDescription(null);
+        }
     }
 
     private boolean computeAllMetadataLocked(BookMetadata m) {

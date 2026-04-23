@@ -16,12 +16,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -104,6 +109,10 @@ public class FileService {
 
     public String getAudiobookCoverFile(long bookId) {
         return Paths.get(appProperties.getPathConfig(), IMAGES_DIR, String.valueOf(bookId), AUDIOBOOK_COVER_FILENAME).toString();
+    }
+
+    public String getThumbnailVariantFile(long bookId, int width) {
+        return Paths.get(appProperties.getPathConfig(), IMAGES_DIR, String.valueOf(bookId), "thumbnail_" + width + ".jpg").toString();
     }
 
     public String getAuthorImagesFolder(long authorId) {
@@ -268,12 +277,49 @@ public class FileService {
             if (!parentDir.exists() && !parentDir.mkdirs()) {
                 throw new IOException("Failed to create directory: " + parentDir);
             }
-            ImageIO.write(originalImage, IMAGE_FORMAT, outputFile);
+            writeJpegWithQuality(originalImage, outputFile, 0.75f);
             log.info("Image saved successfully to: {}", filePath);
         } finally {
             if (originalImage != null) {
-                originalImage.flush(); // Release native resources
+                originalImage.flush();
             }
+        }
+    }
+
+    private static void writeJpegWithQuality(BufferedImage img, File file, float quality) throws IOException {
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(file)) {
+            writeJpegWithQuality(img, ios, quality);
+        }
+    }
+
+    /**
+     * Encodes a JPEG in memory (for example, on-the-fly thumbnail width variants).
+     */
+    public static byte[] writeJpegWithQualityToByteArray(BufferedImage img, float quality) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.min(2_000_000, img.getWidth() * img.getHeight() + 1024));
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(baos)) {
+            writeJpegWithQuality(img, ios, quality);
+        }
+        return baos.toByteArray();
+    }
+
+    private static void writeJpegWithQuality(BufferedImage img, ImageOutputStream ios, float quality) throws IOException {
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName(IMAGE_FORMAT);
+        if (!writers.hasNext()) {
+            throw new IOException("No JPEG image writer is available");
+        }
+        ImageWriter writer = writers.next();
+        try {
+            writer.setOutput(ios);
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            if (param.canWriteCompressed()) {
+                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionType(IMAGE_FORMAT);
+                param.setCompressionQuality(quality);
+            }
+            writer.write(null, new IIOImage(img, null, null), param);
+        } finally {
+            writer.dispose();
         }
     }
 
@@ -545,7 +591,12 @@ public class FileService {
             }
 
             File photoFile = new File(folder, AUTHOR_PHOTO_FILENAME);
-            boolean photoSaved = ImageIO.write(rgbImage, IMAGE_FORMAT, photoFile);
+            try {
+                writeJpegWithQuality(rgbImage, photoFile, 0.75f);
+            } catch (IOException e) {
+                log.warn("Failed to write author photo for {}: {}", authorId, e.getMessage());
+                return false;
+            }
 
             double targetRatio = (double) THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT;
             double sourceRatio = (double) rgbImage.getWidth() / rgbImage.getHeight();
@@ -565,9 +616,14 @@ public class FileService {
             thumb = resizeImage(cropped, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 
             File thumbnailFile = new File(folder, AUTHOR_THUMBNAIL_FILENAME);
-            boolean thumbnailSaved = ImageIO.write(thumb, IMAGE_FORMAT, thumbnailFile);
+            try {
+                writeJpegWithQuality(thumb, thumbnailFile, 0.6f);
+            } catch (IOException e) {
+                log.warn("Failed to write author thumbnail for {}: {}", authorId, e.getMessage());
+                return false;
+            }
 
-            return photoSaved && thumbnailSaved;
+            return true;
         } finally {
             if (rgbImage != null) {
                 rgbImage.flush();
@@ -701,14 +757,24 @@ public class FileService {
             }
 
             File originalFile = new File(folder, AUDIOBOOK_COVER_FILENAME);
-            boolean originalSaved = ImageIO.write(resized, IMAGE_FORMAT, originalFile);
+            try {
+                writeJpegWithQuality(resized, originalFile, 0.75f);
+            } catch (IOException e) {
+                log.warn("Failed to write audiobook cover for {}: {}", bookId, e.getMessage());
+                return false;
+            }
 
             // Create square thumbnail
             thumb = resizeImage(resized, SQUARE_THUMBNAIL_SIZE, SQUARE_THUMBNAIL_SIZE);
             File thumbnailFile = new File(folder, AUDIOBOOK_THUMBNAIL_FILENAME);
-            boolean thumbnailSaved = ImageIO.write(thumb, IMAGE_FORMAT, thumbnailFile);
+            try {
+                writeJpegWithQuality(thumb, thumbnailFile, 0.6f);
+            } catch (IOException e) {
+                log.warn("Failed to write audiobook thumbnail for {}: {}", bookId, e.getMessage());
+                return false;
+            }
 
-            return originalSaved && thumbnailSaved;
+            return true;
         } finally {
             if (rgbImage != null) {
                 rgbImage.flush();
@@ -762,7 +828,12 @@ public class FileService {
             }
 
             File originalFile = new File(folder, COVER_FILENAME);
-            boolean originalSaved = ImageIO.write(rgbImage, IMAGE_FORMAT, originalFile);
+            try {
+                writeJpegWithQuality(rgbImage, originalFile, 0.75f);
+            } catch (IOException e) {
+                log.warn("Failed to write book cover for {}: {}", bookId, e.getMessage());
+                return false;
+            }
 
             // Determine thumbnail dimensions based on source aspect ratio
             int thumbWidth, thumbHeight;
@@ -778,9 +849,14 @@ public class FileService {
             }
             thumb = resizeImage(rgbImage, thumbWidth, thumbHeight);
             File thumbnailFile = new File(folder, THUMBNAIL_FILENAME);
-            boolean thumbnailSaved = ImageIO.write(thumb, IMAGE_FORMAT, thumbnailFile);
+            try {
+                writeJpegWithQuality(thumb, thumbnailFile, 0.6f);
+            } catch (IOException e) {
+                log.warn("Failed to write book thumbnail for {}: {}", bookId, e.getMessage());
+                return false;
+            }
 
-            return originalSaved && thumbnailSaved;
+            return true;
         } finally {
             // Cleanup resources created within this method
             // Note: cropped/resized may equal rgbImage after reassignment, avoid double-flush

@@ -750,7 +750,9 @@ public class OpdsFeedService {
         if (details == null || details.getOpdsUserV2() == null) {
             throw ApiError.FORBIDDEN.createException("OPDS authentication required");
         }
-        return details.getOpdsUserV2().getUserId();
+        Long userId = details.getOpdsUserV2().getUserId();
+        opdsBookService.assertUserMayAccessOpdsCatalog(userId);
+        return userId;
     }
 
     private OpdsSortOrder getSortOrder() {

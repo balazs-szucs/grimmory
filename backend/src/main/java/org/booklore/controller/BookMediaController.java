@@ -12,12 +12,19 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 
 @Tag(name = "Book Media", description = "Endpoints for retrieving book media such as covers, thumbnails, and pages")
 @AllArgsConstructor
@@ -34,8 +41,25 @@ public class BookMediaController {
     @ApiResponse(responseCode = "200", description = "Book thumbnail returned successfully")
     @GetMapping("/book/{bookId}/thumbnail")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> getBookThumbnail(@Parameter(description = "ID of the book") @PathVariable long bookId) {
-        return ResponseEntity.ok(bookService.getBookThumbnail(bookId));
+    public ResponseEntity<Resource> getBookThumbnail(
+            @Parameter(description = "ID of the book") @PathVariable long bookId,
+            @Parameter(description = "Optional max display width in pixels (smaller JPEG for list/LCP).")
+            @RequestParam(name = "w", required = false) Integer displayWidth) {
+        boolean realFile = bookService.hasBookThumbnail(bookId);
+        Instant updatedOn = realFile ? bookService.getCoverUpdatedOn(bookId) : null;
+
+        Resource resource = bookService.getBookThumbnail(bookId, displayWidth);
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .cacheControl(realFile
+                        ? CacheControl.maxAge(365, TimeUnit.DAYS).cachePrivate().mustRevalidate()
+                        : CacheControl.noStore());
+
+        if (updatedOn != null) {
+            builder.lastModified(updatedOn);
+        }
+
+        return builder.body(resource);
     }
 
     @Operation(summary = "Get book cover", description = "Retrieve the cover image for a specific book.")
@@ -43,15 +67,45 @@ public class BookMediaController {
     @GetMapping("/book/{bookId}/cover")
     @CheckBookAccess(bookIdParam = "bookId")
     public ResponseEntity<Resource> getBookCover(@Parameter(description = "ID of the book") @PathVariable long bookId) {
-        return ResponseEntity.ok(bookService.getBookCover(bookId));
+        Resource resource = bookService.getBookCover(bookId);
+        boolean realFile = bookService.hasBookCover(bookId);
+        Instant updatedOn = realFile ? bookService.getCoverUpdatedOn(bookId) : null;
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .cacheControl(realFile
+                        ? CacheControl.maxAge(365, TimeUnit.DAYS).cachePrivate().mustRevalidate()
+                        : CacheControl.noStore());
+
+        if (updatedOn != null) {
+            builder.lastModified(updatedOn);
+        }
+
+        return builder.body(resource);
     }
 
     @Operation(summary = "Get audiobook thumbnail", description = "Retrieve the audiobook thumbnail image for a specific book.")
     @ApiResponse(responseCode = "200", description = "Audiobook thumbnail returned successfully")
     @GetMapping("/book/{bookId}/audiobook-thumbnail")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> getAudiobookThumbnail(@Parameter(description = "ID of the book") @PathVariable long bookId) {
-        return ResponseEntity.ok(bookService.getAudiobookThumbnail(bookId));
+    public ResponseEntity<Resource> getAudiobookThumbnail(
+            @Parameter(description = "ID of the book") @PathVariable long bookId,
+            @Parameter(description = "Optional max display width in pixels (smaller JPEG for list/LCP).")
+            @RequestParam(name = "w", required = false) Integer displayWidth) {
+        boolean realFile = bookService.hasAudiobookThumbnail(bookId);
+        Instant updatedOn = realFile ? bookService.getAudiobookCoverUpdatedOn(bookId) : null;
+
+        Resource resource = bookService.getAudiobookThumbnail(bookId, displayWidth);
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .cacheControl(realFile
+                        ? CacheControl.maxAge(365, TimeUnit.DAYS).cachePrivate().mustRevalidate()
+                        : CacheControl.noStore());
+
+        if (updatedOn != null) {
+            builder.lastModified(updatedOn);
+        }
+
+        return builder.body(resource);
     }
 
     @Operation(summary = "Get audiobook cover", description = "Retrieve the audiobook cover image for a specific book.")
@@ -59,7 +113,20 @@ public class BookMediaController {
     @GetMapping("/book/{bookId}/audiobook-cover")
     @CheckBookAccess(bookIdParam = "bookId")
     public ResponseEntity<Resource> getAudiobookCover(@Parameter(description = "ID of the book") @PathVariable long bookId) {
-        return ResponseEntity.ok(bookService.getAudiobookCover(bookId));
+        Resource resource = bookService.getAudiobookCover(bookId);
+        boolean realFile = bookService.hasAudiobookCover(bookId);
+        Instant updatedOn = realFile ? bookService.getAudiobookCoverUpdatedOn(bookId) : null;
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .cacheControl(realFile
+                        ? CacheControl.maxAge(365, TimeUnit.DAYS).cachePrivate().mustRevalidate()
+                        : CacheControl.noStore());
+
+        if (updatedOn != null) {
+            builder.lastModified(updatedOn);
+        }
+
+        return builder.body(resource);
     }
 
     @Operation(summary = "Get CBX page as image", description = "Retrieve a specific page from a CBX book as an image.")
@@ -83,7 +150,18 @@ public class BookMediaController {
         if (photo == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).body(photo);
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(365, TimeUnit.DAYS).cachePrivate().mustRevalidate())
+                .contentType(MediaType.IMAGE_JPEG);
+
+        try {
+            builder.lastModified(photo.lastModified());
+        } catch (IOException e) {
+            // Ignore if lastModified cannot be determined
+        }
+
+        return builder.body(photo);
     }
 
     @Operation(summary = "Get author thumbnail", description = "Retrieve the thumbnail for a specific author.")
@@ -94,7 +172,18 @@ public class BookMediaController {
         if (thumbnail == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).body(thumbnail);
+
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(365, TimeUnit.DAYS).cachePrivate().mustRevalidate())
+                .contentType(MediaType.IMAGE_JPEG);
+
+        try {
+            builder.lastModified(thumbnail.lastModified());
+        } catch (IOException e) {
+            // Ignore if lastModified cannot be determined
+        }
+
+        return builder.body(thumbnail);
     }
 
     @Operation(summary = "Get bookdrop cover", description = "Retrieve the cover image for a specific bookdrop file.")
