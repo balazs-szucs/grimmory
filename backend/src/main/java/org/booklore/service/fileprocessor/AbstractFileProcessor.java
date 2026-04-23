@@ -14,6 +14,7 @@ import org.booklore.service.file.FileFingerprint;
 import org.booklore.service.metadata.MetadataMatchService;
 import org.booklore.service.metadata.sidecar.SidecarMetadataWriter;
 import org.booklore.util.FileService;
+import org.booklore.util.FileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Propagation;
@@ -112,6 +113,14 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;
         }
+    }
+
+    protected boolean generateCoverFromFolderImage(BookEntity bookEntity, Path bookFolder) {
+        return useFolderCoverImage(bookEntity, bookFolder);
+    }
+
+    protected boolean generateAudiobookCoverFromFolderImage(BookEntity bookEntity, Path bookFolder) {
+        return useFolderAudiobookCoverImage(bookEntity, bookFolder);
     }
 
 }

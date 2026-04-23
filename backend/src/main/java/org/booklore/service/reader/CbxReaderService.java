@@ -403,4 +403,12 @@ public class CbxReaderService {
         }
         return s1.compareToIgnoreCase(s2);
     }
+
+    private boolean isZipPath(Path cbxPath) {
+        if (cbxPath == null || !Files.isRegularFile(cbxPath)) {
+            return false;
+        }
+        String mime = org.booklore.util.MimeDetector.detectSafe(cbxPath);
+        return "application/zip".equals(mime) || "application/x-cbz".equals(mime);
+    }
 }

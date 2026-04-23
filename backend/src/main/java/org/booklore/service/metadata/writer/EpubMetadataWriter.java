@@ -28,6 +28,7 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -54,6 +55,7 @@ import org.grimmory.epub4j.archive.EpubContainers;
 public class EpubMetadataWriter implements MetadataWriter {
 
     private static final String OPF_NS = "http://www.idpf.org/2007/opf";
+    private static final int MAX_COVER_BYTES = 10 * 1024 * 1024;
     private final AppSettingService appSettingService;
 
     @Override
@@ -329,7 +331,10 @@ public class EpubMetadataWriter implements MetadataWriter {
         }
 
         try {
-            byte[] coverData = multipartFile.getBytes();
+            byte[] coverData;
+            try (InputStream inputStream = multipartFile.getInputStream()) {
+                coverData = readLimitedBytes(inputStream, MAX_COVER_BYTES);
+            }
             replaceCoverImageInternal(bookEntity, coverData, "upload");
         } catch (IOException e) {
             log.warn("Failed to read uploaded cover image: {}", e.getMessage(), e);
@@ -515,11 +520,26 @@ public class EpubMetadataWriter implements MetadataWriter {
 
     private byte[] loadImage(String pathOrUrl) {
         try (InputStream stream = pathOrUrl.startsWith("http") ? URI.create(pathOrUrl).toURL().openStream() : new FileInputStream(pathOrUrl)) {
-            return stream.readAllBytes();
+            return readLimitedBytes(stream, MAX_COVER_BYTES);
         } catch (IOException e) {
             log.warn("Failed to load image from {}: {}", pathOrUrl, e.getMessage());
             return null;
         }
+    }
+
+    private byte[] readLimitedBytes(InputStream stream, int maxBytes) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = stream.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Cover image exceeds maximum size of " + maxBytes + " bytes");
+            }
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
     }
 
     private void extractZipToDirectory(File zipSource, Path targetDir) throws IOException {
@@ -542,7 +562,12 @@ public class EpubMetadataWriter implements MetadataWriter {
             // EPUB spec requires mimetype to be the first entry in the ZIP, uncompressed (STORED)
             Path mimetypeFile = sourceDir.resolve("mimetype");
             if (Files.exists(mimetypeFile)) {
-                byte[] mimetypeData = Files.readAllBytes(mimetypeFile);
+                byte[] mimetypeData;
+                try (InputStream in = Files.newInputStream(mimetypeFile);
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    in.transferTo(out);
+                    mimetypeData = out.toByteArray();
+                }
                 ZipEntry mimetypeEntry = new ZipEntry("mimetype");
                 mimetypeEntry.setMethod(ZipEntry.STORED);
                 mimetypeEntry.setSize(mimetypeData.length);

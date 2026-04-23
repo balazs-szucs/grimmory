@@ -7,11 +7,15 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.booklore.service.ArchiveService;
+import org.booklore.util.VipsImageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -27,10 +31,14 @@ import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("CBX Conversion Service Tests")
 @EnabledIf("org.booklore.service.ArchiveService#isAvailable")
+@ExtendWith(MockitoExtension.class)
 class CbxConversionServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @Mock
+    private VipsImageService vipsImageService;
 
     private CbxConversionService cbxConversionService;
     private File testCbzFile;
@@ -38,7 +46,7 @@ class CbxConversionServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        cbxConversionService = new CbxConversionService(new ArchiveService());
+        cbxConversionService = new CbxConversionService(new ArchiveService(), vipsImageService);
         testCbzFile = createTestCbzFile();
         testBookEntity = createTestBookEntity();
     }

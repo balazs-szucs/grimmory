@@ -36,6 +36,7 @@ class CbxMetadataExtractorTest {
     void setUp() {
         org.booklore.util.VipsImageService mockVips = org.mockito.Mockito.mock(org.booklore.util.VipsImageService.class);
         org.mockito.Mockito.when(mockVips.canDecode(org.mockito.ArgumentMatchers.any(byte[].class))).thenReturn(true);
+        org.mockito.Mockito.when(mockVips.canDecode(org.mockito.ArgumentMatchers.any(java.io.InputStream.class))).thenReturn(true);
         extractor = new CbxMetadataExtractor(archiveService, mockVips);
     }
 
@@ -69,7 +70,19 @@ class CbxMetadataExtractorTest {
         when(archiveService.streamEntryNames(path)).then((i) -> keys.stream());
 
         for (String key : keys) {
-            when(archiveService.getEntryBytes(path, key)).thenReturn(contents.get(key));
+            byte[] data = contents.get(key);
+            when(archiveService.getEntryBytes(path, key)).thenReturn(data);
+            try {
+                when(archiveService.withEntryInputStream(eq(path), eq(key), any()))
+                        .thenAnswer(invocation -> {
+                            ArchiveService.EntryInputStreamHandler<?> handler = invocation.getArgument(2);
+                            try (InputStream is = new ByteArrayInputStream(data)) {
+                                return handler.handle(is);
+                            }
+                        });
+            } catch (Exception e) {
+                // ignore
+            }
         }
 
         return path;
@@ -79,6 +92,11 @@ class CbxMetadataExtractorTest {
         Path path = Path.of("test.cbz");
         when(archiveService.streamEntryNames(path)).thenThrow(IOException.class);
         when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenThrow(IOException.class);
+        try {
+            when(archiveService.withEntryInputStream(eq(path), any(), any())).thenThrow(IOException.class);
+        } catch (Exception e) {
+            // ignore
+        }
         return path;
     }
 
@@ -86,14 +104,32 @@ class CbxMetadataExtractorTest {
         Path path = Path.of("test.cbz");
         when(archiveService.streamEntryNames(path)).then((i) -> Stream.empty());
         when(archiveService.getEntryBytes(eq(path), any())).thenThrow(IOException.class);
+        try {
+            when(archiveService.withEntryInputStream(eq(path), any(), any())).thenThrow(IOException.class);
+        } catch (Exception e) {
+            // ignore
+        }
         return path;
     }
 
     private Path mockComicInfo(String innerXml) throws IOException {
         Path path = Path.of("test.cbz");
         String xml = wrapInComicInfo(innerXml);
-        when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(xml.getBytes());
+        byte[] xmlBytes = xml.getBytes();
+        when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(xmlBytes);
         when(archiveService.streamEntryNames(path)).then((i) -> Stream.of("ComicInfo.xml"));
+
+        try {
+            when(archiveService.withEntryInputStream(eq(path), eq("ComicInfo.xml"), any()))
+                    .thenAnswer(invocation -> {
+                        ArchiveService.EntryInputStreamHandler<?> handler = invocation.getArgument(2);
+                        try (InputStream is = new ByteArrayInputStream(xmlBytes)) {
+                            return handler.handle(is);
+                        }
+                    });
+        } catch (Exception e) {
+            // ignore
+        }
 
         return path;
     }

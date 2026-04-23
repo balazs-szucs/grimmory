@@ -205,7 +205,7 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
 
     private boolean generateCoverImageAndSave(Long bookId, PdfDocument doc) throws IOException {
         try (PdfPage page = doc.page(0)) {
-            byte[] coverBytes = page.render(150).toBytes("jpeg");
+            byte[] coverBytes = page.render(150).toJpegBytes();
             return fileService.saveCoverImages(coverBytes, bookId);
         } catch (OutOfMemoryError e) {
             log.error("Out of memory (heap space exhausted) while generating cover for bookId {}. Skipping cover generation.", bookId);

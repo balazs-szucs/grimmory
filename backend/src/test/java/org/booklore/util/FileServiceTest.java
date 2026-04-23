@@ -1,8 +1,8 @@
 package org.booklore.util;
 
 import org.booklore.config.AppProperties;
-import org.booklore.model.settings.AppSettings;
-import org.booklore.model.settings.CoverCroppingSettings;
+import org.booklore.model.dto.settings.AppSettings;
+import org.booklore.model.dto.settings.CoverCroppingSettings;
 import org.booklore.service.appsettings.AppSettingService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -163,7 +163,7 @@ class FileServiceTest {
             @Test
             void decompressionBomb_throwsException() throws IOException {
                 byte[] imageData = new byte[10];
-                when(mockVips.readDimensions(imageData)).thenReturn(new ImageDimensions(10000, 10000));
+                when(mockVips.readDimensions(any(byte[].class))).thenReturn(new ImageDimensions(10000, 10000));
 
                 IOException ex = assertThrows(IOException.class, () -> FileService.validateImageData(imageData, mockVips));
                 assertTrue(ex.getMessage().contains("possible decompression bomb"));

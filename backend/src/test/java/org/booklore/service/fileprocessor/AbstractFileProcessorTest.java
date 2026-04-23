@@ -23,11 +23,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -98,12 +100,12 @@ class AbstractFileProcessorTest {
         var bookEntity = new BookEntity();
         bookEntity.setId(1L);
 
-        when(fileService.saveCoverImages(any(BufferedImage.class), eq(1L))).thenReturn(true);
+        when(fileService.saveCoverImages(any(InputStream.class), eq(1L))).thenReturn(true);
 
         boolean result = processor.exposedGenerateCoverFromFolderImage(bookEntity, folder);
 
         assertThat(result).isTrue();
-        verify(fileService).saveCoverImages(any(BufferedImage.class), eq(1L));
+        verify(fileService).saveCoverImages(any(InputStream.class), eq(1L));
     }
 
     @Test
@@ -129,7 +131,7 @@ class AbstractFileProcessorTest {
 
         processor.exposedGenerateCoverFromFolderImage(bookEntity, folder);
 
-        verify(fileService, never()).saveCoverImages(any(), any(long.class));
+        verify(fileService, never()).saveCoverImages(any(InputStream.class), anyLong());
     }
 
     // ========== generateAudiobookCoverFromFolderImage ==========
@@ -143,12 +145,12 @@ class AbstractFileProcessorTest {
         var bookEntity = new BookEntity();
         bookEntity.setId(2L);
 
-        when(fileService.saveAudiobookCoverImages(any(BufferedImage.class), eq(2L))).thenReturn(true);
+        when(fileService.saveAudiobookCoverImages(any(InputStream.class), eq(2L))).thenReturn(true);
 
         boolean result = processor.exposedGenerateAudiobookCoverFromFolderImage(bookEntity, folder);
 
         assertThat(result).isTrue();
-        verify(fileService).saveAudiobookCoverImages(any(BufferedImage.class), eq(2L));
+        verify(fileService).saveAudiobookCoverImages(any(InputStream.class), eq(2L));
     }
 
     @Test

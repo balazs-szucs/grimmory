@@ -522,8 +522,20 @@ public class BookCoverService {
     }
 
     private byte[] extractBytesFromMultipartFile(MultipartFile file) {
-        try {
-            return file.getBytes();
+        final int maxBytes = 10 * 1024 * 1024;
+        try (var inputStream = file.getInputStream();
+             var output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            int total = 0;
+            while ((read = inputStream.read(buffer)) != -1) {
+                total += read;
+                if (total > maxBytes) {
+                    throw new IOException("Cover file exceeds " + maxBytes + " bytes");
+                }
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
         } catch (Exception e) {
             log.error("Failed to read cover file: {}", e.getMessage());
             throw new RuntimeException("Failed to read cover file", e);

@@ -17,6 +17,7 @@ import java.util.Optional;
 @Slf4j
 @Service
 public class SidecarMetadataReader {
+    private static final int MAX_SIDECAR_COVER_BYTES = 10 * 1024 * 1024;
 
     private final SidecarMetadataMapper mapper;
     private final ObjectMapper objectMapper;
@@ -61,8 +62,20 @@ public class SidecarMetadataReader {
             return null;
         }
 
-        try {
-            return Files.readAllBytes(coverPath);
+        try (var inputStream = Files.newInputStream(coverPath);
+             var output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int total = 0;
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                total += read;
+                if (total > MAX_SIDECAR_COVER_BYTES) {
+                    log.warn("Sidecar cover {} exceeds size limit ({} bytes)", coverPath, MAX_SIDECAR_COVER_BYTES);
+                    return null;
+                }
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
         } catch (IOException e) {
             log.warn("Failed to read sidecar cover from {}: {}", coverPath, e.getMessage());
             return null;
