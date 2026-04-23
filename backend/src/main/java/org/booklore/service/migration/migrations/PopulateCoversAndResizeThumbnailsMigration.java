@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -49,10 +50,11 @@ public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
                     stream.filter(Files::isRegularFile)
                             .forEach(path -> {
                                 try {
-                                    byte[] imageData = Files.readAllBytes(path);
-                                    if (!vipsImageService.canDecode(imageData)) {
-                                        log.warn("Skipping non-image file: {}", path);
-                                        return;
+                                    try (var inputStream = Files.newInputStream(path)) {
+                                        if (!vipsImageService.canDecode(inputStream)) {
+                                            log.warn("Skipping non-image file: {}", path);
+                                            return;
+                                        }
                                     }
 
                                     // Extract bookId from folder structure
@@ -62,15 +64,19 @@ public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
                                     Path bookDir = imagesDir.resolve(bookId);
                                     Files.createDirectories(bookDir);
 
-                                    // Flatten + save as cover.jpg
+                                    // Flatten + save as cover.jpg (file-to-file avoids in-memory image buffers)
                                     Path coverFile = bookDir.resolve("cover.jpg");
-                                    vipsImageService.flattenResizeAndSave(imageData, coverFile, 1000, 1500);
+                                    Path tempInputFile = bookDir.resolve("thumb-source.tmp");
+                                    Files.copy(path, tempInputFile, StandardCopyOption.REPLACE_EXISTING);
+                                    try {
+                                        vipsImageService.flattenResizeAndSave(tempInputFile, coverFile, 1000, 1500);
+                                        Path thumbnailFile = bookDir.resolve("thumbnail.jpg");
+                                        vipsImageService.flattenThumbnailAndSave(tempInputFile, thumbnailFile, 250, 350);
+                                    } finally {
+                                        Files.deleteIfExists(tempInputFile);
+                                    }
 
-                                    // Resize and save thumbnail.jpg
-                                    Path thumbnailFile = bookDir.resolve("thumbnail.jpg");
-                                    vipsImageService.flattenThumbnailAndSave(imageData, thumbnailFile, 250, 350);
-
-                                    log.debug("Processed book {}: cover={} thumbnail={}", bookId, coverFile, thumbnailFile);
+                                    log.debug("Processed book {}: cover={} thumbnail={}", bookId, coverFile, bookDir.resolve("thumbnail.jpg"));
                                 } catch (IOException e) {
                                     log.error("Error processing file {}", path, e);
                                     throw new UncheckedIOException(e);

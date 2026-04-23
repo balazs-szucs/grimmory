@@ -2,23 +2,27 @@ package org.booklore.util;
 
 import app.photofox.vipsffm.VBlob;
 import app.photofox.vipsffm.VImage;
+import app.photofox.vipsffm.VSource;
+import app.photofox.vipsffm.VTarget;
 import app.photofox.vipsffm.Vips;
 import app.photofox.vipsffm.VipsError;
 import app.photofox.vipsffm.VipsHelper;
 import app.photofox.vipsffm.VipsOption;
 import app.photofox.vipsffm.enums.VipsAccess;
 import app.photofox.vipsffm.enums.VipsBandFormat;
+import app.photofox.vipsffm.enums.VipsInteresting;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,23 +30,23 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * High-performance image processing service using libvips via vips-ffm.
- * Leverages the Foreign Function &amp; Memory (FFM) API for zero-copy native performance.
- * Uses a semaphore to limit concurrent encoding operations and prevent OOM under load.
- *
- * <p>vips-ffm auto-initialises libvips on first use of {@link Vips#run}; no manual
- * {@code Vips.init()} call is needed (see vips-ffm README, "Initialisation" section).</p>
+ * Prefers streaming (VSource/VTarget) and shrink-on-load (thumbnail) for memory efficiency.
  */
 @Slf4j
 @Service
 public class VipsImageService {
 
-    private static final Semaphore ENCODING_SEMAPHORE = new Semaphore(Runtime.getRuntime().availableProcessors());
+    private static final Semaphore ENCODING_SEMAPHORE = new Semaphore(Runtime.getRuntime().availableProcessors() * 2);
     private static final int DEFAULT_JPEG_QUALITY = 90;
     private static final List<Double> WHITE_BACKGROUND = List.of(255.0, 255.0, 255.0);
     private static final VipsOption SEQUENTIAL_ACCESS = VipsOption.Enum("access", VipsAccess.ACCESS_SEQUENTIAL);
     private static final AtomicBoolean VIPS_CONFIGURED = new AtomicBoolean(false);
 
+    /**
+     * Read dimensions from raw bytes.
+     */
     public ImageDimensions readDimensions(byte[] data) throws IOException {
+        if (data == null || data.length == 0) throw new IOException("Image data is null or empty");
         var ref = new AtomicReference<ImageDimensions>();
         runVips(arena -> {
             VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
@@ -51,6 +55,23 @@ public class VipsImageService {
         return ref.get();
     }
 
+    /**
+     * Read dimensions from an InputStream without loading the full image into memory.
+     */
+    public ImageDimensions readDimensions(InputStream inputStream) throws IOException {
+        if (inputStream == null) throw new IOException("Image stream is null");
+        var ref = new AtomicReference<ImageDimensions>();
+        runVips(arena -> {
+            VSource source = VSource.newFromInputStream(arena, inputStream);
+            VImage img = VImage.newFromSource(arena, source, "", SEQUENTIAL_ACCESS);
+            ref.set(new ImageDimensions(img.getWidth(), img.getHeight()));
+        });
+        return ref.get();
+    }
+
+    /**
+     * Read dimensions from a file efficiently.
+     */
     public ImageDimensions readDimensionsFromFile(Path path) throws IOException {
         var ref = new AtomicReference<ImageDimensions>();
         runVips(arena -> {
@@ -60,6 +81,9 @@ public class VipsImageService {
         return ref.get();
     }
 
+    /**
+     * Finds content bounds (trim) from bytes.
+     */
     public TrimBounds findContentBounds(byte[] data) throws IOException {
         var ref = new AtomicReference<TrimBounds>();
         runVips(arena -> {
@@ -76,10 +100,13 @@ public class VipsImageService {
         return ref.get();
     }
 
-    public TrimBounds findContentBounds(Path path) throws IOException {
+    /**
+     * Finds content bounds (trim) from a source file.
+     */
+    public TrimBounds findContentBounds(Path source) throws IOException {
         var ref = new AtomicReference<TrimBounds>();
         runVips(arena -> {
-            VImage img = VImage.newFromFile(arena, path.toString(), SEQUENTIAL_ACCESS);
+            VImage img = VImage.newFromFile(arena, source.toString(), SEQUENTIAL_ACCESS);
             if (img.hasAlpha()) {
                 img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
             }
@@ -92,6 +119,9 @@ public class VipsImageService {
         return ref.get();
     }
 
+    /**
+     * Checks if image bytes can be decoded.
+     */
     public boolean canDecode(byte[] data) {
         if (data == null || data.length == 0) return false;
         try {
@@ -103,23 +133,44 @@ public class VipsImageService {
     }
 
     /**
-     * Flatten alpha, proportional resize within bounds, save as JPEG.
+     * Checks if image stream can be decoded.
+     */
+    public boolean canDecode(InputStream inputStream) {
+        if (inputStream == null) return false;
+        try {
+            Vips.run(arena -> {
+                VSource source = VSource.newFromInputStream(arena, inputStream);
+                VImage.newFromSource(arena, source, "", SEQUENTIAL_ACCESS);
+            });
+            return true;
+        } catch (VipsError e) {
+            return false;
+        }
+    }
+
+    /**
+     * Flatten alpha, proportional resize within bounds, save as JPEG to target path.
+     * Uses thumbnail (shrink-on-load) for high performance.
      */
     public void flattenResizeAndSave(byte[] data, Path target, int maxWidth, int maxHeight) throws IOException {
         runVips(arena -> {
-            VImage img = loadAndFlatten(arena, data);
-            img = proportionalResize(img, maxWidth, maxHeight);
+            VImage img = VImage.thumbnailBuffer(arena, VBlob.newFromBytes(arena, data), maxWidth, VipsOption.Int("height", maxHeight));
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
         });
     }
 
     /**
-     * File-to-file: flatten alpha, proportional resize, save as JPEG.
+     * File-to-file version of flattenResizeAndSave.
      */
     public void flattenResizeAndSave(Path source, Path target, int maxWidth, int maxHeight) throws IOException {
         runVips(arena -> {
-            VImage img = loadAndFlattenFromFile(arena, source.toString());
-            img = proportionalResize(img, maxWidth, maxHeight);
+            VImage img = VImage.thumbnail(arena, source.toString(), maxWidth, VipsOption.Int("height", maxHeight));
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
         });
     }
@@ -131,7 +182,10 @@ public class VipsImageService {
             int cropLeft, int cropTop, int cropWidth, int cropHeight,
             int maxWidth, int maxHeight) throws IOException {
         runVips(arena -> {
-            VImage img = loadAndFlatten(arena, data);
+            VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
             img = img.extractArea(cropLeft, cropTop, cropWidth, cropHeight);
             img = proportionalResize(img, maxWidth, maxHeight);
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
@@ -139,13 +193,16 @@ public class VipsImageService {
     }
 
     /**
-     * File-to-file: flatten alpha, crop, proportional resize, save as JPEG.
+     * File-to-file version of flattenCropResizeAndSave.
      */
     public void flattenCropResizeAndSave(Path source, Path target,
             int cropLeft, int cropTop, int cropWidth, int cropHeight,
             int maxWidth, int maxHeight) throws IOException {
         runVips(arena -> {
-            VImage img = loadAndFlattenFromFile(arena, source.toString());
+            VImage img = VImage.newFromFile(arena, source.toString(), SEQUENTIAL_ACCESS);
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
             img = img.extractArea(cropLeft, cropTop, cropWidth, cropHeight);
             img = proportionalResize(img, maxWidth, maxHeight);
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
@@ -157,54 +214,33 @@ public class VipsImageService {
      */
     public void flattenThumbnailAndSave(byte[] data, Path target, int width, int height) throws IOException {
         runVips(arena -> {
-            VImage img = loadAndFlatten(arena, data);
-            img = thumbnailCrop(img, width, height);
+            VImage img = VImage.thumbnailBuffer(arena, VBlob.newFromBytes(arena, data), width,
+                    VipsOption.Int("height", height),
+                    VipsOption.Enum("crop", VipsInteresting.INTERESTING_CENTRE));
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
         });
     }
 
     /**
-     * File-to-file: flatten alpha, smart-crop thumbnail, save as JPEG.
+     * File-to-file version of flattenThumbnailAndSave.
      */
     public void flattenThumbnailAndSave(Path source, Path target, int width, int height) throws IOException {
         runVips(arena -> {
-            VImage img = loadAndFlattenFromFile(arena, source.toString());
-            img = thumbnailCrop(img, width, height);
-            img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
-        });
-    }
-
-    /**
-     * Resizes an image efficiently using libvips's streaming pipeline.
-     */
-    public void resizeImage(Path source, Path target, int width, int height) throws IOException {
-        runVips(arena -> {
-            VImage img = VImage.newFromFile(arena, source.toString(), SEQUENTIAL_ACCESS);
-            if (img.getWidth() <= width && img.getHeight() <= height) {
-                try {
-                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException e) {
-                    throw new VipsError("File copy failed: " + e.getMessage());
-                }
-                return;
+            VImage img = VImage.thumbnail(arena, source.toString(), width,
+                    VipsOption.Int("height", height),
+                    VipsOption.Enum("crop", VipsInteresting.INTERESTING_CENTRE));
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
             }
-            VImage resized = proportionalResize(img, width, height);
-            resized.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
-        });
-    }
-
-    /**
-     * Generates a thumbnail with smart-cropping (center-weighted).
-     */
-    public void generateThumbnail(Path source, Path target, int width, int height) throws IOException {
-        runVips(arena -> {
-            VImage img = VImage.thumbnail(arena, source.toString(), width);
             img.jpegsave(target.toString(), VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
         });
     }
 
     /**
-     * Crop a region from source, resize proportionally, save as JPEG.
+     * Crop a region from source file, resize proportionally, save as JPEG.
      */
     public void cropResizeAndSave(Path source, Path target,
             int cropLeft, int cropTop, int cropWidth, int cropHeight,
@@ -244,25 +280,12 @@ public class VipsImageService {
     }
 
     /**
-     * Converts a BufferedImage to JPEG bytes using libvips via vips-ffm.
-     * Extracts raw RGB pixel data from the BufferedImage and encodes it with
-     * libvips's optimised JPEG encoder (libjpeg-turbo).
+     * Converts a BufferedImage to JPEG bytes using libvips.
      */
     public byte[] bufferedImageToJpeg(BufferedImage img, int quality) throws IOException {
-        BufferedImage rgbImage;
-        if (img.getType() == BufferedImage.TYPE_INT_RGB || img.getType() == BufferedImage.TYPE_3BYTE_BGR) {
-            rgbImage = img;
-        } else {
-            rgbImage = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_RGB);
-            var g = rgbImage.createGraphics();
-            g.setColor(Color.WHITE);
-            g.fillRect(0, 0, img.getWidth(), img.getHeight());
-            g.drawImage(img, 0, 0, null);
-            g.dispose();
-        }
-        int w = rgbImage.getWidth();
-        int h = rgbImage.getHeight();
-        byte[] rgbBytes = extractRgbBytes(rgbImage, w, h);
+        int w = img.getWidth();
+        int h = img.getHeight();
+        byte[] rgbBytes = extractRgbBytes(img, w, h);
         var ref = new AtomicReference<byte[]>();
         runVips(arena -> {
             MemorySegment segment = arena.allocate((long) w * h * 3);
@@ -276,9 +299,7 @@ public class VipsImageService {
     }
 
     /**
-     * Downscales a BufferedImage using vips Lanczos3 and encodes directly to JPEG.
-     * Avoids creating an intermediate BufferedImage by combining resize + encode
-     * in a single vips pipeline.
+     * Downscales a BufferedImage and encodes directly to JPEG.
      */
     public byte[] downscaleBufferedImageToJpeg(BufferedImage img, int targetWidth, int targetHeight,
             int quality) throws IOException {
@@ -292,7 +313,9 @@ public class VipsImageService {
             VImage vimg = VImage.newFromMemory(arena, segment, w, h, 3,
                     VipsBandFormat.FORMAT_UCHAR.getRawValue());
             double scale = Math.min((double) targetWidth / w, (double) targetHeight / h);
-            vimg = vimg.resize(scale);
+            if (scale < 1.0) {
+                vimg = vimg.resize(scale);
+            }
             VBlob blob = vimg.jpegsaveBuffer(VipsOption.Int("Q", quality));
             ref.set(blob.asClonedByteBuffer().array());
         });
@@ -300,31 +323,40 @@ public class VipsImageService {
     }
 
     /**
-     * Converts an image to JPEG with optimized quality.
-     * @deprecated Use {@link #encodeAsJpeg(byte[], int)} instead.
+     * Processes an image from an InputStream and writes it to an OutputStream as optimized JPEG.
      */
-    @Deprecated(forRemoval = true)
-    public byte[] convertToOptimizedJpeg(byte[] data, float quality) throws IOException {
-        return encodeAsJpeg(data, (int) (quality * 100));
+    public void processStreamToJpeg(InputStream inputStream, OutputStream outputStream, int maxWidth, int maxHeight) throws IOException {
+        runVips(arena -> {
+            VSource source = VSource.newFromInputStream(arena, inputStream);
+            // Use thumbnail for streaming load + resize
+            VImage img = VImage.thumbnailSource(arena, source, maxWidth, VipsOption.Int("height", maxHeight));
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
+            VTarget target = VTarget.newFromOutputStream(arena, outputStream);
+            img.jpegsaveTarget(target, VipsOption.Int("Q", DEFAULT_JPEG_QUALITY));
+        });
     }
 
-    private VImage loadAndFlatten(Arena arena, byte[] data) throws VipsError {
-        VImage img = VImage.newFromBytes(arena, data, SEQUENTIAL_ACCESS);
-        if (img.hasAlpha()) {
-            img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
-        }
-        return img;
-    }
-
-    private VImage loadAndFlattenFromFile(Arena arena, String path) throws VipsError {
-        VImage img = VImage.newFromFile(arena, path, SEQUENTIAL_ACCESS);
-        if (img.hasAlpha()) {
-            img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
-        }
-        return img;
+    /**
+     * Transcodes a source stream to JPEG without materializing full byte[] buffers.
+     */
+    public void transcodeStreamToJpeg(InputStream inputStream, OutputStream outputStream, int quality) throws IOException {
+        int effectiveQuality = Math.max(1, Math.min(100, quality));
+        runVips(arena -> {
+            VSource source = VSource.newFromInputStream(arena, inputStream);
+            VImage img = VImage.newFromSource(arena, source, "", SEQUENTIAL_ACCESS);
+            if (img.hasAlpha()) {
+                img = img.flatten(VipsOption.ArrayDouble("background", WHITE_BACKGROUND));
+            }
+            VTarget target = VTarget.newFromOutputStream(arena, outputStream);
+            img.jpegsaveTarget(target, VipsOption.Int("Q", effectiveQuality));
+        });
     }
 
     private byte[] extractRgbBytes(BufferedImage image, int w, int h) {
+        // If it's already INT_RGB or 3BYTE_BGR, we could potentially get the DataBuffer,
+        // but getRGB is safest for compatibility across all types.
         int[] pixels = image.getRGB(0, 0, w, h, null, 0, w);
         byte[] rgbBytes = new byte[w * h * 3];
         for (int i = 0; i < pixels.length; i++) {
@@ -346,23 +378,6 @@ public class VipsImageService {
         return img.resize(scale);
     }
 
-    private VImage thumbnailCrop(VImage img, int width, int height) throws VipsError {
-        double scaleX = (double) width / img.getWidth();
-        double scaleY = (double) height / img.getHeight();
-        double scale = Math.max(scaleX, scaleY);
-        if (scale < 1.0) {
-            img = img.resize(scale);
-        }
-        int finalW = Math.min(img.getWidth(), width);
-        int finalH = Math.min(img.getHeight(), height);
-        int left = (img.getWidth() - finalW) / 2;
-        int top = (img.getHeight() - finalH) / 2;
-        if (left > 0 || top > 0) {
-            img = img.extractArea(left, top, finalW, finalH);
-        }
-        return img;
-    }
-
     private void runVips(VipsRunnable task) throws IOException {
         ENCODING_SEMAPHORE.acquireUninterruptibly();
         try {
@@ -370,16 +385,18 @@ public class VipsImageService {
                 if (VIPS_CONFIGURED.compareAndSet(false, true)) {
                     try {
                         VipsHelper.cache_set_max(0);
+                        // Optional: monitor for leaks in dev
+                        // VipsHelper.leak_set(true);
                         log.info("libvips {} initialised – operation cache disabled",
                                 VipsHelper.version_string());
                     } catch (VipsError e) {
-                        log.warn("Failed to configure libvips cache settings", e);
+                        log.warn("Failed to configure libvips settings", e);
                     }
                 }
                 task.run(arena);
             });
         } catch (VipsError e) {
-            throw new IOException("libvips operation failed", e);
+            throw new IOException("libvips operation failed: " + e.getMessage(), e);
         } finally {
             ENCODING_SEMAPHORE.release();
         }

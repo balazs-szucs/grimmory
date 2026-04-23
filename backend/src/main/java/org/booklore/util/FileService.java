@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -445,9 +446,7 @@ public class FileService {
     public void createThumbnailFromFile(long bookId, MultipartFile file) {
         try {
             validateCoverFile(file);
-            byte[] imageBytes = file.getBytes();
-            validateImageData(imageBytes, vipsImageService);
-            boolean success = saveCoverImages(imageBytes, bookId);
+            boolean success = saveCoverImages(file.getInputStream(), bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
             }
@@ -548,6 +547,42 @@ public class FileService {
         return true;
     }
 
+    public boolean saveAuthorImages(InputStream imageStream, long authorId) throws IOException {
+        String folderPath = getAuthorImagesFolder(authorId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        Path photoFile = Path.of(folderPath, AUTHOR_PHOTO_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, AUTHOR_THUMBNAIL_FILENAME);
+
+        try (InputStream in = imageStream; var photoOut = Files.newOutputStream(photoFile)) {
+            vipsImageService.processStreamToJpeg(in, photoOut, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        }
+
+        ImageDimensions photoDims = vipsImageService.readDimensionsFromFile(photoFile);
+        double targetRatio = (double) THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT;
+        double sourceRatio = (double) photoDims.width() / photoDims.height();
+        int cropWidth, cropHeight, cropX, cropY;
+        if (sourceRatio > targetRatio) {
+            cropHeight = photoDims.height();
+            cropWidth = (int) (cropHeight * targetRatio);
+            cropX = (photoDims.width() - cropWidth) / 2;
+            cropY = 0;
+        } else {
+            cropWidth = photoDims.width();
+            cropHeight = (int) (cropWidth / targetRatio);
+            cropX = 0;
+            cropY = (photoDims.height() - cropHeight) / 2;
+        }
+
+        vipsImageService.cropResizeAndSave(photoFile, thumbnailFile,
+                cropX, cropY, cropWidth, cropHeight, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+
+        return true;
+    }
+
     /**
      * Bridge for callers that still have a BufferedImage (e.g. from pdfium4j).
      */
@@ -584,12 +619,7 @@ public class FileService {
     public void createAudiobookThumbnailFromFile(long bookId, MultipartFile file) {
         try {
             validateCoverFile(file);
-            byte[] imageBytes = file.getBytes();
-            if (!vipsImageService.canDecode(imageBytes)) {
-                log.warn("Could not decode image from file, skipping audiobook thumbnail creation for book: {}", bookId);
-                return;
-            }
-            boolean success = saveAudiobookCoverImages(imageBytes, bookId);
+            boolean success = saveAudiobookCoverImages(file.getInputStream(), bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
             }
@@ -664,6 +694,33 @@ public class FileService {
         return true;
     }
 
+    public boolean saveAudiobookCoverImages(InputStream imageStream, long bookId) throws IOException {
+        String folderPath = getImagesFolder(bookId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        Path coverFile = Path.of(folderPath, AUDIOBOOK_COVER_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, AUDIOBOOK_THUMBNAIL_FILENAME);
+
+        // Stream decode+resize into cover file first, then do file-based crop/thumbnail work.
+        try (InputStream in = imageStream; var coverOut = Files.newOutputStream(coverFile)) {
+            vipsImageService.processStreamToJpeg(in, coverOut, MAX_SQUARE_SIZE, MAX_SQUARE_SIZE);
+        }
+
+        ImageDimensions dims = vipsImageService.readDimensionsFromFile(coverFile);
+        int size = Math.min(dims.width(), dims.height());
+        int cropX = (dims.width() - size) / 2;
+        int cropY = (dims.height() - size) / 2;
+        Path squareCoverFile = Path.of(folderPath, "audiobook-cover-square.jpg");
+        vipsImageService.cropResizeAndSave(coverFile, squareCoverFile, cropX, cropY, size, size, size, size);
+        Files.move(squareCoverFile, coverFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        vipsImageService.cropResizeAndSave(coverFile, thumbnailFile,
+                0, 0, size, size, SQUARE_THUMBNAIL_SIZE, SQUARE_THUMBNAIL_SIZE);
+        return true;
+    }
+
     /**
      * Bridge for callers that still have a BufferedImage (e.g. from pdfium4j).
      */
@@ -708,6 +765,43 @@ public class FileService {
         // Thumbnail from saved cover (file-to-file, avoids re-reading into memory)
         vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, thumbWidth, thumbHeight);
 
+        return true;
+    }
+
+    public boolean saveCoverImages(InputStream imageStream, long bookId) throws IOException {
+        String folderPath = getImagesFolder(bookId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        Path coverFile = Path.of(folderPath, COVER_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, THUMBNAIL_FILENAME);
+
+        try (InputStream in = imageStream; var coverOut = Files.newOutputStream(coverFile)) {
+            vipsImageService.processStreamToJpeg(in, coverOut, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        }
+
+        ImageDimensions dims = vipsImageService.readDimensionsFromFile(coverFile);
+        int[] crop = computeCoverCrop(coverFile, dims);
+        if (crop != null) {
+            Path croppedCoverFile = Path.of(folderPath, "cover-cropped.jpg");
+            vipsImageService.flattenCropResizeAndSave(coverFile, croppedCoverFile,
+                    crop[0], crop[1], crop[2], crop[3], MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+            Files.move(croppedCoverFile, coverFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        ImageDimensions coverDims = vipsImageService.readDimensionsFromFile(coverFile);
+        int thumbWidth, thumbHeight;
+        double aspectRatio = (double) coverDims.width() / coverDims.height();
+        if (aspectRatio >= 0.85 && aspectRatio <= 1.15) {
+            thumbWidth = THUMBNAIL_WIDTH;
+            thumbHeight = THUMBNAIL_WIDTH;
+        } else {
+            thumbWidth = THUMBNAIL_WIDTH;
+            thumbHeight = THUMBNAIL_HEIGHT;
+        }
+        vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, thumbWidth, thumbHeight);
         return true;
     }
 
@@ -763,6 +857,48 @@ public class FileService {
             }
             log.debug("Cropping wide image: {}x{} (ratio {}) -> {}x{}, smartCrop={}",
                     width, height, String.format("%.2f", widthToHeightRatio), croppedWidth, height, smartCrop);
+            return new int[]{startX, 0, croppedWidth, height};
+        }
+
+        return null;
+    }
+
+    private int[] computeCoverCrop(Path imagePath, ImageDimensions dims) throws IOException {
+        CoverCroppingSettings settings = appSettingService.getAppSettings().getCoverCroppingSettings();
+        if (settings == null) {
+            return null;
+        }
+
+        int width = dims.width();
+        int height = dims.height();
+        double heightToWidthRatio = (double) height / width;
+        double widthToHeightRatio = (double) width / height;
+        double threshold = settings.getAspectRatioThreshold();
+        boolean smartCrop = settings.isSmartCroppingEnabled();
+
+        boolean isExtremelyTall = settings.isVerticalCroppingEnabled() && heightToWidthRatio > threshold;
+        if (isExtremelyTall) {
+            int croppedHeight = (int) (width * TARGET_COVER_ASPECT_RATIO);
+            int startY = 0;
+            if (smartCrop) {
+                TrimBounds bounds = vipsImageService.findContentBounds(imagePath);
+                int margin = (int) (croppedHeight * SMART_CROP_MARGIN_PERCENT);
+                startY = Math.max(0, bounds.top() - margin);
+                startY = Math.min(startY, height - croppedHeight);
+            }
+            return new int[]{0, startY, width, croppedHeight};
+        }
+
+        boolean isExtremelyWide = settings.isHorizontalCroppingEnabled() && widthToHeightRatio > threshold;
+        if (isExtremelyWide) {
+            int croppedWidth = (int) (height / TARGET_COVER_ASPECT_RATIO);
+            int startX = 0;
+            if (smartCrop) {
+                TrimBounds bounds = vipsImageService.findContentBounds(imagePath);
+                int margin = (int) (croppedWidth * SMART_CROP_MARGIN_PERCENT);
+                startX = Math.max(0, bounds.left() - margin);
+                startX = Math.min(startX, width - croppedWidth);
+            }
             return new int[]{startX, 0, croppedWidth, height};
         }
 

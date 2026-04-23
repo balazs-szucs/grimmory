@@ -95,9 +95,8 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
     protected boolean useFolderCoverImage(BookEntity bookEntity, Path bookFolder) {
         Optional<Path> coverImage = FileUtils.findCoverImageInFolder(bookFolder);
         if (coverImage.isEmpty()) return false;
-        try {
-            byte[] imageBytes = Files.readAllBytes(coverImage.get());
-            return fileService.saveCoverImages(imageBytes, bookEntity.getId());
+        try (var inputStream = Files.newInputStream(coverImage.get())) {
+            return fileService.saveCoverImages(inputStream, bookEntity.getId());
         } catch (Exception e) {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;
@@ -107,9 +106,8 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
     protected boolean useFolderAudiobookCoverImage(BookEntity bookEntity, Path bookFolder) {
         Optional<Path> coverImage = FileUtils.findCoverImageInFolder(bookFolder);
         if (coverImage.isEmpty()) return false;
-        try {
-            byte[] imageBytes = Files.readAllBytes(coverImage.get());
-            return fileService.saveAudiobookCoverImages(imageBytes, bookEntity.getId());
+        try (var inputStream = Files.newInputStream(coverImage.get())) {
+            return fileService.saveAudiobookCoverImages(inputStream, bookEntity.getId());
         } catch (Exception e) {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;

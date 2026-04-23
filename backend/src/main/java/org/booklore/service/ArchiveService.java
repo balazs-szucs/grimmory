@@ -127,6 +127,24 @@ public class ArchiveService {
         throw new IOException("Entry not found in archive");
     }
 
+    public <T> T withEntryInputStream(Path path, String entryName, EntryInputStreamHandler<T> handler) throws IOException {
+        requireAvailable();
+        ReentrantLock lock = getFileLock(path);
+        lock.lock();
+        try (InputStream inputStream = Archive.getInputStream(path, entryName)) {
+            if (inputStream == null) {
+                throw new IOException("Entry not found in archive");
+            }
+            return handler.handle(inputStream);
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to extract from archive: " + e.getMessage(), e);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     public byte[] getEntryBytes(Path path, String entryName) throws IOException {
         try (
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -198,6 +216,11 @@ public class ArchiveService {
         static final class LimitReachedException extends IOException {
             LimitReachedException() { super("Bounded output limit reached"); }
         }
+    }
+
+    @FunctionalInterface
+    public interface EntryInputStreamHandler<T> {
+        T handle(InputStream inputStream) throws Exception;
     }
 
     public long extractEntryToPath(Path path, String entryName, Path outputPath) throws IOException {

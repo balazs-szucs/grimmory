@@ -19,12 +19,6 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileSystemUtils;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -337,10 +331,10 @@ public class CbxConversionService {
             }
         } else {
             try {
-                byte[] imageBytes = Files.readAllBytes(sourceImagePath);
                 int quality = Math.max(1, Math.min(100, compressionPercentage));
-                byte[] jpegBytes = vipsImageService.encodeAsJpeg(imageBytes, quality);
-                zipOut.write(jpegBytes);
+                try (InputStream inputStream = Files.newInputStream(sourceImagePath)) {
+                    vipsImageService.transcodeStreamToJpeg(inputStream, zipOut, quality);
+                }
             } catch (Exception e) {
                 log.warn("Could not convert image {}, copying raw bytes: {}", sourceImagePath.getFileName(), e.getMessage());
                 try (InputStream rawStream = Files.newInputStream(sourceImagePath)) {
@@ -514,7 +508,11 @@ public class CbxConversionService {
             if (inputStream == null) {
                 throw new IOException("Resource not found: " + resourcePath);
             }
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            try (Reader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
+                 StringWriter writer = new StringWriter()) {
+                reader.transferTo(writer);
+                return writer.toString();
+            }
         }
     }
 

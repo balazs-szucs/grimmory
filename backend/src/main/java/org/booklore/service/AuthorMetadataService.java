@@ -217,12 +217,9 @@ public class AuthorMetadataService {
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
 
         try {
-            java.awt.image.BufferedImage image = FileService.readImage(file.getInputStream());
-            if (image == null) {
-                throw ApiError.FILE_READ_ERROR.createException("Failed to decode image");
+            try (var inputStream = file.getInputStream()) {
+                fileService.saveAuthorImages(inputStream, authorId);
             }
-            fileService.saveAuthorImages(image, authorId);
-            image.flush();
         } catch (java.io.IOException e) {
             throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
         }

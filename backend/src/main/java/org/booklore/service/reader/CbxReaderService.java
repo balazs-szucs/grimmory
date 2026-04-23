@@ -28,8 +28,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -177,8 +175,11 @@ public class CbxReaderService {
 
     private CbxPageDimension readEntryDimension(Path cbxPath, String entryName, int pageNumber) {
         try {
-            byte[] imageBytes = archiveService.getEntryBytes(cbxPath, entryName);
-            ImageDimensions dims = vipsImageService.readDimensions(imageBytes);
+            ImageDimensions dims = archiveService.withEntryInputStream(
+                    cbxPath,
+                    entryName,
+                    vipsImageService::readDimensions
+            );
             return CbxPageDimension.builder()
                     .pageNumber(pageNumber)
                     .width(dims.width())
@@ -202,7 +203,7 @@ public class CbxReaderService {
      * <p>
      * For ZIP/CBZ archives the fast path uses {@link java.util.zip.ZipFile}
      * which supports random access, so each entry stream feeds directly into
-     * {@link ImageIO}. For non-ZIP archives (RAR, 7z) the first
+     * libvips. For non-ZIP archives (RAR, 7z) the first
      * {@value #DIMENSION_PREFIX_BYTES} bytes of each entry are extracted via
      * {@link ArchiveService#getEntryBytesPrefix} which is sufficient for all
      * common image header formats (JPEG SOF, PNG IHDR, WebP VP8, etc.).
