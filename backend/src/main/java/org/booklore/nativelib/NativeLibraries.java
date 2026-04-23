@@ -126,6 +126,10 @@ public final class NativeLibraries {
         return Holder.INSTANCE;
     }
 
+    public static void ensureInitialized() {
+        NativeLibraries ignored = Holder.INSTANCE;
+    }
+
     public boolean isAvailable(Library library) {
         return Boolean.TRUE.equals(status.get(library));
     }
@@ -136,6 +140,10 @@ public final class NativeLibraries {
 
     public boolean isLibArchiveAvailable() {
         return isAvailable(Library.LIBARCHIVE);
+    }
+
+    public boolean isEpubNativeAvailable() {
+        return isAvailable(Library.EPUB4J_NATIVE);
     }
 
     private record Probe(String name, CheckedBooleanSupplier fn) {}
