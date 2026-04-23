@@ -2,7 +2,7 @@ version: 2
 updates:
   # Backend – Gradle (Java / Spring)
   - package-ecosystem: "gradle"
-    directory: "/booklore-api"
+    directory: "/backend"
     schedule:
       interval: "weekly"
       day: "friday"
@@ -37,6 +37,8 @@ updates:
       npm-dependencies:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "typescript"
 
   # Release tooling – npm (semantic-release)
   - package-ecosystem: "npm"
