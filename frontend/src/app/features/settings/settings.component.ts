@@ -73,10 +73,7 @@ export class SettingsComponent implements OnInit {
   private validTabs = Object.values(SettingsTab);
   private _activeTab = signal<SettingsTab>(SettingsTab.ReaderSettings);
 
-  visitedTabs = signal<Set<SettingsTab>>(new Set([
-    SettingsTab.UserManagement,
-    SettingsTab.EmailSettingsV2
-  ]));
+  visitedTabs = signal<Set<SettingsTab>>(new Set());
 
   get activeTab(): SettingsTab {
     return this._activeTab();

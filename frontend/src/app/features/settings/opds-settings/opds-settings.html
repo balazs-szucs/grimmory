@@ -12,6 +12,7 @@
   </div>
 
   @if (hasPermission) {
+    @defer (on idle) {
     <div class="settings-card">
       <div class="section-header">
         <h3 class="section-title">
@@ -364,6 +365,9 @@
     </p-dialog>
 
     <p-confirmDialog></p-confirmDialog>
+    } @placeholder {
+      <div style="min-height: 12rem;" aria-hidden="true"></div>
+    }
   } @else {
     <div class="access-denied-card">
       <i class="pi pi-lock"></i>

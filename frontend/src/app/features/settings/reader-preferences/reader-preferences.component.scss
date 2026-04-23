@@ -22,6 +22,14 @@
   gap: 2rem;
 }
 
+.deferred-settings-placeholder {
+  min-height: 14rem;
+}
+
+.deferred-card-placeholder {
+  min-height: 8rem;
+}
+
 .preferences-section {
   @media (width >= 768px) {
     padding: 0 1rem;

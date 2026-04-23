@@ -10,6 +10,7 @@
     </p>
   </div>
 
+  @defer (on idle) {
   <div class="settings-content">
     <div class="preferences-section">
       <div class="section-header">
@@ -193,5 +194,8 @@
       </div>
     </div>
   </div>
+  } @placeholder {
+    <div style="min-height: 14rem;" aria-hidden="true"></div>
+  }
 </div>
 </ng-container>

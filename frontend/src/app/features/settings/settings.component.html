@@ -92,15 +92,19 @@
               </p-tabpanel>
             }
 
-            <!-- [GROUP: Eager Tabs (Always Rendered to ensure initialization)] -->
+            <!-- [GROUP: Lazy Tabs Continued] -->
             @if (currentUser.permissions.admin) {
               <p-tabpanel [value]="SettingsTab.UserManagement">
-                <app-user-management></app-user-management>
+                @if (visitedTabs().has(SettingsTab.UserManagement)) {
+                  <app-user-management></app-user-management>
+                }
               </p-tabpanel>
             }
 
             <p-tabpanel [value]="SettingsTab.EmailSettingsV2">
-              <app-email-v2></app-email-v2>
+              @if (visitedTabs().has(SettingsTab.EmailSettingsV2)) {
+                <app-email-v2></app-email-v2>
+              }
             </p-tabpanel>
 
             <!-- [GROUP: Lazy Tabs Continued] -->

@@ -9,6 +9,7 @@
     <p class="settings-description" [innerHTML]="t('description')"></p>
   </div>
 
+  @defer (on idle) {
   <div class="settings-card">
     <div class="section-header">
       <h3 class="section-title">
@@ -222,5 +223,8 @@
       </div>
     </div>
   </div>
+  } @placeholder {
+    <div style="min-height: 12rem;" aria-hidden="true"></div>
+  }
 </div>
 </ng-container>

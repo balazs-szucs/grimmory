@@ -94,14 +94,17 @@ export function initializeAuthFactory() {
       staleTime: 5 * 60_000
     });
 
+    const seedBootstrapCaches = (data: AppBootstrapResponse) => {
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, data.user);
+      queryClient.setQueryData(PUBLIC_SETTINGS_QUERY_KEY, data.publicSettings);
+      queryClient.setQueryData(MENU_COUNTS_QUERY_KEY, data.menuCounts);
+      queryClient.setQueryData(LIBRARIES_QUERY_KEY, [...(data.libraries || [])].sort((a, b) => a.name.localeCompare(b.name)));
+      queryClient.setQueryData(SHELVES_QUERY_KEY, data.shelves || []);
+    };
+
     const finalizeAuth = (data?: AppBootstrapResponse) => {
       if (data) {
-        // Seed the individual caches with the consolidated data
-        queryClient.setQueryData(CURRENT_USER_QUERY_KEY, data.user);
-        queryClient.setQueryData(PUBLIC_SETTINGS_QUERY_KEY, data.publicSettings);
-        queryClient.setQueryData(MENU_COUNTS_QUERY_KEY, data.menuCounts);
-        queryClient.setQueryData(LIBRARIES_QUERY_KEY, [...(data.libraries || [])].sort((a, b) => a.name.localeCompare(b.name)));
-        queryClient.setQueryData(SHELVES_QUERY_KEY, data.shelves || []);
+        seedBootstrapCaches(data);
       }
 
       const accessToken = authService.getInternalAccessToken();
@@ -112,6 +115,32 @@ export function initializeAuthFactory() {
       }
       authInitService.markAsInitialized();
     };
+
+    const existingToken = authService.getInternalAccessToken();
+    if (existingToken) {
+      // Do not block first paint for authenticated users; hydrate bootstrap data asynchronously.
+      warmDashboardLcpCandidate(existingToken);
+      authService.initializeWebSocketConnection();
+      authInitService.markAsInitialized();
+
+      const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);
+      const timeoutPromise = new Promise<null>(resolve =>
+        setTimeout(() => {
+          console.warn('[Auth] Bootstrap fetch reached 5s timeout');
+          resolve(null);
+        }, SETTINGS_TIMEOUT_MS)
+      );
+
+      void Promise.race([bootstrapPromise, timeoutPromise]).then(data => {
+        if (!data) {
+          console.warn('[Auth] Proceeding with limited state due to bootstrap failure/timeout');
+          return;
+        }
+        seedBootstrapCaches(data);
+      });
+
+      return Promise.resolve();
+    }
 
     // We MUST fetch bootstrap data before proceeding to ensure guards and components have settings/session state.
     const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);

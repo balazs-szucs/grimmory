@@ -11,6 +11,7 @@
     </p>
   </div>
 
+  @defer (on idle) {
   <div class="warning-notice">
     <i class="pi pi-exclamation-triangle"></i>
     <div>
@@ -432,5 +433,9 @@
       </div>
     </div>
   </div>
+  </div>
+  } @placeholder {
+    <div style="min-height: 14rem;" aria-hidden="true"></div>
+  }
 </div>
 </ng-container>
