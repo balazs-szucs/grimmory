@@ -11,7 +11,7 @@ import {PUBLIC_SETTINGS_QUERY_KEY} from '../../shared/service/app-settings-query
 import {MENU_COUNTS_QUERY_KEY} from '../../shared/service/menu-counts.service';
 import {LIBRARIES_QUERY_KEY} from '../../features/book/service/library-query-keys';
 
-const SETTINGS_TIMEOUT_MS = 10000;
+const SETTINGS_TIMEOUT_MS = 5000;
 
 export const BOOTSTRAP_QUERY_KEY = ['app-bootstrap'] as const;
 const SHELVES_QUERY_KEY = ['shelves'] as const;
@@ -29,30 +29,22 @@ export function initializeAuthFactory() {
       staleTime: 5 * 60_000
     });
 
-    const SETTINGS_TIMEOUT_MS = 5000;
-    
     const finalizeAuth = (data?: AppBootstrapResponse) => {
-      console.log('[Auth] Finalizing auth. Data present:', !!data, 'User:', data?.user?.username);
       if (data) {
-        console.log('[Auth] Seeding caches: user=', data.user?.username, 'libraries=', data.libraries?.length, 'shelves=', data.shelves?.length);
         // Seed the individual caches with the consolidated data
         queryClient.setQueryData(CURRENT_USER_QUERY_KEY, data.user);
         queryClient.setQueryData(PUBLIC_SETTINGS_QUERY_KEY, data.publicSettings);
         queryClient.setQueryData(MENU_COUNTS_QUERY_KEY, data.menuCounts);
         queryClient.setQueryData(LIBRARIES_QUERY_KEY, [...(data.libraries || [])].sort((a, b) => a.name.localeCompare(b.name)));
         queryClient.setQueryData(SHELVES_QUERY_KEY, data.shelves || []);
-        console.log('[Auth] Caches seeded successfully');
       }
 
       if (authService.getInternalAccessToken()) {
-        console.log('[Auth] Found internal access token, initializing WS');
         authService.initializeWebSocketConnection();
       }
-      console.log('[Auth] Marking as initialized');
       authInitService.markAsInitialized();
     };
 
-    console.log('[Auth] Starting consolidated bootstrap fetch...');
     // We MUST fetch bootstrap data before proceeding to ensure guards and components have settings/session state.
     const bootstrapPromise = queryClient.fetchQuery(bootstrapOptions);
     const timeoutPromise = new Promise<null>(resolve =>
@@ -69,8 +61,6 @@ export function initializeAuthFactory() {
           finalizeAuth();
           return;
         }
-
-        console.log('[Auth] Bootstrap data received successfully');
 
         // If we have a potential remote auth but no local token, try to login automatically
         if (data.publicSettings?.remoteAuthEnabled && !authService.getInternalAccessToken()) {

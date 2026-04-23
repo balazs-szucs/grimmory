@@ -52,7 +52,7 @@ export class BookService {
    */
   private booksQuery = injectQuery(() => ({
     ...this.getBooksQueryOptions(),
-    enabled: !!this.token(),
+    enabled: !!this.token() && this.bootstrapGate.hasBootstrapped(),
   }));
 
   books = computed(() => this.booksQuery.data() ?? []);
