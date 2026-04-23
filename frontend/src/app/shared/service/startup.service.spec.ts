@@ -5,58 +5,73 @@ import {QueryClient, queryOptions} from '@tanstack/angular-query-experimental';
 
 import {AuthService} from './auth.service';
 import {StartupService} from './startup.service';
-import {UserService} from '../../features/settings/user-management/user.service';
+import {BookService} from '../../features/book/service/book.service';
 
 describe('StartupService', () => {
-  it('loads the current user when a token is present', async () => {
-    const fetchQuery = vi.fn().mockResolvedValue({username: 'admin'});
+  it('prefetches book context when landing on a book route with a token', async () => {
+    const prefetchQuery = vi.fn().mockResolvedValue(undefined);
+    const originalUrl = window.location.href;
+    window.history.pushState({}, '', '/book/123');
 
     TestBed.configureTestingModule({
       providers: [
         StartupService,
-        {provide: AuthService, useValue: {token: signal('token')}},
         {
-          provide: UserService,
+          provide: AuthService,
           useValue: {
-            getUserQueryOptions: () => queryOptions({
-              queryKey: ['user'],
-              queryFn: async () => ({username: 'admin'}),
+            token: signal('token'),
+            getInternalAccessToken: () => 'token'
+          }
+        },
+        {
+          provide: BookService,
+          useValue: {
+            bookContextQueryOptions: (bookId: number) => queryOptions({
+              queryKey: ['book-context', bookId],
+              queryFn: async () => ({})
             }),
           },
         },
-        {provide: QueryClient, useValue: {fetchQuery}},
+        {provide: QueryClient, useValue: {prefetchQuery}},
       ]
     });
 
     const service = TestBed.inject(StartupService);
 
     await expect(service.load()).resolves.toBeUndefined();
-    expect(fetchQuery).toHaveBeenCalledOnce();
+    expect(prefetchQuery).toHaveBeenCalledOnce();
+    window.history.pushState({}, '', originalUrl);
   });
 
   it('resolves immediately when there is no token', async () => {
-    const fetchQuery = vi.fn();
+    const prefetchQuery = vi.fn();
 
     TestBed.configureTestingModule({
       providers: [
         StartupService,
-        {provide: AuthService, useValue: {token: signal(null)}},
         {
-          provide: UserService,
+          provide: AuthService,
           useValue: {
-            getUserQueryOptions: () => queryOptions({
-              queryKey: ['user'],
-              queryFn: async () => ({username: 'admin'}),
+            token: signal(null),
+            getInternalAccessToken: () => null
+          }
+        },
+        {
+          provide: BookService,
+          useValue: {
+            bookContextQueryOptions: (bookId: number) => queryOptions({
+              queryKey: ['book-context', bookId],
+              queryFn: async () => ({})
             }),
           },
         },
-        {provide: QueryClient, useValue: {fetchQuery}},
+        {provide: QueryClient, useValue: {prefetchQuery}},
       ]
     });
 
     const service = TestBed.inject(StartupService);
 
     await expect(service.load()).resolves.toBeUndefined();
-    expect(fetchQuery).not.toHaveBeenCalled();
+    expect(prefetchQuery).not.toHaveBeenCalled();
   });
 });
