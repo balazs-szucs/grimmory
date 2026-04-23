@@ -7,7 +7,16 @@
       }
     </h2>
 
-    @if (books() !== null && books()?.length === 0) {
+    @if (isLoading()) {
+      <div class="dashboard-scroller-loading" aria-hidden="true">
+        @for (slot of [1,2,3,4,5,6]; track slot) {
+          <div class="loading-card" [ngClass]="{'square-card': useSquareCovers()}">
+            <div class="loading-cover"></div>
+            <div class="loading-text"></div>
+          </div>
+        }
+      </div>
+    } @else if (books() !== null && books()?.length === 0) {
       <div class="dashboard-scroller-no-books">
         <div class="empty-state-icon">
           <i class="pi pi-book"></i>
@@ -33,7 +42,7 @@
       </div>
     }
 
-    @if (books() === null) {
+    @if (!isLoading() && books() === null) {
       <div class="dashboard-scroller-error">
         <div class="error-icon">
           <i class="pi pi-exclamation-triangle"></i>

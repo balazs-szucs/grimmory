@@ -24,6 +24,7 @@ export class DashboardScrollerComponent {
   readonly bookListType = input<ScrollerType | null>(null);
   readonly title = input.required<string>();
   readonly books = input<Book[] | null>(null);
+  readonly isLoading = input<boolean>(false);
   readonly isMagicShelf = input<boolean>(false);
   readonly useSquareCovers = input<boolean>(false);
   readonly overlayPreferenceService = input.required<BookCardOverlayPreferenceService>();

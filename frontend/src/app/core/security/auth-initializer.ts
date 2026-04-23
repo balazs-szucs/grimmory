@@ -16,12 +16,77 @@ const SETTINGS_TIMEOUT_MS = 5000;
 export const BOOTSTRAP_QUERY_KEY = ['app-bootstrap'] as const;
 const SHELVES_QUERY_KEY = ['shelves'] as const;
 
+function shouldSkipBootstrapForRoute(): boolean {
+  if (typeof globalThis.window === 'undefined') {
+    return false;
+  }
+
+  const path = globalThis.window.location.pathname;
+  return path === '/login' || path.startsWith('/login/') || path === '/setup' || path.startsWith('/setup/');
+}
+
+function warmDashboardLcpCandidate(token: string | null): void {
+  if (!token || typeof globalThis.window === 'undefined') {
+    return;
+  }
+
+  const path = globalThis.window.location.pathname;
+  if (path !== '/dashboard' && !path.startsWith('/dashboard/')) {
+    return;
+  }
+
+  const raw = globalThis.window.localStorage.getItem('lcp_book_candidate');
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const candidate = JSON.parse(raw) as {
+      id?: number;
+      updatedOn?: string | null;
+      audioUpdatedOn?: string | null;
+      isAudio?: boolean;
+    };
+
+    if (!candidate?.id) {
+      return;
+    }
+
+    const updatedOn = candidate.isAudio ? candidate.audioUpdatedOn : candidate.updatedOn;
+    if (!updatedOn) {
+      return;
+    }
+
+    const endpoint = candidate.isAudio ? 'audiobook-thumbnail' : 'thumbnail';
+    const url = `${API_CONFIG.BASE_URL}/api/v1/media/book/${candidate.id}/${endpoint}?${updatedOn}&w=240&token=${token}`;
+
+    const link = globalThis.window.document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = url;
+    link.fetchPriority = 'high';
+    globalThis.window.document.head.appendChild(link);
+
+    void fetch(url, {
+      credentials: 'include',
+      cache: 'force-cache',
+    }).catch(() => {});
+  } catch {
+    // ignore malformed candidate data
+  }
+}
+
 export function initializeAuthFactory() {
   return () => {
     const http = inject(HttpClient);
     const authService = inject(AuthService);
     const authInitService = inject(AuthInitializationService);
     const queryClient = inject(QueryClient);
+
+    if (shouldSkipBootstrapForRoute()) {
+      authInitService.markAsInitialized();
+      return Promise.resolve();
+    }
 
     const bootstrapOptions = queryOptions({
       queryKey: BOOTSTRAP_QUERY_KEY,
@@ -39,7 +104,10 @@ export function initializeAuthFactory() {
         queryClient.setQueryData(SHELVES_QUERY_KEY, data.shelves || []);
       }
 
-      if (authService.getInternalAccessToken()) {
+      const accessToken = authService.getInternalAccessToken();
+      warmDashboardLcpCandidate(accessToken);
+
+      if (accessToken) {
         authService.initializeWebSocketConnection();
       }
       authInitService.markAsInitialized();

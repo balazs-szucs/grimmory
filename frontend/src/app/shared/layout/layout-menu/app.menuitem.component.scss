@@ -99,6 +99,8 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 3.5rem;
 }
 
 .entity-menu-button {
@@ -145,6 +147,8 @@
 .book-count {
   color: var(--primary-color);
   padding-right: 0.75rem;
+  min-width: 2.25rem;
+  text-align: right;
   transition: color 0.2s ease;
 }
 

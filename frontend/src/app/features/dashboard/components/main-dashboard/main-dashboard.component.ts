@@ -38,6 +38,7 @@ export class MainDashboardComponent {
   protected readonly overlayPreferenceService = inject(BookCardOverlayPreferenceService);
 
   readonly dashboardConfig = this.dashboardConfigService.config;
+  readonly isDashboardLoading = this.dashboardBookService.isLoading;
   readonly isInitialLoading = this.libraryService.isLibrariesLoading;
   readonly isLibrariesEmpty = computed(() =>
     !this.libraryService.isLibrariesLoading() && this.libraryService.libraries().length === 0

@@ -30,6 +30,8 @@ export class DashboardBookService {
     staleTime: 2 * 60_000,
   }));
 
+  readonly isLoading = computed(() => this.dashboardQuery.isPending());
+
   /**
    * Computed map of scroller ID to its book list, fetched from the consolidated backend endpoint.
    */

@@ -2,10 +2,47 @@
   border-radius: 20px;
   padding: 1rem 2rem 0;
   margin-bottom: 2rem;
+  min-height: 330px;
   position: relative;
   overflow: hidden;
   background: rgb(30 30 45 / 40%);
   border: color-mix(in srgb, var(--p-surface-500), transparent 50%) 1px solid;
+}
+
+.dashboard-scroller-loading {
+  display: flex;
+  gap: 2rem;
+  min-height: 250px;
+  padding: 1rem 0.5rem;
+}
+
+.loading-card {
+  flex: 0 0 124px;
+
+  &.square-card {
+    flex-basis: 160px;
+  }
+}
+
+.loading-cover {
+  width: 100%;
+  aspect-ratio: 5/7;
+  border-radius: 8px;
+  background: var(--p-surface-800);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.loading-card.square-card .loading-cover {
+  aspect-ratio: 1/1;
+}
+
+.loading-text {
+  width: 80%;
+  height: 14px;
+  margin: 0.75rem auto 0;
+  border-radius: 4px;
+  background: var(--p-surface-800);
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .dashboard-scroller-title {
@@ -80,6 +117,7 @@
   position: relative;
   z-index: 2;
   scrollbar-width: none;
+  min-height: 250px;
 
   &::-webkit-scrollbar {
     display: none;
@@ -112,6 +150,23 @@
 }
 
 @media (width <= 767px) {
+  .dashboard-scroller-container {
+    min-height: 280px;
+  }
+
+  .dashboard-scroller-loading {
+    min-height: 184px;
+    gap: 1rem;
+  }
+
+  .loading-card {
+    flex-basis: 108px;
+  }
+
+  .loading-card.square-card {
+    flex-basis: 150px;
+  }
+
   .dashboard-scroller-card {
     height: 184px;
     width: 108px;
@@ -140,4 +195,9 @@
       font-size: 1.1rem;
     }
   }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
 }

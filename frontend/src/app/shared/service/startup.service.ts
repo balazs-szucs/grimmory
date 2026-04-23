@@ -13,7 +13,9 @@ export class StartupService {
   load(): Promise<void> {
     const token = this.authService.getInternalAccessToken();
     if (token) {
-      this.predictivePreloadLcp(token);
+      if (this.shouldWarmLikelyLcp(window.location.pathname)) {
+        this.predictivePreloadLcp(token);
+      }
 
       // If we are landing on a book-specific route, prefetch that specific book context
       const bookId = this.detectBookIdFromUrl();
@@ -30,6 +32,10 @@ export class StartupService {
     // Matches /book/123, /pdf-reader/book/123, etc.
     const match = path.match(/\/book\/(\d+)/);
     return match ? parseInt(match[1], 10) : null;
+  }
+
+  private shouldWarmLikelyLcp(path: string): boolean {
+    return path === '/dashboard' || path.startsWith('/dashboard/');
   }
 
   private predictivePreloadLcp(token: string): void {
@@ -51,6 +57,13 @@ export class StartupService {
       link.href = url;
       link.fetchPriority = 'high';
       document.head.appendChild(link);
+
+      // Warm the request pipeline immediately so the first dashboard cover can
+      // hit memory/disk cache by the time the scroller renders.
+      void fetch(url, {
+        credentials: 'include',
+        cache: 'force-cache',
+      }).catch(() => {});
     } catch (e) {
       console.warn('[Startup] Failed to parse LCP candidate', e);
     }

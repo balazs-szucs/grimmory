@@ -73,6 +73,7 @@
                     [title]="scroller.title"
                     [isMagicShelf]="scroller.type === ScrollerType.MAGIC_SHELF"
                     [useSquareCovers]="scroller.type === ScrollerType.LAST_LISTENED"
+                    [isLoading]="isDashboardLoading()"
                     [books]="getBooksForScroller(scroller)"
                     [eagerCount]="getEagerCountForScroller(idx)"
                     [overlayPreferenceService]="overlayPreferenceService">
@@ -84,6 +85,7 @@
                       [title]="scroller.title"
                       [isMagicShelf]="scroller.type === ScrollerType.MAGIC_SHELF"
                       [useSquareCovers]="scroller.type === ScrollerType.LAST_LISTENED"
+                      [isLoading]="isDashboardLoading()"
                       [books]="getBooksForScroller(scroller)"
                       [overlayPreferenceService]="overlayPreferenceService">
                     </app-dashboard-scroller>
