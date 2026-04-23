@@ -10,11 +10,11 @@ import {CURRENT_USER_QUERY_KEY} from '../../features/settings/user-management/us
 import {PUBLIC_SETTINGS_QUERY_KEY} from '../../shared/service/app-settings-query-keys';
 import {MENU_COUNTS_QUERY_KEY} from '../../shared/service/menu-counts.service';
 import {LIBRARIES_QUERY_KEY} from '../../features/book/service/library-query-keys';
+import {SHELVES_QUERY_KEY} from '../../features/book/service/shelf.service';
 
 const SETTINGS_TIMEOUT_MS = 5000;
 
 export const BOOTSTRAP_QUERY_KEY = ['app-bootstrap'] as const;
-const SHELVES_QUERY_KEY = ['shelves'] as const;
 
 function shouldSkipBootstrapForRoute(): boolean {
   if (typeof globalThis.window === 'undefined') {

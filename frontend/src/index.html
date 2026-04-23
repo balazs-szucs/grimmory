@@ -12,31 +12,6 @@
   <link rel="dns-prefetch" href="https://www.amazon.com">
   <link rel="dns-prefetch" href="https://books.google.com">
   <link rel="preload" href="media/primeicons-4GST5W3O.woff2" as="font" type="font/woff2" crossorigin="anonymous">
-  <script>
-    (function() {
-      try {
-        const token = localStorage.getItem('accessToken_Internal');
-        if (!token) return;
-
-        // 2. Predictive LCP Preload (The cover image)
-        const rawCandidate = localStorage.getItem('lcp_book_candidate');
-        if (rawCandidate) {
-          const candidate = JSON.parse(rawCandidate);
-          const updatedOn = candidate.isAudio ? candidate.audioUpdatedOn : candidate.updatedOn;
-          if (updatedOn) {
-            const endpoint = candidate.isAudio ? 'audiobook-thumbnail' : 'thumbnail';
-            const imageUrl = '/api/v1/media/book/' + candidate.id + '/' + endpoint + '?' + updatedOn + '&w=240&token=' + token;
-            const imgLink = document.createElement('link');
-            imgLink.rel = 'preload';
-            imgLink.as = 'image';
-            imgLink.href = imageUrl;
-            imgLink.fetchPriority = 'high';
-            document.head.appendChild(imgLink);
-          }
-        }
-      } catch (e) {}
-    })();
-  </script>
   <link rel="manifest" href="manifest.webmanifest">
 </head>
 

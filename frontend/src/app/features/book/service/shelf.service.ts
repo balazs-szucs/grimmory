@@ -11,7 +11,7 @@ import {Book} from '../model/book.model';
 import {UserService} from '../../settings/user-management/user.service';
 import {AuthService} from '../../../shared/service/auth.service';
 
-const SHELVES_QUERY_KEY = ['shelves'] as const;
+export const SHELVES_QUERY_KEY = ['shelves'] as const;
 
 @Injectable({providedIn: 'root'})
 export class ShelfService {

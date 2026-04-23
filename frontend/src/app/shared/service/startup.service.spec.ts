@@ -8,7 +8,7 @@ import {StartupService} from './startup.service';
 import {BookService} from '../../features/book/service/book.service';
 
 describe('StartupService', () => {
-  it('preloads and warms likely LCP cover on dashboard route', async () => {
+  it('does not preload LCP cover from startup flow', async () => {
     const prefetchQuery = vi.fn().mockResolvedValue(undefined);
     const originalUrl = window.location.href;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null));
@@ -48,8 +48,8 @@ describe('StartupService', () => {
     const service = TestBed.inject(StartupService);
     await expect(service.load()).resolves.toBeUndefined();
 
-    expect(appendSpy).toHaveBeenCalled();
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(appendSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
 
     localStorage.removeItem('lcp_book_candidate');
     window.history.pushState({}, '', originalUrl);
