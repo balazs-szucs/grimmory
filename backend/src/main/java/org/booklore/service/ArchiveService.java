@@ -5,6 +5,7 @@ import com.github.gotson.nightcompress.ArchiveEntry;
 import com.github.gotson.nightcompress.LibArchiveException;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.exception.ApiError;
+import org.booklore.nativelib.NativeLibraries;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -27,8 +28,8 @@ public class ArchiveService {
             .mapToObj(ignored -> new ReentrantLock())
             .toArray(ReentrantLock[]::new);
 
-    // NightCompress exposes native availability directly on Archive.
-    private final boolean available = Archive.isAvailable();
+    // Route through the JVM-wide serialized native loader.
+    private final boolean available = NativeLibraries.get().isLibArchiveAvailable();
 
     private ReentrantLock getFileLock(Path path) {
         int hash = path.toAbsolutePath().normalize().toString().hashCode();
@@ -42,7 +43,7 @@ public class ArchiveService {
     }
 
     public static boolean isAvailable() {
-        return Archive.isAvailable();
+        return NativeLibraries.get().isLibArchiveAvailable();
     }
 
     public record Entry(String name, long size) {}

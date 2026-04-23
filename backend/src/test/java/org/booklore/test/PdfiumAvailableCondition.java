@@ -1,6 +1,6 @@
 package org.booklore.test;
 
-import org.grimmory.pdfium4j.PdfiumLibrary;
+import org.booklore.nativelib.NativeLibraries;
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -9,7 +9,7 @@ import org.junit.jupiter.api.extension.ExtensionContext;
  * Enables tests only when PDFium native binaries are available on the current
  * platform.
  *
- * <p>Delegates to PDFium's own availability probe.
+ * <p>Delegates to the JVM-wide native-library loader singleton.
  */
 public class PdfiumAvailableCondition implements ExecutionCondition {
 
@@ -21,6 +21,6 @@ public class PdfiumAvailableCondition implements ExecutionCondition {
 
     @Override
     public ConditionEvaluationResult evaluateExecutionCondition(ExtensionContext context) {
-        return PdfiumLibrary.isAvailable() ? ENABLED : DISABLED;
+        return NativeLibraries.get().isPdfiumAvailable() ? ENABLED : DISABLED;
     }
 }
