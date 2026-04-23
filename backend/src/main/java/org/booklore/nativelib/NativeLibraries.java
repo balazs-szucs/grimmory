@@ -7,12 +7,18 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * JVM-wide single source of truth for native-library availability.
  *
  * <p>Initialization is intentionally serialized via the holder idiom so native
  * library loading is forced exactly once under the JVM class-init lock.
+ *
+ * <p><b>Important:</b> SIGSEGV is not catchable in Java. If a native library
+ * crashes the process during load, the JVM exits immediately. This class only
+ * handles Java-visible failures (e.g. UnsatisfiedLinkError). For hard process
+ * isolation, probes must run in a subprocess.
  */
 @Slf4j
 public final class NativeLibraries {
@@ -23,6 +29,13 @@ public final class NativeLibraries {
         EPUB4J_NATIVE
     }
 
+    /**
+     * Force reflective probes through the system loader to reduce duplicate
+     * native-load paths across child class loaders in tests and bootstrappers.
+     */
+    private static final ClassLoader NATIVE_CL = ClassLoader.getSystemClassLoader();
+    private static final String PROCESS_MARKER = "org.booklore.nativelibs.initialized";
+    private static final String STATUS_PREFIX = "org.booklore.nativelibs.status.";
     private static final Map<Library, Probe> PROBES;
 
     static {
@@ -43,15 +56,7 @@ public final class NativeLibraries {
             Boolean clean = tryInvokeStaticBoolean(
                     "org.grimmory.epub4j.native_parsing.EpubNativeLibrary"
             );
-            if (clean != null) {
-                return clean;
-            }
-            Class.forName(
-                    "org.grimmory.epub4j.native_parsing.PanamaConstants",
-                    true,
-                    NativeLibraries.class.getClassLoader()
-            );
-            return true;
+            return clean != null && clean;
         }));
 
         PROBES = Collections.unmodifiableMap(probes);
@@ -60,12 +65,35 @@ public final class NativeLibraries {
     private final Map<Library, Boolean> status;
 
     private NativeLibraries() {
-        Map<Library, Boolean> result = new LinkedHashMap<>();
-        for (Map.Entry<Library, Probe> entry : PROBES.entrySet()) {
-            result.put(entry.getKey(), runProbe(entry.getValue()));
-        }
-        this.status = Collections.unmodifiableMap(result);
+        this.status = loadOrProbeProcessWideStatus();
         logSummary();
+    }
+
+    private Map<Library, Boolean> loadOrProbeProcessWideStatus() {
+        Properties props = System.getProperties();
+        synchronized (props) {
+            if (Boolean.parseBoolean(props.getProperty(PROCESS_MARKER))) {
+                return loadStatusFromProperties(props);
+            }
+
+            Map<Library, Boolean> result = new LinkedHashMap<>();
+            for (Map.Entry<Library, Probe> entry : PROBES.entrySet()) {
+                boolean available = runProbe(entry.getValue());
+                result.put(entry.getKey(), available);
+                props.setProperty(STATUS_PREFIX + entry.getKey().name(), Boolean.toString(available));
+            }
+            props.setProperty(PROCESS_MARKER, "true");
+            return Collections.unmodifiableMap(result);
+        }
+    }
+
+    private static Map<Library, Boolean> loadStatusFromProperties(Properties props) {
+        Map<Library, Boolean> result = new LinkedHashMap<>();
+        for (Library lib : Library.values()) {
+            boolean available = Boolean.parseBoolean(props.getProperty(STATUS_PREFIX + lib.name(), "false"));
+            result.put(lib, available);
+        }
+        return Collections.unmodifiableMap(result);
     }
 
     private static boolean runProbe(Probe probe) {
@@ -80,7 +108,7 @@ public final class NativeLibraries {
     private static Boolean tryInvokeStaticBoolean(String fqcn) throws Throwable {
         Class<?> cls;
         try {
-            cls = Class.forName(fqcn, false, NativeLibraries.class.getClassLoader());
+            cls = Class.forName(fqcn, false, NATIVE_CL);
         } catch (ClassNotFoundException _) {
             return null;
         }
@@ -96,7 +124,9 @@ public final class NativeLibraries {
             return null;
         }
 
-        Class.forName(fqcn, true, NativeLibraries.class.getClassLoader());
+        // Same loader + class name returns the same Class object; this call only
+        // forces static initialization before invoking the previously looked-up method.
+        Class.forName(fqcn, true, NATIVE_CL);
         try {
             return (Boolean) method.invoke(null);
         } catch (InvocationTargetException ite) {
@@ -127,7 +157,7 @@ public final class NativeLibraries {
     }
 
     public static void ensureInitialized() {
-        NativeLibraries ignored = Holder.INSTANCE;
+        get();
     }
 
     public boolean isAvailable(Library library) {

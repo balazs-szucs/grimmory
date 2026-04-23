@@ -1,5 +1,6 @@
 package org.booklore.nativelib;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,21 +12,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class NativeLibraryManager {
 
-    private final NativeLibraries libs = NativeLibraries.get();
-
-    public boolean isPdfiumAvailable() {
-        return libs.isPdfiumAvailable();
-    }
-
-    public boolean isLibArchiveAvailable() {
-        return libs.isLibArchiveAvailable();
-    }
-
-    public boolean isEpubNativeAvailable() {
-        return libs.isEpubNativeAvailable();
-    }
-
-    public boolean isAvailable(NativeLibraries.Library library) {
-        return libs.isAvailable(library);
+    @PostConstruct
+    void initializeAtStartup() {
+        NativeLibraries.ensureInitialized();
     }
 }
