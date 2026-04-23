@@ -62,8 +62,8 @@ class MenuCountsServiceTest {
                 entityManager
         );
         
-        lenient().when(libraryService.getLibraries()).thenReturn(Collections.emptyList());
-        lenient().when(shelfService.getShelves()).thenReturn(Collections.emptyList());
+        lenient().when(libraryService.getLibraries(any())).thenReturn(Collections.emptyList());
+        lenient().when(shelfService.getShelves(any())).thenReturn(Collections.emptyList());
         lenient().when(magicShelfService.getUserShelves()).thenReturn(Collections.emptyList());
     }
 
@@ -83,8 +83,8 @@ class MenuCountsServiceTest {
         BookLoreUser admin = buildUser(42L, true, List.of(library(1L), library(2L)));
         when(authenticationService.getAuthenticatedUser()).thenReturn(admin);
 
-        when(libraryService.getLibraries()).thenReturn(List.of(library(1L), library(2L)));
-        when(shelfService.getShelves()).thenReturn(List.of(shelf(10L), shelf(11L)));
+        when(libraryService.getLibraries(any())).thenReturn(List.of(library(1L), library(2L)));
+        when(shelfService.getShelves(any())).thenReturn(List.of(shelf(10L), shelf(11L)));
         when(magicShelfService.getUserShelves()).thenReturn(List.of(magicShelf(20L), magicShelf(21L)));
         
         // Mock Library Counts JPQL
@@ -153,8 +153,8 @@ class MenuCountsServiceTest {
         BookLoreUser user = buildUser(7L, true, List.of());
         when(authenticationService.getAuthenticatedUser()).thenReturn(user);
 
-        when(libraryService.getLibraries()).thenReturn(List.of());
-        when(shelfService.getShelves()).thenReturn(List.of());
+        when(libraryService.getLibraries(any())).thenReturn(List.of());
+        when(shelfService.getShelves(any())).thenReturn(List.of());
         when(magicShelfService.getUserShelves()).thenReturn(List.of(magicShelf(99L)));
         when(magicShelfBookService.toSpecification(7L, 99L))
                 .thenThrow(new RuntimeException("broken rule"));
@@ -194,8 +194,8 @@ class MenuCountsServiceTest {
         BookLoreUser user = buildUser(5L, false, List.of(library(1L)));
         when(authenticationService.getAuthenticatedUser()).thenReturn(user);
 
-        when(libraryService.getLibraries()).thenReturn(List.of(library(1L)));
-        when(shelfService.getShelves()).thenReturn(List.of(shelf(10L)));
+        when(libraryService.getLibraries(any())).thenReturn(List.of(library(1L)));
+        when(shelfService.getShelves(any())).thenReturn(List.of(shelf(10L)));
         when(magicShelfService.getUserShelves()).thenReturn(List.of());
 
         // Mock Library Counts (JPQL)
