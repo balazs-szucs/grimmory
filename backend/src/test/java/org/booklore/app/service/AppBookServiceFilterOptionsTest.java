@@ -217,10 +217,7 @@ class AppBookServiceFilterOptionsTest {
                 .permissions(permissions)
                 .build();
         when(authenticationService.getAuthenticatedUser()).thenReturn(user);
-        when(libraryRepository.findAll()).thenReturn(List.of(
-                org.booklore.model.entity.LibraryEntity.builder().id(5L).build(),
-                org.booklore.model.entity.LibraryEntity.builder().id(10L).build()
-        ));
+        when(libraryRepository.findAllIds()).thenReturn(List.of(5L, 10L));
     }
 
     private void mockNonAdminUser(Set<Long> libraryIds) {

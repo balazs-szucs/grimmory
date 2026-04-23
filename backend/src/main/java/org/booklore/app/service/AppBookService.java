@@ -763,9 +763,7 @@ public class AppBookService {
 
     private Set<Long> getAccessibleLibraryIds(BookLoreUser user) {
         if (user.getPermissions().isAdmin()) {
-            return libraryRepository.findAll().stream()
-                    .map(LibraryEntity::getId)
-                    .collect(Collectors.toSet());
+            return new HashSet<>(libraryRepository.findAllIds());
         }
         if (user.getAssignedLibraries() == null || user.getAssignedLibraries().isEmpty()) {
             return Collections.emptySet();
@@ -912,7 +910,7 @@ public class AppBookService {
         }
 
         if (req.matchScore() != null && !req.matchScore().isEmpty()) {
-            List<String> cleaned = req.matchScore();
+            List<String> cleaned = BookListRequest.cleanValues(req.matchScore());
             if (!cleaned.isEmpty()) {
                 specs.add(AppBookSpecification.withMatchScores(cleaned, req.effectiveFilterMode()));
             }

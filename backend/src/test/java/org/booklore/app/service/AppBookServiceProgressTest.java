@@ -167,7 +167,7 @@ class AppBookServiceProgressTest {
                 .permissions(permissions)
                 .build();
         when(authenticationService.getAuthenticatedUser()).thenReturn(user);
-        when(libraryRepository.findAll()).thenReturn(List.of(LibraryEntity.builder().id(libraryId).build()));
+        when(libraryRepository.findAllIds()).thenReturn(List.of(libraryId));
     }
 
     private void mockNonAdminUser(Set<Long> libraryIds) {
