@@ -218,10 +218,15 @@ class MenuCountsServiceTest {
         CriteriaQuery<Tuple> cq = mock(CriteriaQuery.class);
         Root<BookEntity> root = mock(Root.class);
         Join shelfJoin = mock(Join.class);
+        Path libraryPath = mock(Path.class);
+        Path libraryIdPath = mock(Path.class);
         when(entityManager.getCriteriaBuilder()).thenReturn(cb);
         when(cb.count(any())).thenReturn(mock(Expression.class));
         when(cb.createTupleQuery()).thenReturn(cq);
         when(cq.from(BookEntity.class)).thenReturn(root);
+        when(root.get("library")).thenReturn(libraryPath);
+        when(libraryPath.get("id")).thenReturn(libraryIdPath);
+        when(libraryIdPath.in(anyCollection())).thenReturn(mock(Predicate.class));
         when(cq.multiselect(any(), any())).thenReturn(cq);
         when(cq.where(any(Predicate.class))).thenReturn(cq);
         when(cq.groupBy(any(Expression.class))).thenReturn(cq);
