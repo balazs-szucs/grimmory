@@ -175,8 +175,8 @@ class MenuCountsServiceTest {
         when(cb.count(any())).thenReturn(mock(Expression.class));
         when(cb.createTupleQuery()).thenReturn(cq);
         when(cq.from(BookEntity.class)).thenReturn(root);
-        when(root.get("library")).thenReturn(libraryPath);
-        when(libraryPath.get("id")).thenReturn(libraryIdPath);
+        when(root.get(anyString())).thenReturn(libraryPath);
+        when(libraryPath.get(anyString())).thenReturn(libraryIdPath);
         when(libraryIdPath.in(anyCollection())).thenReturn(libraryPredicate);
         when(cq.multiselect(any(), any())).thenReturn(cq);
         when(cq.where(any(Predicate.class))).thenReturn(cq);
