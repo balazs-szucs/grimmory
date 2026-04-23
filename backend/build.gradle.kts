@@ -160,6 +160,9 @@ dependencies {
     // --- MIME Detection ---
     implementation("org.apache.tika:tika-core:3.3.0")
 
+    // --- libvips (vips-ffm) ---
+    implementation("app.photofox.vips-ffm:vips-ffm-core:1.9.6")
+
     // --- XML Support (JAXB) ---
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
     runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.7")

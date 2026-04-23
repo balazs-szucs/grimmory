@@ -14,14 +14,11 @@ import org.booklore.model.entity.BookFileEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
-import org.booklore.util.ArchiveUtils;
 import org.booklore.util.FileUtils;
+import org.booklore.util.ImageDimensions;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,15 +57,7 @@ public class CbxReaderService {
 
     private final ArchiveService archiveService;
     private final ChapterCacheService chapterCacheService;
-
-    /** Single-threaded executor for background disk-cache population. */
-    private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "cbx-cache-init");
-        t.setDaemon(true);
-        return t;
-    });
-    /** Tracks books whose async cache init has already been submitted. */
-    private final Set<String> cacheInitSubmitted = ConcurrentHashMap.newKeySet();
+    private final VipsImageService vipsImageService;
 
     // L1 Cache: Open ZipFile handles for active reading sessions (TTL 30m)
     @Setter
@@ -103,44 +92,14 @@ public class CbxReaderService {
         }
     }
 
-    /**
-     * Submits a background task to extract all pages to the disk cache.
-     * This runs once per book/type combination and makes subsequent
-     * {@link #streamPageImage} calls hit Tier 2 (disk) instead of Tier 3
-     * (native extraction per request).
-     */
-    private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
-        String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.add(key)) {
-            cacheExecutor.submit(() -> {
-                try {
-                    initCache(bookId, bookType);
-                } catch (Exception e) {
-                    log.warn("Background cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.remove(key);
-                }
-            });
-        }
-    }
-
     private List<CbxPageDimension> computeDimensionsFromDiskCache(String cacheKey, int pageCount) {
         List<CbxPageDimension> dimensions = new ArrayList<>();
         for (int i = 1; i <= pageCount; i++) {
             Path cachedPage = chapterCacheService.getCachedPage(cacheKey, i);
-            try (ImageInputStream iis = ImageIO.createImageInputStream(cachedPage.toFile())) {
-                Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-                if (readers.hasNext()) {
-                    ImageReader reader = readers.next();
-                    try {
-                        reader.setInput(iis, true, true);
-                        int width = reader.getWidth(0);
-                        int height = reader.getHeight(0);
-                        dimensions.add(CbxPageDimension.builder().pageNumber(i).width(width).height(height).wide(width > height).build());
-                        continue;
-                    } finally {
-                        reader.dispose();
-                    }
-                }
+            try {
+                ImageDimensions dims = vipsImageService.readDimensionsFromFile(cachedPage);
+                dimensions.add(CbxPageDimension.builder().pageNumber(i).width(dims.width()).height(dims.height()).wide(dims.width() > dims.height()).build());
+                continue;
             } catch (Exception e) {
                 log.warn("Failed to read dimensions for cached page {}: {}", i, e.getMessage());
             }
@@ -156,10 +115,7 @@ public class CbxReaderService {
     public List<Integer> getAvailablePages(Long bookId, String bookType) {
         Path cbxPath = getBookPath(bookId, bookType);
         try {
-            CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
-            List<String> imageEntries = metadata.imageEntries();
-            // Trigger background disk-cache population for faster subsequent page serving
-            submitBackgroundCacheInit(bookId, bookType, metadata.lastModified());
+            List<String> imageEntries = getImageEntriesFromArchiveCached(cbxPath);
             return IntStream.rangeClosed(1, imageEntries.size())
                     .boxed()
                     .toList();
@@ -200,27 +156,44 @@ public class CbxReaderService {
             if (metadata.pageDimensions() != null) {
                 return metadata.pageDimensions();
             }
-
-            // Try disk cache first (fast, memory-safe)
-            String cacheKey = getCacheKey(bookId, bookType, metadata.lastModified());
-            if (chapterCacheService.hasPage(cacheKey, 1) && chapterCacheService.hasPage(cacheKey, metadata.imageEntries().size())) {
-                List<CbxPageDimension> dimensions = computeDimensionsFromDiskCache(cacheKey, metadata.imageEntries().size());
-                CachedArchiveMetadata updated = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified());
-                archiveCache.put(cbxPath.toString(), updated);
-                return dimensions;
+            
+            List<String> imageEntries = metadata.imageEntries();
+            List<CbxPageDimension> dimensions = new ArrayList<>();
+            for (int i = 0; i < imageEntries.size(); i++) {
+                String entryName = imageEntries.get(i);
+                CbxPageDimension dim = readEntryDimension(cbxPath, entryName, i + 1);
+                dimensions.add(dim);
             }
-
-            // Streaming: read only image headers, not full images
-            List<CbxPageDimension> dimensions = readDimensionsStreaming(cbxPath, metadata.imageEntries());
-
+            
             CachedArchiveMetadata updatedMetadata = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified());
             archiveCache.put(cbxPath.toString(), updatedMetadata);
-
+            
             return dimensions;
         } catch (IOException e) {
             log.error("Failed to read page dimensions for book {}", bookId, e);
             throw ApiError.FILE_READ_ERROR.createException("Failed to read page dimensions: " + e.getMessage());
         }
+    }
+
+    private CbxPageDimension readEntryDimension(Path cbxPath, String entryName, int pageNumber) {
+        try {
+            byte[] imageBytes = archiveService.getEntryBytes(cbxPath, entryName);
+            ImageDimensions dims = vipsImageService.readDimensions(imageBytes);
+            return CbxPageDimension.builder()
+                    .pageNumber(pageNumber)
+                    .width(dims.width())
+                    .height(dims.height())
+                    .wide(dims.width() > dims.height())
+                    .build();
+        } catch (Exception e) {
+            log.warn("Failed to read dimensions for page {} (entry: {}): {}", pageNumber, entryName, e.getMessage());
+        }
+        return CbxPageDimension.builder()
+                .pageNumber(pageNumber)
+                .width(0)
+                .height(0)
+                .wide(false)
+                .build();
     }
 
     /**
@@ -234,105 +207,6 @@ public class CbxReaderService {
      * {@link ArchiveService#getEntryBytesPrefix} which is sufficient for all
      * common image header formats (JPEG SOF, PNG IHDR, WebP VP8, etc.).
      */
-    private List<CbxPageDimension> readDimensionsStreaming(Path cbxPath, List<String> imageEntries) {
-        // Try the ZipFile fast-path first (random access, no full extraction)
-        if (isZipPath(cbxPath)) {
-            try {
-                return readDimensionsViaZipFile(cbxPath, imageEntries);
-            } catch (IOException e) {
-                log.debug("ZipFile dimension read failed for {}, falling back to bounded extraction: {}", cbxPath.getFileName(), e.getMessage());
-            }
-        }
-
-        // Fallback for non-ZIP or on ZipFile failure: bounded prefix extraction
-        return readDimensionsViaBoundedPrefix(cbxPath, imageEntries);
-    }
-
-    /**
-     * Uses a ZipFile handle to stream each entry's image header bytes directly
-     * into ImageIO for dimension detection.  Memory cost: only the bytes
-     * ImageIO needs to decode the header (typically < 4 KB per page).
-     */
-    private List<CbxPageDimension> readDimensionsViaZipFile(Path cbxPath, List<String> imageEntries) throws IOException {
-        List<CbxPageDimension> dimensions = new ArrayList<>(imageEntries.size());
-        try (ZipFile zip = new ZipFile(cbxPath.toFile())) {
-            for (int i = 0; i < imageEntries.size(); i++) {
-                int pageNumber = i + 1;
-                String entryName = imageEntries.get(i);
-                ZipEntry entry = zip.getEntry(entryName);
-                if (entry != null) {
-                    try (InputStream is = zip.getInputStream(entry);
-                         ImageInputStream iis = ImageIO.createImageInputStream(is)) {
-                        dimensions.add(readDimensionFromImageStream(iis, pageNumber));
-                        continue;
-                    } catch (Exception e) {
-                        log.warn("Failed to read dimensions for page {} via ZipFile (entry: {}): {}", pageNumber, entryName, e.getMessage());
-                    }
-                }
-                dimensions.add(fallbackDimension(pageNumber));
-            }
-        }
-        return dimensions;
-    }
-
-    /**
-     * For non-ZIP archives (RAR, 7z): extracts only the first
-     * {@value #DIMENSION_PREFIX_BYTES} bytes of each entry, enough for image
-     * header parsing,  and reads dimensions from that bounded buffer.
-     */
-    private List<CbxPageDimension> readDimensionsViaBoundedPrefix(Path cbxPath, List<String> imageEntries) {
-        List<CbxPageDimension> dimensions = new ArrayList<>(imageEntries.size());
-        for (int i = 0; i < imageEntries.size(); i++) {
-            int pageNumber = i + 1;
-            String entryName = imageEntries.get(i);
-            try {
-                byte[] prefix = archiveService.getEntryBytesPrefix(cbxPath, entryName, DIMENSION_PREFIX_BYTES);
-                try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(prefix))) {
-                    dimensions.add(readDimensionFromImageStream(iis, pageNumber));
-                    continue;
-                }
-            } catch (Exception e) {
-                log.warn("Failed to read dimensions for page {} via bounded prefix (entry: {}): {}", pageNumber, entryName, e.getMessage());
-            }
-            dimensions.add(fallbackDimension(pageNumber));
-        }
-        return dimensions;
-    }
-
-    private CbxPageDimension readDimensionFromImageStream(ImageInputStream iis, int pageNumber) throws IOException {
-        Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-        if (readers.hasNext()) {
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(iis, true, true);
-                int width = reader.getWidth(0);
-                int height = reader.getHeight(0);
-                return CbxPageDimension.builder()
-                        .pageNumber(pageNumber)
-                        .width(width)
-                        .height(height)
-                        .wide(width > height)
-                        .build();
-            } finally {
-                reader.dispose();
-            }
-        }
-        return fallbackDimension(pageNumber);
-    }
-
-    private static CbxPageDimension fallbackDimension(int pageNumber) {
-        return CbxPageDimension.builder()
-                .pageNumber(pageNumber)
-                .width(0)
-                .height(0)
-                .wide(false)
-                .build();
-    }
-
-    private static boolean isZipPath(Path path) {
-        return ArchiveUtils.detectArchiveType(path) == ArchiveUtils.ArchiveType.ZIP;
-    }
-
     private String extractDisplayName(String entryPath) {
         String fileName = baseName(entryPath);
         int lastDotIndex = fileName.lastIndexOf('.');

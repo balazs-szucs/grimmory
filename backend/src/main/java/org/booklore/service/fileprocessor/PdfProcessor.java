@@ -21,7 +21,6 @@ import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -205,18 +204,13 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
     }
 
     private boolean generateCoverImageAndSave(Long bookId, PdfDocument doc) throws IOException {
-        BufferedImage coverImage = null;
         try (PdfPage page = doc.page(0)) {
-            coverImage = page.render(150).toBufferedImage();
-            return fileService.saveCoverImages(coverImage, bookId);
+            byte[] coverBytes = page.render(150).toBytes("jpeg");
+            return fileService.saveCoverImages(coverBytes, bookId);
         } catch (OutOfMemoryError e) {
             log.error("Out of memory (heap space exhausted) while generating cover for bookId {}. Skipping cover generation.", bookId);
             System.gc(); // Hint to JVM to reclaim memory
             return false;
-        } finally {
-            if (coverImage != null) {
-                coverImage.flush(); // Release native resources
-            }
         }
     }
 }

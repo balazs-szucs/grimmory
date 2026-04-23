@@ -34,7 +34,9 @@ class CbxMetadataExtractorTest {
 
     @BeforeEach
     void setUp() {
-        extractor = new CbxMetadataExtractor(archiveService);
+        org.booklore.util.VipsImageService mockVips = org.mockito.Mockito.mock(org.booklore.util.VipsImageService.class);
+        org.mockito.Mockito.when(mockVips.canDecode(org.mockito.ArgumentMatchers.any(byte[].class))).thenReturn(true);
+        extractor = new CbxMetadataExtractor(archiveService, mockVips);
     }
 
     private byte[] createMinimalJpeg(int rgb) throws IOException {

@@ -19,9 +19,6 @@ import org.booklore.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
@@ -81,16 +78,7 @@ public class EpubProcessor extends AbstractFileProcessor implements BookFileProc
                 return false;
             }
 
-            boolean saved;
-            try (ByteArrayInputStream bais = new ByteArrayInputStream(coverData)) {
-                BufferedImage originalImage = ImageIO.read(bais);
-                if (originalImage == null) {
-                    log.warn("Cover image found but could not be decoded (possibly SVG or unsupported format) in EPUB '{}'", bookFile.getFileName());
-                    return false;
-                }
-                saved = fileService.saveCoverImages(originalImage, bookEntity.getId());
-                originalImage.flush();
-            }
+            boolean saved = fileService.saveCoverImages(coverData, bookEntity.getId());
 
             return saved;
 

@@ -11,31 +11,21 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -48,12 +38,12 @@ public class FileService {
     private final RestTemplate restTemplate;
     private final AppSettingService appSettingService;
     private final RestTemplate noRedirectRestTemplate;
+    private final VipsImageService vipsImageService;
 
     private static final int MAX_REDIRECTS = 5;
 
 
     private static final double TARGET_COVER_ASPECT_RATIO = 1.5;
-    private static final int SMART_CROP_COLOR_TOLERANCE = 30;
     private static final double SMART_CROP_MARGIN_PERCENT = 0.02;
 
     // @formatter:off
@@ -208,76 +198,39 @@ public class FileService {
     // IMAGE OPERATIONS
     // ========================================
 
-    public static BufferedImage readImage(InputStream inputStream) throws IOException {
-        return readImage(inputStream.readAllBytes());
-    }
-
-    public static BufferedImage readImage(byte[] imageData) throws IOException {
+    /**
+     * Validates that image bytes can be decoded by libvips and checks dimensions against the
+     * decompression-bomb limit.
+     */
+    public static void validateImageData(byte[] imageData, VipsImageService vips) throws IOException {
         if (imageData == null || imageData.length == 0) {
             throw new IOException("Image data is null or empty");
         }
-
-        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(imageData))) {
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-            if (readers.hasNext()) {
-                ImageReader reader = readers.next();
-                try {
-                    reader.setInput(iis);
-                    int width = reader.getWidth(0);
-                    int height = reader.getHeight(0);
-
-                    long pixelCount = (long) width * height;
-                    if (pixelCount > MAX_IMAGE_PIXELS) {
-                        throw new IOException(String.format("Rejected image: dimensions %dx%d (%d pixels) exceed limit %d — possible decompression bomb",
-                                width, height, pixelCount, MAX_IMAGE_PIXELS));
-                    }
-
-                    return reader.read(0);
-                } finally {
-                    reader.dispose();
-                }
-            }
-        } catch (IOException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IOException("ImageIO decode failed (possibly unsupported format): " + e.getMessage(), e);
-        }
-
-        throw new IOException("Unable to decode image, likely unsupported format");
-    }
-
-    public static BufferedImage resizeImage(BufferedImage originalImage, int width, int height) {
-        Image tmp = originalImage.getScaledInstance(width, height, Image.SCALE_SMOOTH);
-        BufferedImage resizedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2d = resizedImage.createGraphics();
-        g2d.drawImage(tmp, 0, 0, null);
-        g2d.dispose();
-        return resizedImage;
-    }
-
-    public static void saveImage(byte[] imageData, String filePath) throws IOException {
-        BufferedImage originalImage = null;
-        try {
-            originalImage = readImage(imageData);
-            if (originalImage == null) {
-                log.warn("Skipping saveImage for {}: decoded image is null", filePath);
-                return;
-            }
-            File outputFile = new File(filePath);
-            File parentDir = outputFile.getParentFile();
-            if (!parentDir.exists() && !parentDir.mkdirs()) {
-                throw new IOException("Failed to create directory: " + parentDir);
-            }
-            ImageIO.write(originalImage, IMAGE_FORMAT, outputFile);
-            log.info("Image saved successfully to: {}", filePath);
-        } finally {
-            if (originalImage != null) {
-                originalImage.flush(); // Release native resources
-            }
+        ImageDimensions dims = vips.readDimensions(imageData);
+        long pixelCount = (long) dims.width() * dims.height();
+        if (pixelCount > MAX_IMAGE_PIXELS) {
+            throw new IOException(String.format(
+                    "Rejected image: dimensions %dx%d (%d pixels) exceed limit %d — possible decompression bomb",
+                    dims.width(), dims.height(), pixelCount, MAX_IMAGE_PIXELS));
         }
     }
 
-    public BufferedImage downloadImageFromUrl(String imageUrl) throws IOException {
+    public void saveImage(byte[] imageData, String filePath) throws IOException {
+        if (imageData == null || imageData.length == 0) {
+            log.warn("Skipping saveImage for {}: image data is null or empty", filePath);
+            return;
+        }
+        File outputFile = new File(filePath);
+        File parentDir = outputFile.getParentFile();
+        if (!parentDir.exists() && !parentDir.mkdirs()) {
+            throw new IOException("Failed to create directory: " + parentDir);
+        }
+        vipsImageService.flattenResizeAndSave(imageData, outputFile.toPath(),
+                MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        log.info("Image saved successfully to: {}", filePath);
+    }
+
+    public byte[] downloadImageFromUrl(String imageUrl) throws IOException {
         try {
             return downloadImageFromUrlInternal(imageUrl);
         } catch (Exception e) {
@@ -289,7 +242,65 @@ public class FileService {
         }
     }
 
-    private BufferedImage downloadImageFromUrlInternal(String imageUrl) throws IOException {
+    /**
+     * Downloads raw image bytes from a URL with SSRF protection (scheme validation
+     */
+    public byte[] downloadImageBytesFromUrl(String imageUrl) throws IOException {
+        try {
+            return downloadImageBytesFromUrlInternal(imageUrl);
+        } catch (Exception e) {
+            log.warn("Failed to download image bytes from {}: {}", imageUrl, e.getMessage());
+            if (e instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("Failed to download image bytes from " + imageUrl + ": " + e.getMessage(), e);
+        }
+    }
+
+    private byte[] downloadImageBytesFromUrlInternal(String imageUrl) throws IOException {
+        URI uri = URI.create(imageUrl);
+        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IOException("Only HTTP and HTTPS protocols are allowed");
+        }
+
+        String host = uri.getHost();
+        if (host == null) {
+            throw new IOException("Invalid URL: no host found in " + imageUrl);
+        }
+
+        InetAddress[] inetAddresses = InetAddress.getAllByName(host);
+        if (inetAddresses.length == 0) {
+            throw new IOException("Could not resolve host: " + host);
+        }
+        for (InetAddress inetAddress : inetAddresses) {
+            if (isInternalAddress(inetAddress)) {
+                throw new SecurityException("URL points to a local or private internal network address: " + host + " (" + inetAddress.getHostAddress() + ")");
+            }
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
+        headers.set(HttpHeaders.ACCEPT, "image/*");
+
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
+        log.debug("Downloading image bytes from: {}", imageUrl);
+
+        ResponseEntity<byte[]> response = restTemplate.exchange(
+                imageUrl,
+                HttpMethod.GET,
+                entity,
+                byte[].class
+        );
+
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            return response.getBody();
+        }
+
+        throw new IOException("Failed to download image bytes. HTTP Status: " + response.getStatusCode());
+    }
+
+    private byte[] downloadImageFromUrlInternal(String imageUrl) throws IOException {
         String currentUrl = imageUrl;
         int redirectCount = 0;
 
@@ -331,7 +342,7 @@ public class FileService {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return readImage(response.getBody());
+                return response.getBody();
             } else if (response.getStatusCode().is3xxRedirection()) {
                 String location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
                 if (location == null) {
@@ -434,19 +445,12 @@ public class FileService {
     public void createThumbnailFromFile(long bookId, MultipartFile file) {
         try {
             validateCoverFile(file);
-            BufferedImage originalImage;
-            try (InputStream inputStream = file.getInputStream()) {
-                originalImage = readImage(inputStream);
-            }
-            if (originalImage == null) {
-                log.warn("Could not decode image from file, skipping thumbnail creation for book: {}", bookId);
-                return;
-            }
-            boolean success = saveCoverImages(originalImage, bookId);
+            byte[] imageBytes = file.getBytes();
+            validateImageData(imageBytes, vipsImageService);
+            boolean success = saveCoverImages(imageBytes, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
             }
-            originalImage.flush(); // Release resources after processing
             log.info("Cover images created and saved for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating the thumbnail: {}", e.getMessage(), e);
@@ -456,16 +460,11 @@ public class FileService {
 
     public void createThumbnailFromBytes(long bookId, byte[] imageBytes) {
         try {
-            BufferedImage originalImage = readImage(imageBytes);
-            if (originalImage == null) {
-                log.warn("Skipping thumbnail creation for book {}: image decode failed", bookId);
-                return;
-            }
-            boolean success = saveCoverImages(originalImage, bookId);
+            validateImageData(imageBytes, vipsImageService);
+            boolean success = saveCoverImages(imageBytes, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
             }
-            originalImage.flush();
             log.info("Cover images created and saved from bytes for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating thumbnail from bytes: {}", e.getMessage(), e);
@@ -475,16 +474,15 @@ public class FileService {
 
     public void createThumbnailFromUrl(long bookId, String imageUrl) {
         try {
-            BufferedImage originalImage = downloadImageFromUrl(imageUrl);
-            if (originalImage == null) {
-                log.warn("Skipping thumbnail creation for book {}: download/decode failed", bookId);
+            byte[] imageBytes = downloadImageFromUrl(imageUrl);
+            if (imageBytes == null || imageBytes.length == 0) {
+                log.warn("Skipping thumbnail creation for book {}: download failed", bookId);
                 return;
             }
-            boolean success = saveCoverImages(originalImage, bookId);
+            boolean success = saveCoverImages(imageBytes, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
             }
-            originalImage.flush();
             log.info("Cover images created and saved from URL for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating thumbnail from URL: {}", e.getMessage(), e);
@@ -498,87 +496,64 @@ public class FileService {
 
     public void createAuthorThumbnailFromUrl(long authorId, String imageUrl) {
         try {
-            BufferedImage originalImage = downloadImageFromUrl(imageUrl);
-            if (originalImage == null) {
-                log.warn("Skipping author thumbnail creation for author {}: download/decode failed", authorId);
+            byte[] imageBytes = downloadImageFromUrl(imageUrl);
+            if (imageBytes == null || imageBytes.length == 0) {
+                log.warn("Skipping author thumbnail creation for author {}: download failed", authorId);
                 return;
             }
-            boolean success = saveAuthorImages(originalImage, authorId);
+            boolean success = saveAuthorImages(imageBytes, authorId);
             if (!success) {
                 log.warn("Failed to save author images for author ID: {}", authorId);
             }
-            originalImage.flush();
             log.info("Author images created and saved from URL for author ID: {}", authorId);
         } catch (Exception e) {
             log.warn("Failed to create author thumbnail from URL for author {}: {}", authorId, e.getMessage());
         }
     }
 
-    public boolean saveAuthorImages(BufferedImage sourceImage, long authorId) throws IOException {
-        BufferedImage rgbImage = null;
-        BufferedImage resized = null;
-        BufferedImage thumb = null;
-        try {
-            String folderPath = getAuthorImagesFolder(authorId);
-            File folder = new File(folderPath);
-            if (!folder.exists() && !folder.mkdirs()) {
-                throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
-            }
-
-            rgbImage = new BufferedImage(
-                    sourceImage.getWidth(),
-                    sourceImage.getHeight(),
-                    BufferedImage.TYPE_INT_RGB
-            );
-            Graphics2D g = rgbImage.createGraphics();
-            g.drawImage(sourceImage, 0, 0, Color.WHITE, null);
-            g.dispose();
-
-            double scale = Math.min(
-                    (double) MAX_ORIGINAL_WIDTH / rgbImage.getWidth(),
-                    (double) MAX_ORIGINAL_HEIGHT / rgbImage.getHeight()
-            );
-            if (scale < 1.0) {
-                resized = resizeImage(rgbImage, (int) (rgbImage.getWidth() * scale), (int) (rgbImage.getHeight() * scale));
-                rgbImage.flush();
-                rgbImage = resized;
-            }
-
-            File photoFile = new File(folder, AUTHOR_PHOTO_FILENAME);
-            boolean photoSaved = ImageIO.write(rgbImage, IMAGE_FORMAT, photoFile);
-
-            double targetRatio = (double) THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT;
-            double sourceRatio = (double) rgbImage.getWidth() / rgbImage.getHeight();
-            int cropWidth, cropHeight, cropX, cropY;
-            if (sourceRatio > targetRatio) {
-                cropHeight = rgbImage.getHeight();
-                cropWidth = (int) (cropHeight * targetRatio);
-                cropX = (rgbImage.getWidth() - cropWidth) / 2;
-                cropY = 0;
-            } else {
-                cropWidth = rgbImage.getWidth();
-                cropHeight = (int) (cropWidth / targetRatio);
-                cropX = 0;
-                cropY = (rgbImage.getHeight() - cropHeight) / 2;
-            }
-            BufferedImage cropped = rgbImage.getSubimage(cropX, cropY, cropWidth, cropHeight);
-            thumb = resizeImage(cropped, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
-
-            File thumbnailFile = new File(folder, AUTHOR_THUMBNAIL_FILENAME);
-            boolean thumbnailSaved = ImageIO.write(thumb, IMAGE_FORMAT, thumbnailFile);
-
-            return photoSaved && thumbnailSaved;
-        } finally {
-            if (rgbImage != null) {
-                rgbImage.flush();
-            }
-            if (resized != null && resized != rgbImage) {
-                resized.flush();
-            }
-            if (thumb != null) {
-                thumb.flush();
-            }
+    public boolean saveAuthorImages(byte[] imageData, long authorId) throws IOException {
+        String folderPath = getAuthorImagesFolder(authorId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
         }
+
+        Path photoFile = Path.of(folderPath, AUTHOR_PHOTO_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, AUTHOR_THUMBNAIL_FILENAME);
+
+        // Flatten + resize + save photo
+        vipsImageService.flattenResizeAndSave(imageData, photoFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+
+        // Compute aspect-ratio crop for thumbnail from saved photo
+        ImageDimensions photoDims = vipsImageService.readDimensionsFromFile(photoFile);
+        double targetRatio = (double) THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT;
+        double sourceRatio = (double) photoDims.width() / photoDims.height();
+        int cropWidth, cropHeight, cropX, cropY;
+        if (sourceRatio > targetRatio) {
+            cropHeight = photoDims.height();
+            cropWidth = (int) (cropHeight * targetRatio);
+            cropX = (photoDims.width() - cropWidth) / 2;
+            cropY = 0;
+        } else {
+            cropWidth = photoDims.width();
+            cropHeight = (int) (cropWidth / targetRatio);
+            cropX = 0;
+            cropY = (photoDims.height() - cropHeight) / 2;
+        }
+
+        // Crop + resize → thumbnail
+        vipsImageService.cropResizeAndSave(photoFile, thumbnailFile,
+                cropX, cropY, cropWidth, cropHeight, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+
+        return true;
+    }
+
+    /**
+     * Bridge for callers that still have a BufferedImage (e.g. from pdfium4j).
+     */
+    public boolean saveAuthorImages(BufferedImage sourceImage, long authorId) throws IOException {
+        byte[] jpegBytes = vipsImageService.bufferedImageToJpeg(sourceImage, 95);
+        return saveAuthorImages(jpegBytes, authorId);
     }
 
     public void deleteAuthorImages(long authorId) {
@@ -609,19 +584,15 @@ public class FileService {
     public void createAudiobookThumbnailFromFile(long bookId, MultipartFile file) {
         try {
             validateCoverFile(file);
-            BufferedImage originalImage;
-            try (InputStream inputStream = file.getInputStream()) {
-                originalImage = readImage(inputStream);
-            }
-            if (originalImage == null) {
+            byte[] imageBytes = file.getBytes();
+            if (!vipsImageService.canDecode(imageBytes)) {
                 log.warn("Could not decode image from file, skipping audiobook thumbnail creation for book: {}", bookId);
                 return;
             }
-            boolean success = saveAudiobookCoverImages(originalImage, bookId);
+            boolean success = saveAudiobookCoverImages(imageBytes, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
             }
-            originalImage.flush();
             log.info("Audiobook cover images created and saved for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating the audiobook thumbnail: {}", e.getMessage(), e);
@@ -631,16 +602,14 @@ public class FileService {
 
     public void createAudiobookThumbnailFromBytes(long bookId, byte[] imageBytes) {
         try {
-            BufferedImage originalImage = readImage(imageBytes);
-            if (originalImage == null) {
+            if (!vipsImageService.canDecode(imageBytes)) {
                 log.warn("Skipping audiobook thumbnail creation for book {}: image decode failed", bookId);
                 return;
             }
-            boolean success = saveAudiobookCoverImages(originalImage, bookId);
+            boolean success = saveAudiobookCoverImages(imageBytes, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
             }
-            originalImage.flush();
             log.info("Audiobook cover images created and saved from bytes for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating audiobook thumbnail from bytes: {}", e.getMessage(), e);
@@ -650,16 +619,15 @@ public class FileService {
 
     public void createAudiobookThumbnailFromUrl(long bookId, String imageUrl) {
         try {
-            BufferedImage originalImage = downloadImageFromUrl(imageUrl);
-            if (originalImage == null) {
-                log.warn("Skipping audiobook thumbnail creation for book {}: download/decode failed", bookId);
+            byte[] imageBytes = downloadImageFromUrl(imageUrl);
+            if (imageBytes == null || imageBytes.length == 0) {
+                log.warn("Skipping audiobook thumbnail creation for book {}: download failed", bookId);
                 return;
             }
-            boolean success = saveAudiobookCoverImages(originalImage, bookId);
+            boolean success = saveAudiobookCoverImages(imageBytes, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
             }
-            originalImage.flush();
             log.info("Audiobook cover images created and saved from URL for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating audiobook thumbnail from URL: {}", e.getMessage(), e);
@@ -667,146 +635,102 @@ public class FileService {
         }
     }
 
+    public boolean saveAudiobookCoverImages(byte[] imageData, long bookId) throws IOException {
+        String folderPath = getImagesFolder(bookId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        Path coverFile = Path.of(folderPath, AUDIOBOOK_COVER_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, AUDIOBOOK_THUMBNAIL_FILENAME);
+
+        // Read dimensions to compute center-square crop
+        ImageDimensions dims = vipsImageService.readDimensions(imageData);
+        int size = Math.min(dims.width(), dims.height());
+        int cropX = (dims.width() - size) / 2;
+        int cropY = (dims.height() - size) / 2;
+
+        int coverSize = Math.min(size, MAX_SQUARE_SIZE);
+
+        // Flatten + center-square crop + resize → audiobook cover
+        vipsImageService.flattenCropResizeAndSave(imageData, coverFile,
+                cropX, cropY, size, size, coverSize, coverSize);
+
+        // Square thumbnail from saved cover
+        vipsImageService.cropResizeAndSave(coverFile, thumbnailFile,
+                0, 0, coverSize, coverSize, SQUARE_THUMBNAIL_SIZE, SQUARE_THUMBNAIL_SIZE);
+
+        return true;
+    }
+
+    /**
+     * Bridge for callers that still have a BufferedImage (e.g. from pdfium4j).
+     */
     public boolean saveAudiobookCoverImages(BufferedImage coverImage, long bookId) throws IOException {
-        BufferedImage rgbImage = null;
-        BufferedImage resized = null;
-        BufferedImage thumb = null;
-        try {
-            String folderPath = getImagesFolder(bookId);
-            File folder = new File(folderPath);
-            if (!folder.exists() && !folder.mkdirs()) {
-                throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
-            }
-
-            rgbImage = new BufferedImage(
-                    coverImage.getWidth(),
-                    coverImage.getHeight(),
-                    BufferedImage.TYPE_INT_RGB
-            );
-            Graphics2D g = rgbImage.createGraphics();
-            g.drawImage(coverImage, 0, 0, Color.WHITE, null);
-            g.dispose();
-
-            // Resize to square if needed, maintaining 1:1 aspect ratio
-            int size = Math.min(rgbImage.getWidth(), rgbImage.getHeight());
-            int x = (rgbImage.getWidth() - size) / 2;
-            int y = (rgbImage.getHeight() - size) / 2;
-            BufferedImage cropped = rgbImage.getSubimage(x, y, size, size);
-
-            // Resize if too large
-            if (size > MAX_SQUARE_SIZE) {
-                resized = resizeImage(cropped, MAX_SQUARE_SIZE, MAX_SQUARE_SIZE);
-            } else {
-                resized = cropped;
-            }
-
-            File originalFile = new File(folder, AUDIOBOOK_COVER_FILENAME);
-            boolean originalSaved = ImageIO.write(resized, IMAGE_FORMAT, originalFile);
-
-            // Create square thumbnail
-            thumb = resizeImage(resized, SQUARE_THUMBNAIL_SIZE, SQUARE_THUMBNAIL_SIZE);
-            File thumbnailFile = new File(folder, AUDIOBOOK_THUMBNAIL_FILENAME);
-            boolean thumbnailSaved = ImageIO.write(thumb, IMAGE_FORMAT, thumbnailFile);
-
-            return originalSaved && thumbnailSaved;
-        } finally {
-            if (rgbImage != null) {
-                rgbImage.flush();
-            }
-            if (resized != null && resized != rgbImage) {
-                resized.flush();
-            }
-            if (thumb != null) {
-                thumb.flush();
-            }
-        }
+        byte[] jpegBytes = vipsImageService.bufferedImageToJpeg(coverImage, 95);
+        return saveAudiobookCoverImages(jpegBytes, bookId);
     }
 
+    public boolean saveCoverImages(byte[] imageData, long bookId) throws IOException {
+        String folderPath = getImagesFolder(bookId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        Path coverFile = Path.of(folderPath, COVER_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, THUMBNAIL_FILENAME);
+
+        // Read dimensions and compute optional crop region
+        ImageDimensions dims = vipsImageService.readDimensions(imageData);
+        int[] crop = computeCoverCrop(imageData, dims);
+
+        if (crop != null) {
+            vipsImageService.flattenCropResizeAndSave(imageData, coverFile,
+                    crop[0], crop[1], crop[2], crop[3], MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        } else {
+            vipsImageService.flattenResizeAndSave(imageData, coverFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        }
+
+        // Determine thumbnail dimensions based on saved cover aspect ratio
+        ImageDimensions coverDims = vipsImageService.readDimensionsFromFile(coverFile);
+        int thumbWidth, thumbHeight;
+        double aspectRatio = (double) coverDims.width() / coverDims.height();
+        if (aspectRatio >= 0.85 && aspectRatio <= 1.15) {
+            thumbWidth = THUMBNAIL_WIDTH;
+            thumbHeight = THUMBNAIL_WIDTH;
+        } else {
+            thumbWidth = THUMBNAIL_WIDTH;
+            thumbHeight = THUMBNAIL_HEIGHT;
+        }
+
+        // Thumbnail from saved cover (file-to-file, avoids re-reading into memory)
+        vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, thumbWidth, thumbHeight);
+
+        return true;
+    }
+
+    /**
+     * Bridge for callers that still have a BufferedImage (e.g. from pdfium4j).
+     */
     public boolean saveCoverImages(BufferedImage coverImage, long bookId) throws IOException {
-        BufferedImage rgbImage = null;
-        BufferedImage cropped = null;
-        BufferedImage resized = null;
-        BufferedImage thumb = null;
-        try {
-            String folderPath = getImagesFolder(bookId);
-            File folder = new File(folderPath);
-            if (!folder.exists() && !folder.mkdirs()) {
-                throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
-            }
-
-            rgbImage = new BufferedImage(
-                    coverImage.getWidth(),
-                    coverImage.getHeight(),
-                    BufferedImage.TYPE_INT_RGB
-            );
-            Graphics2D g = rgbImage.createGraphics();
-            g.drawImage(coverImage, 0, 0, Color.WHITE, null);
-            g.dispose();
-            // Note: coverImage is not flushed here - caller is responsible for its lifecycle
-
-            cropped = applyCoverCropping(rgbImage);
-            if (cropped != rgbImage) {
-                rgbImage.flush();
-                rgbImage = cropped;
-            }
-
-            // Resize original image if too large to prevent OOM
-            double scale = Math.min(
-                    (double) MAX_ORIGINAL_WIDTH / rgbImage.getWidth(),
-                    (double) MAX_ORIGINAL_HEIGHT / rgbImage.getHeight()
-            );
-            if (scale < 1.0) {
-                resized = resizeImage(rgbImage, (int) (rgbImage.getWidth() * scale), (int) (rgbImage.getHeight() * scale));
-                rgbImage.flush(); // Release resources of the original large image
-                rgbImage = resized;
-            }
-
-            File originalFile = new File(folder, COVER_FILENAME);
-            boolean originalSaved = ImageIO.write(rgbImage, IMAGE_FORMAT, originalFile);
-
-            // Determine thumbnail dimensions based on source aspect ratio
-            int thumbWidth, thumbHeight;
-            double aspectRatio = (double) rgbImage.getWidth() / rgbImage.getHeight();
-            if (aspectRatio >= 0.85 && aspectRatio <= 1.15) {
-                // Square-ish image (e.g., audiobook covers) - keep square
-                thumbWidth = THUMBNAIL_WIDTH;
-                thumbHeight = THUMBNAIL_WIDTH;
-            } else {
-                // Portrait/landscape - use standard dimensions
-                thumbWidth = THUMBNAIL_WIDTH;
-                thumbHeight = THUMBNAIL_HEIGHT;
-            }
-            thumb = resizeImage(rgbImage, thumbWidth, thumbHeight);
-            File thumbnailFile = new File(folder, THUMBNAIL_FILENAME);
-            boolean thumbnailSaved = ImageIO.write(thumb, IMAGE_FORMAT, thumbnailFile);
-
-            return originalSaved && thumbnailSaved;
-        } finally {
-            // Cleanup resources created within this method
-            // Note: cropped/resized may equal rgbImage after reassignment, avoid double-flush
-            if (rgbImage != null) {
-                rgbImage.flush();
-            }
-            if (cropped != null && cropped != rgbImage) {
-                cropped.flush();
-            }
-            if (resized != null && resized != rgbImage) {
-                resized.flush();
-            }
-            if (thumb != null) {
-                thumb.flush();
-            }
-        }
+        byte[] jpegBytes = vipsImageService.bufferedImageToJpeg(coverImage, 95);
+        return saveCoverImages(jpegBytes, bookId);
     }
 
-    private BufferedImage applyCoverCropping(BufferedImage image) {
+    /**
+     * Compute crop region based on cover cropping settings, using vips findTrim for smart crop.
+     * Returns [left, top, width, height] or null if no cropping needed.
+     */
+    private int[] computeCoverCrop(byte[] imageData, ImageDimensions dims) throws IOException {
         CoverCroppingSettings settings = appSettingService.getAppSettings().getCoverCroppingSettings();
         if (settings == null) {
-            return image;
+            return null;
         }
 
-        int width = image.getWidth();
-        int height = image.getHeight();
+        int width = dims.width();
+        int height = dims.height();
         double heightToWidthRatio = (double) height / width;
         double widthToHeightRatio = (double) width / height;
         double threshold = settings.getAspectRatioThreshold();
@@ -815,92 +739,34 @@ public class FileService {
         boolean isExtremelyTall = settings.isVerticalCroppingEnabled() && heightToWidthRatio > threshold;
         if (isExtremelyTall) {
             int croppedHeight = (int) (width * TARGET_COVER_ASPECT_RATIO);
+            int startY = 0;
+            if (smartCrop) {
+                TrimBounds bounds = vipsImageService.findContentBounds(imageData);
+                int margin = (int) (croppedHeight * SMART_CROP_MARGIN_PERCENT);
+                startY = Math.max(0, bounds.top() - margin);
+                startY = Math.min(startY, height - croppedHeight);
+            }
             log.debug("Cropping tall image: {}x{} (ratio {}) -> {}x{}, smartCrop={}",
                     width, height, String.format("%.2f", heightToWidthRatio), width, croppedHeight, smartCrop);
-            return cropFromTop(image, width, croppedHeight, smartCrop);
+            return new int[]{0, startY, width, croppedHeight};
         }
 
         boolean isExtremelyWide = settings.isHorizontalCroppingEnabled() && widthToHeightRatio > threshold;
         if (isExtremelyWide) {
             int croppedWidth = (int) (height / TARGET_COVER_ASPECT_RATIO);
+            int startX = 0;
+            if (smartCrop) {
+                TrimBounds bounds = vipsImageService.findContentBounds(imageData);
+                int margin = (int) (croppedWidth * SMART_CROP_MARGIN_PERCENT);
+                startX = Math.max(0, bounds.left() - margin);
+                startX = Math.min(startX, width - croppedWidth);
+            }
             log.debug("Cropping wide image: {}x{} (ratio {}) -> {}x{}, smartCrop={}",
                     width, height, String.format("%.2f", widthToHeightRatio), croppedWidth, height, smartCrop);
-            return cropFromLeft(image, croppedWidth, height, smartCrop);
+            return new int[]{startX, 0, croppedWidth, height};
         }
 
-        return image;
-    }
-
-    private BufferedImage cropFromTop(BufferedImage image, int targetWidth, int targetHeight, boolean smartCrop) {
-        int startY = 0;
-        if (smartCrop) {
-            int contentStartY = findContentStartY(image);
-            int margin = (int) (targetHeight * SMART_CROP_MARGIN_PERCENT);
-            startY = Math.max(0, contentStartY - margin);
-
-            int maxStartY = image.getHeight() - targetHeight;
-            startY = Math.min(startY, maxStartY);
-        }
-        return image.getSubimage(0, startY, targetWidth, targetHeight);
-    }
-
-    private BufferedImage cropFromLeft(BufferedImage image, int targetWidth, int targetHeight, boolean smartCrop) {
-        int startX = 0;
-        if (smartCrop) {
-            int contentStartX = findContentStartX(image);
-            int margin = (int) (targetWidth * SMART_CROP_MARGIN_PERCENT);
-            startX = Math.max(0, contentStartX - margin);
-
-            int maxStartX = image.getWidth() - targetWidth;
-            startX = Math.min(startX, maxStartX);
-        }
-        return image.getSubimage(startX, 0, targetWidth, targetHeight);
-    }
-
-    private int findContentStartY(BufferedImage image) {
-        for (int y = 0; y < image.getHeight(); y++) {
-            if (!isRowUniformColor(image, y)) {
-                return y;
-            }
-        }
-        return 0;
-    }
-
-    private int findContentStartX(BufferedImage image) {
-        for (int x = 0; x < image.getWidth(); x++) {
-            if (!isColumnUniformColor(image, x)) {
-                return x;
-            }
-        }
-        return 0;
-    }
-
-    private boolean isRowUniformColor(BufferedImage image, int y) {
-        int firstPixel = image.getRGB(0, y);
-        for (int x = 1; x < image.getWidth(); x++) {
-            if (!colorsAreSimilar(firstPixel, image.getRGB(x, y))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean isColumnUniformColor(BufferedImage image, int x) {
-        int firstPixel = image.getRGB(x, 0);
-        for (int y = 1; y < image.getHeight(); y++) {
-            if (!colorsAreSimilar(firstPixel, image.getRGB(x, y))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean colorsAreSimilar(int rgb1, int rgb2) {
-        int r1 = (rgb1 >> 16) & 0xFF, g1 = (rgb1 >> 8) & 0xFF, b1 = rgb1 & 0xFF;
-        int r2 = (rgb2 >> 16) & 0xFF, g2 = (rgb2 >> 8) & 0xFF, b2 = rgb2 & 0xFF;
-        return Math.abs(r1 - r2) <= SMART_CROP_COLOR_TOLERANCE
-                && Math.abs(g1 - g2) <= SMART_CROP_COLOR_TOLERANCE
-                && Math.abs(b1 - b2) <= SMART_CROP_COLOR_TOLERANCE;
+        return null;
     }
 
     public static void setBookCoverPath(BookMetadataEntity bookMetadataEntity) {

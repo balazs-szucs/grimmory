@@ -1,23 +1,19 @@
 package org.booklore.service.metadata;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
 @Slf4j
+@RequiredArgsConstructor
 @Service
 public class CoverImageGenerator {
 
@@ -35,13 +31,14 @@ public class CoverImageGenerator {
     private static final int MIN_FONT = 36 * SCALE;
     private static final Pattern WS = Pattern.compile("\\s+");
 
+    private final VipsImageService vipsImageService;
+
     public byte[] generateCover(String title, String author) {
         return generateCover(title, author, null);
     }
 
     public byte[] generateCover(String title, String author, String subtitle) {
         BufferedImage render = null;
-        BufferedImage result = null;
         Graphics2D g = null;
 
         try {
@@ -80,17 +77,13 @@ public class CoverImageGenerator {
                 if (g != null) g.dispose();
             }
 
-            result = downscale(render);
-            render.flush();
-            render = null;
-
-            return encodeJpeg(result);
+            return vipsImageService.downscaleBufferedImageToJpeg(render, WIDTH, HEIGHT, 95);
 
         } catch (Exception e) {
             log.error("Cover generation failed: {}", title, e);
             throw new RuntimeException("Cover generation failed", e);
         } finally {
-            cleanup(g, render, result);
+            cleanup(g, render);
         }
     }
 
@@ -99,7 +92,6 @@ public class CoverImageGenerator {
      */
     public byte[] generateSquareCover(String title, String author) {
         BufferedImage render = null;
-        BufferedImage result = null;
         Graphics2D g = null;
 
         try {
@@ -131,17 +123,13 @@ public class CoverImageGenerator {
                 if (g != null) g.dispose();
             }
 
-            result = downscaleSquare(render);
-            render.flush();
-            render = null;
-
-            return encodeJpeg(result);
+            return vipsImageService.downscaleBufferedImageToJpeg(render, SQUARE_SIZE, SQUARE_SIZE, 95);
 
         } catch (Exception e) {
             log.error("Square cover generation failed: {}", title, e);
             throw new RuntimeException("Square cover generation failed", e);
         } finally {
-            cleanup(g, render, result);
+            cleanup(g, render);
         }
     }
 
@@ -710,32 +698,6 @@ public class CoverImageGenerator {
         return 50 * SCALE;
     }
 
-    private BufferedImage downscale(BufferedImage src) {
-        BufferedImage dst = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = dst.createGraphics();
-        try {
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(src, 0, 0, WIDTH, HEIGHT, null);
-            return dst;
-        } finally {
-            g.dispose();
-        }
-    }
-
-    private BufferedImage downscaleSquare(BufferedImage src) {
-        BufferedImage dst = new BufferedImage(SQUARE_SIZE, SQUARE_SIZE, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = dst.createGraphics();
-        try {
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(src, 0, 0, SQUARE_SIZE, SQUARE_SIZE, null);
-            return dst;
-        } finally {
-            g.dispose();
-        }
-    }
-
     private int calcSquareMargin(int size) {
         int frameOuter = (int) (size * PHI_SQ_INV * 0.10);
         int frameInner = (int) (frameOuter * PHI);
@@ -844,28 +806,6 @@ public class CoverImageGenerator {
         if (len < 25) return 60 * SCALE;
         if (len < 40) return 52 * SCALE;
         return 45 * SCALE;
-    }
-
-    private byte[] encodeJpeg(BufferedImage img) {
-        ImageWriter writer = null;
-        ImageOutputStream ios = null;
-
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            writer = ImageIO.getImageWritersByFormatName("jpg").next();
-            ImageWriteParam param = writer.getDefaultWriteParam();
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(0.95f);
-
-            ios = ImageIO.createImageOutputStream(baos);
-            writer.setOutput(ios);
-            writer.write(null, new IIOImage(img, null, null), param);
-            return baos.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException("JPEG encoding failed", e);
-        } finally {
-            if (writer != null) writer.dispose();
-            if (ios != null) try { ios.close(); } catch (IOException ignored) {}
-        }
     }
 
     private void cleanup(Graphics2D g, BufferedImage... images) {
