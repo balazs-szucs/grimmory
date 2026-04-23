@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +25,7 @@ import java.util.Map;
 @Tag(name = "App Dashboard", description = "Consolidated endpoints for the app dashboard experience")
 @Slf4j
 public class AppDashboardController {
+    private static final int DEFAULT_MAX_ITEMS = 20;
 
     private final AppBookService mobileBookService;
     private final AuthenticationService authenticationService;
@@ -36,11 +38,7 @@ public class AppDashboardController {
     @GetMapping
     public ResponseEntity<AppDashboardResponse> getDashboard() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
-        BookLoreUser.UserSettings.DashboardConfig config = user.getUserSettings().getDashboardConfig();
-
-        if (config == null || config.getScrollers() == null) {
-            return ResponseEntity.ok(new AppDashboardResponse(Map.of()));
-        }
+        BookLoreUser.UserSettings.DashboardConfig config = resolveDashboardConfig(user);
 
         Map<String, List<AppBookSummary>> scrollerData = new HashMap<>();
 
@@ -83,5 +81,36 @@ public class AppDashboardController {
         return ResponseEntity.ok()
                 .header("Cache-Control", "private, max-age=60")
                 .body(new AppDashboardResponse(scrollerData));
+    }
+
+    private BookLoreUser.UserSettings.DashboardConfig resolveDashboardConfig(BookLoreUser user) {
+        if (user == null || user.getUserSettings() == null) {
+            return buildDefaultDashboardConfig();
+        }
+
+        BookLoreUser.UserSettings.DashboardConfig config = user.getUserSettings().getDashboardConfig();
+        if (config == null || config.getScrollers() == null || config.getScrollers().isEmpty()) {
+            return buildDefaultDashboardConfig();
+        }
+        return config;
+    }
+
+    private BookLoreUser.UserSettings.DashboardConfig buildDefaultDashboardConfig() {
+        List<BookLoreUser.UserSettings.ScrollerConfig> scrollers = new ArrayList<>();
+        scrollers.add(defaultScroller("1", "lastListened", 1));
+        scrollers.add(defaultScroller("2", "lastRead", 2));
+        scrollers.add(defaultScroller("3", "latestAdded", 3));
+        scrollers.add(defaultScroller("4", "random", 4));
+        return BookLoreUser.UserSettings.DashboardConfig.builder().scrollers(scrollers).build();
+    }
+
+    private BookLoreUser.UserSettings.ScrollerConfig defaultScroller(String id, String type, int order) {
+        return BookLoreUser.UserSettings.ScrollerConfig.builder()
+                .id(id)
+                .type(type)
+                .enabled(true)
+                .order(order)
+                .maxItems(DEFAULT_MAX_ITEMS)
+                .build();
     }
 }
