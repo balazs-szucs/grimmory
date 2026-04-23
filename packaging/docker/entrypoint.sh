@@ -34,4 +34,34 @@ fi
 mkdir -p /app/data /bookdrop /books
 chown "$USER_ID:$GROUP_ID" /app/data /bookdrop /books 2>/dev/null || true
 
+start_caddy_proxy=false
+if [ "${ENABLE_CADDY:-true}" = "true" ] && [ "$#" -gt 0 ] && [ "$1" = "java" ]; then
+    start_caddy_proxy=true
+fi
+
+if [ "$start_caddy_proxy" = "true" ]; then
+    public_port="${GRIMMORY_HTTP_PORT:-${BOOKLORE_PORT:-6060}}"
+    backend_port="${GRIMMORY_BACKEND_PORT:-8080}"
+
+    if [ "$backend_port" = "$public_port" ]; then
+        if [ "$public_port" = "8080" ]; then
+            backend_port="8081"
+        else
+            backend_port="8080"
+        fi
+    fi
+
+    export GRIMMORY_HTTP_PORT="$public_port"
+    export GRIMMORY_BACKEND_PORT="$backend_port"
+    export XDG_CONFIG_HOME=/tmp/caddy/config
+    export XDG_DATA_HOME=/tmp/caddy/data
+
+    mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+    chown -R "$USER_ID:$GROUP_ID" /tmp/caddy 2>/dev/null || true
+
+    su-exec "$USER_ID:$GROUP_ID" caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
+
+    exec env BOOKLORE_PORT="$backend_port" su-exec "$USER_ID:$GROUP_ID" "$@"
+fi
+
 exec su-exec "$USER_ID:$GROUP_ID" "$@"
