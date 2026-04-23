@@ -7,9 +7,11 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.security.service.AuthenticationService;
@@ -71,7 +73,7 @@ public class MenuCountsService {
 
         Specification<BookEntity> visibleScope = buildVisibleScope(visibleLibraryIds, isAdmin);
         long totalBookCount = bookRepository.count(visibleScope.and(notDeleted()));
-        long unshelvedBookCount = bookRepository.count(visibleScope.and(notDeleted()).and(unshelved()));
+        long unshelvedBookCount = bookRepository.count(visibleScope.and(notDeleted()).and(unshelved(visibleShelfIds)));
 
         return new MenuCountsResponse(
                 libraryCounts,
@@ -123,10 +125,7 @@ public class MenuCountsService {
         Predicate shelfVisibilityPredicate = isAdmin
                 ? cb.conjunction()
                 : shelfIdPath.in(visibleShelfIds);
-        Predicate notDeletedPredicate = cb.or(
-                cb.isNull(root.get("deleted")),
-                cb.isFalse(root.get("deleted"))
-        );
+        Predicate notDeletedPredicate = notDeleted().toPredicate(root, query, cb);
 
         query.multiselect(shelfIdPath, countExpr)
                 .where(cb.and(visiblePredicate, shelfVisibilityPredicate, notDeletedPredicate))
@@ -178,7 +177,22 @@ public class MenuCountsService {
         );
     }
 
-    private Specification<BookEntity> unshelved() {
-        return (root, query, cb) -> cb.isEmpty(root.get("shelves"));
+    private Specification<BookEntity> unshelved(Set<Long> visibleShelfIds) {
+        return (root, query, cb) -> {
+            if (visibleShelfIds == null || visibleShelfIds.isEmpty() || query == null) {
+                return cb.conjunction();
+            }
+
+            Subquery<Long> subquery = query.subquery(Long.class);
+            Root<BookEntity> subRoot = subquery.from(BookEntity.class);
+            Join<BookEntity, ?> shelfJoin = subRoot.join("shelves", JoinType.INNER);
+            subquery.select(subRoot.get("id"))
+                    .where(
+                            cb.equal(subRoot, root),
+                            shelfJoin.get("id").in(visibleShelfIds)
+                    );
+
+            return cb.not(cb.exists(subquery));
+        };
     }
 }
