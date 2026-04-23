@@ -332,7 +332,7 @@ public class FileUtils {
         }
 
         boolean allSingleFileFormats = audioFiles.stream().allMatch(f -> {
-            String mime = MimeDetector.detectSafe(f);
+            String mime = MimeDetector.detectByExtension(f.getFileName().toString());
             return "audio/mp4".equals(mime) || "audio/x-m4a".equals(mime) || "audio/x-m4b".equals(mime)
                     || "audio/aac".equals(mime) || "audio/x-m4p".equals(mime);
         });
