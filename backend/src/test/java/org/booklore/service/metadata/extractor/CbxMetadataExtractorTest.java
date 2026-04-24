@@ -24,6 +24,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -144,6 +146,7 @@ class CbxMetadataExtractorTest {
             BookMetadata metadata = extractor.extractMetadata(cbz);
 
             assertThat(metadata.getTitle()).isEqualTo("Batman: Year One");
+            verify(archiveService, never()).withEntryInputStream(eq(cbz), eq("ComicInfo.xml"), any());
         }
 
         @Test
@@ -955,6 +958,20 @@ class CbxMetadataExtractorTest {
             byte[] actual = extractor.extractCover(cbz);
 
             assertThat(actual).isEqualTo(expected);
+        }
+
+        @Test
+        void extractsCoverWithoutStreamingImageEntryIntoVips() throws IOException {
+            byte[] expected = createMinimalJpeg(1);
+            Path cbz = mockArchiveContents(Map.of(
+                    "ComicInfo.xml", wrapInComicInfo("<Title>Test</Title>").getBytes(),
+                    "cover.jpg", expected
+            ));
+
+            byte[] actual = extractor.extractCover(cbz);
+
+            assertThat(actual).isEqualTo(expected);
+            verify(archiveService, never()).withEntryInputStream(eq(cbz), eq("cover.jpg"), any());
         }
 
         @Test

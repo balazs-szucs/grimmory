@@ -3,6 +3,7 @@ package org.booklore.service;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookMetadataEntity;
+import org.booklore.nativelib.NativeLibraries;
 import org.booklore.service.kobo.CbxConversionService;
 import org.booklore.service.metadata.extractor.CbxMetadataExtractor;
 import org.booklore.service.metadata.writer.CbxMetadataWriter;
@@ -17,6 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.file.Files;
@@ -53,6 +56,36 @@ class Rar5IntegrationTest {
         assertThat(metadata.getSeriesName()).isEqualTo("RAR5 Test Series");
         assertThat(metadata.getSeriesNumber()).isEqualTo(1.0f);
         assertThat(metadata.getAuthors()).contains("Test Author");
+    }
+
+    @Test
+    void metadataExtractor_extractsCoverFromRar5(@TempDir Path tempDir) throws Exception {
+        Path cbrCopy = tempDir.resolve("test.cbr");
+        Files.copy(RAR5_CBR, cbrCopy);
+        org.mockito.Mockito.when(vipsImageService.canDecode(org.mockito.ArgumentMatchers.any(byte[].class)))
+                .thenReturn(true);
+
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService(), vipsImageService);
+        byte[] coverBytes = extractor.extractCover(cbrCopy.toFile());
+
+        assertThat(coverBytes).isNotNull();
+        assertThat(coverBytes.length).isGreaterThan(0);
+        assertThat(ImageIO.read(new ByteArrayInputStream(coverBytes))).isNotNull();
+    }
+
+    @Test
+    void metadataExtractor_extractsCoverFromRar5_withRealVipsWhenAvailable(@TempDir Path tempDir) throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(NativeLibraries.get().isVipsAvailable());
+
+        Path cbrCopy = tempDir.resolve("test.cbr");
+        Files.copy(RAR5_CBR, cbrCopy);
+
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService(), new VipsImageService());
+        byte[] coverBytes = extractor.extractCover(cbrCopy.toFile());
+
+        assertThat(coverBytes).isNotNull();
+        assertThat(coverBytes.length).isGreaterThan(0);
+        assertThat(ImageIO.read(new ByteArrayInputStream(coverBytes))).isNotNull();
     }
 
     // -- CbxReaderService: getImageEntriesFromRar + streamEntryFromRar fallback --

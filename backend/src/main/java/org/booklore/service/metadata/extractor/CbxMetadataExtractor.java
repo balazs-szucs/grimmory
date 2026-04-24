@@ -479,20 +479,15 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
                         () -> extractCoverEntryNameFallback(path)
                 )
                 .flatMap(Supplier::get)
-                .filter(coverEntry -> canDecode(path, coverEntry))
                 .map(coverEntry -> readArchiveEntryBytes(path, coverEntry))
+                .filter(this::canDecode)
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
     }
 
-    private boolean canDecode(Path cbxPath, String entryName) {
-        try {
-            return archiveService.withEntryInputStream(cbxPath, entryName, vipsImageService::canDecode);
-        } catch (Exception e) {
-            log.debug("Failed to decode archive {} entry stream for {}", cbxPath.getFileName(), entryName, e);
-            return false;
-        }
+    private boolean canDecode(byte[] imageBytes) {
+        return imageBytes != null && vipsImageService.canDecode(imageBytes);
     }
 
     private Stream<String> extractCoverEntryNameFromComicInfo(Path cbxPath) {
@@ -603,7 +598,13 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
             return null;
         }
         try {
-            return archiveService.withEntryInputStream(cbxPath, comicInfoEntry, this::buildSecureDocument);
+            byte[] comicInfoBytes = archiveService.getEntryBytes(cbxPath, comicInfoEntry);
+            if (comicInfoBytes == null || comicInfoBytes.length == 0) {
+                return null;
+            }
+            try (InputStream inputStream = new ByteArrayInputStream(comicInfoBytes)) {
+                return buildSecureDocument(inputStream);
+            }
         } catch (Exception e) {
             log.warn("Failed to parse ComicInfo.xml from archive {}: {}", cbxPath.getFileName(), e.getMessage());
             return null;

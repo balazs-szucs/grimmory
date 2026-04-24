@@ -40,7 +40,6 @@ public class VipsImageService {
     private static final int DEFAULT_JPEG_QUALITY = 90;
     private static final List<Double> WHITE_BACKGROUND = List.of(255.0, 255.0, 255.0);
     private static final VipsOption SEQUENTIAL_ACCESS = VipsOption.Enum("access", VipsAccess.ACCESS_SEQUENTIAL);
-    private static final AtomicBoolean VIPS_CONFIGURED = new AtomicBoolean(false);
 
     /**
      * Read dimensions from raw bytes.
@@ -379,22 +378,12 @@ public class VipsImageService {
     }
 
     private void runVips(VipsRunnable task) throws IOException {
+        if (!org.booklore.nativelib.NativeLibraries.get().isVipsAvailable()) {
+            throw new IOException("libvips native library is not available");
+        }
         ENCODING_SEMAPHORE.acquireUninterruptibly();
         try {
-            Vips.run(arena -> {
-                if (VIPS_CONFIGURED.compareAndSet(false, true)) {
-                    try {
-                        VipsHelper.cache_set_max(0);
-                        // Optional: monitor for leaks in dev
-                        // VipsHelper.leak_set(true);
-                        log.info("libvips {} initialised – operation cache disabled",
-                                VipsHelper.version_string());
-                    } catch (VipsError e) {
-                        log.warn("Failed to configure libvips settings", e);
-                    }
-                }
-                task.run(arena);
-            });
+            Vips.run(task::run);
         } catch (VipsError e) {
             throw new IOException("libvips operation failed: " + e.getMessage(), e);
         } finally {
