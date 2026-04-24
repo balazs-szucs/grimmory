@@ -155,17 +155,18 @@
 
     @if (clickToPaginate()) {
     <div class="click-overlay visible" [class.rtl-overlay]="readingDirection() === CbxReadingDirection.RTL"
+      [class.continuous-overlay]="scrollMode() !== CbxScrollMode.PAGINATED"
       [class.magnifier-disabled]="isMagnifierActive()">
       <div class="click-zone click-zone-prev" role="button" tabindex="0" (click)="onClickZonePrev($event)"
         (keydown.enter)="onClickZonePrev($event)">
-        <span class="zone-arrow">&#9664;</span>
+        <span class="zone-arrow">{{ scrollMode() === CbxScrollMode.PAGINATED ? '◀' : '▲' }}</span>
       </div>
       <div class="click-zone click-zone-menu" role="button" tabindex="0" (click)="onClickZoneMenu($event)"
         (keydown.enter)="onClickZoneMenu($event)">
       </div>
       <div class="click-zone click-zone-next" role="button" tabindex="0" (click)="onClickZoneNext($event)"
         (keydown.enter)="onClickZoneNext($event)">
-        <span class="zone-arrow">&#9654;</span>
+        <span class="zone-arrow">{{ scrollMode() === CbxScrollMode.PAGINATED ? '▶' : '▼' }}</span>
       </div>
     </div>
     }

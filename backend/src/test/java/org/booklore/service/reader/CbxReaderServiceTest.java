@@ -163,4 +163,31 @@ class CbxReaderServiceTest {
         );
         assertTrue(ex.getMessage().contains("Invalid book type"), "Expected INVALID_INPUT, got: " + ex.getMessage());
     }
+
+    @Test
+    void testGetPageCacheInfo_ReturnsStableEtagAndLastModified() throws Exception {
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("001.webp"));
+        try (
+                MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+                MockedStatic<Files> filesStatic = mockStatic(Files.class);
+        ) {
+            FileTime modified = FileTime.from(Instant.parse("2025-01-01T00:00:00Z"));
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
+            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(modified);
+
+            CbxReaderService.PageCacheInfo info = cbxReaderService.getPageCacheInfo(1L, null, 1);
+            assertEquals(modified.toMillis(), info.lastModified());
+            assertTrue(info.etag().startsWith("\""));
+            assertTrue(info.etag().endsWith("\""));
+        }
+    }
+
+    @Test
+    void testConvertFormatAliases() {
+        assertEquals(CbxReaderService.PageConvertFormat.JPEG, CbxReaderService.PageConvertFormat.fromValue("jpeg").orElseThrow());
+        assertEquals(CbxReaderService.PageConvertFormat.JPEG, CbxReaderService.PageConvertFormat.fromValue("jpg").orElseThrow());
+        assertEquals(CbxReaderService.PageConvertFormat.PNG, CbxReaderService.PageConvertFormat.fromValue("png").orElseThrow());
+        assertTrue(CbxReaderService.PageConvertFormat.fromValue("gif").isEmpty());
+    }
 }

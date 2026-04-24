@@ -39,6 +39,9 @@ import {
   shouldOfferWebtoonHint,
   writeStripWidthPercentPerBook
 } from './core/cbx-reader-storage';
+import { getClickZoneNavigationAction, getSwipeNavigationAction } from './core/cbx-reader-interactions';
+import { buildCenteredWindow, extendHeadWindow, extendTailWindow } from './core/cbx-reader-load-window';
+import { supportsModernComicFormats } from './core/cbx-image-support';
 
 
 @Component({
@@ -79,6 +82,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   private static readonly AUTO_CLOSE_MENU_TIMEOUT = 3000;
   /** Max pages kept in DOM for infinite scroll; pages outside this window are removed. */
   private static readonly INFINITE_SCROLL_MAX_DOM_PAGES = 18;
+  private static readonly PAGINATED_PRELOAD_RADIUS = 2;
+  private static readonly INFINITE_WINDOW_RADIUS = 2;
 
   private readonly destroyRef = inject(DestroyRef);
   private progressSaveSubject$ = new Subject<void>();
@@ -99,6 +104,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   private touchStartX = 0;
   private touchEndX = 0;
+  private touchStartY = 0;
+  private touchEndY = 0;
 
   currentBook = signal<Book | null>(null);
   nextBookInSeries = signal<Book | null>(null);
@@ -109,6 +116,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   /** True while a chunk of pages is being prepended/appended (does not block scroll UX). */
   isLoadingMore = signal(false);
   private infiniteScrollPageDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  loadWindowTelemetry = signal({ loaded: 0, evicted: 0 });
 
   // Long-strip state (Kavita-inspired webtoon reader)
   longStripImages = signal<{ src: string; page: number }[]>([]);
@@ -150,6 +158,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   // Double-tap zoom
   private lastTapTime = 0;
+  private lastTapX = 0;
+  private lastTapY = 0;
   private originalFitMode: CbxFitMode | null = null;
 
   // Shortcuts help dialog
@@ -202,6 +212,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   // Double page detection (fallback cache for pages without backend dims)
   private pageDimensionsCache = new Map<number, { width: number, height: number }>();
+  private preferredConvertFormat = signal<'jpeg' | undefined>(undefined);
 
   // Swipe double-action prevention
   private hasHitRightScroll = signal(false);
@@ -298,6 +309,10 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    void supportsModernComicFormats().then((supportsModern) => {
+      this.preferredConvertFormat.set(supportsModern ? undefined : 'jpeg');
+    });
+
     this.visibilityManager = new ReaderHeaderFooterVisibilityManager(window.innerHeight);
     this.visibilityManager.onStateChange((state) => {
       this.headerService.setForceVisible(state.headerVisible);
@@ -801,7 +816,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     const pagesToPreload: number[] = [];
 
     const step = this.isTwoPageView() ? 2 : 1;
-    for (let i = 1; i <= 2; i++) {
+    for (let i = 1; i <= CbxReaderComponent.PAGINATED_PRELOAD_RADIUS; i++) {
       const nextPage = this.currentPage() + (step * i);
       if (nextPage < this.pages().length) {
         pagesToPreload.push(nextPage);
@@ -811,7 +826,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
       }
     }
 
-    for (let i = 1; i <= 2; i++) {
+    for (let i = 1; i <= CbxReaderComponent.PAGINATED_PRELOAD_RADIUS; i++) {
       const prevPage = this.currentPage() - (step * i);
       if (prevPage >= 0) {
         pagesToPreload.push(prevPage);
@@ -1162,13 +1177,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   }
 
   private initializeInfiniteScroll(): void {
-    const pages: number[] = [];
-    const startIndex = Math.max(0, this.currentPage() - 2);
-    const endIndex = Math.min(this.currentPage() + this.preloadCount + 1, this.pages().length);
-    for (let i = startIndex; i < endIndex; i++) {
-      pages.push(i);
-    }
-    this.infiniteScrollPages.set(pages);
+    this.infiniteScrollPages.set(
+      buildCenteredWindow(this.currentPage(), this.pages().length, CbxReaderComponent.INFINITE_WINDOW_RADIUS)
+    );
   }
 
   onScroll(event: Event): void {
@@ -1210,15 +1221,15 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     if (lastLoadedIndex === undefined || lastLoadedIndex >= this.pages().length - 1) return;
 
     this.isLoadingMore.set(true);
-    const endIndex = Math.min(lastLoadedIndex + this.preloadCount + 1, this.pages().length);
-
     requestAnimationFrame(() => {
-      const added: number[] = [];
-      for (let i = lastLoadedIndex + 1; i < endIndex; i++) {
-        added.push(i);
-      }
-      this.infiniteScrollPages.update(p => [...p, ...added]);
-      this.trimInfiniteScrollPages('tail');
+      const result = extendTailWindow(
+        currentPages,
+        this.pages().length,
+        this.preloadCount,
+        CbxReaderComponent.INFINITE_SCROLL_MAX_DOM_PAGES
+      );
+      this.infiniteScrollPages.set(result.pages);
+      this.loadWindowTelemetry.update((t) => ({ loaded: t.loaded + result.stats.loaded, evicted: t.evicted + result.stats.evicted }));
       this.isLoadingMore.set(false);
     });
   }
@@ -1241,35 +1252,19 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     const beforeTop = anchorEl.getBoundingClientRect().top;
 
     this.isLoadingMore.set(true);
-    const newFirst = Math.max(0, first - this.preloadCount);
-    const added: number[] = [];
-    for (let p = newFirst; p < first; p++) {
-      added.push(p);
-    }
-    this.infiniteScrollPages.update(p => [...added, ...p]);
-    this.trimInfiniteScrollPages('head');
+    const result = extendHeadWindow(
+      this.infiniteScrollPages(),
+      this.preloadCount,
+      CbxReaderComponent.INFINITE_SCROLL_MAX_DOM_PAGES
+    );
+    this.infiniteScrollPages.set(result.pages);
+    this.loadWindowTelemetry.update((t) => ({ loaded: t.loaded + result.stats.loaded, evicted: t.evicted + result.stats.evicted }));
 
     this.afterNextPaint(() => {
       const afterTop = anchorEl.getBoundingClientRect().top;
       container.scrollTop += afterTop - beforeTop;
       this.isLoadingMore.set(false);
     });
-  }
-
-  /**
-   * Caps the infinite scroll DOM to INFINITE_SCROLL_MAX_DOM_PAGES pages.
-   * When appending ('tail'), oldest pages at the head are dropped.
-   * When prepending ('head'), newest pages at the tail are dropped.
-   */
-  private trimInfiniteScrollPages(growingSide: 'head' | 'tail'): void {
-    const max = CbxReaderComponent.INFINITE_SCROLL_MAX_DOM_PAGES;
-    if (this.infiniteScrollPages().length <= max) return;
-
-    if (growingSide === 'tail') {
-      this.infiniteScrollPages.update(p => p.slice(-max));
-    } else {
-      this.infiniteScrollPages.update(p => p.slice(0, max));
-    }
   }
 
   private updateCurrentPageFromScroll(container: HTMLElement): void {
@@ -1309,7 +1304,12 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   }
 
   getPageImageUrl(pageIndex: number): string {
-    return this.cbxReaderService.getPageImageUrl(this.bookId()!, this.pages()[pageIndex], this.altBookType());
+    return this.cbxReaderService.getPageImageUrl(
+      this.bookId()!,
+      this.pages()[pageIndex],
+      this.altBookType(),
+      this.preferredConvertFormat()
+    );
   }
 
   // ── Long-strip mode (Kavita-inspired) ──
@@ -1716,16 +1716,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   private ensurePageLoaded(pageIndex: number): void {
     if (this.infiniteScrollPages().includes(pageIndex)) return;
-
-    const pages: number[] = [];
-    // Load a window around the target page
-    const startIndex = Math.max(0, pageIndex - 1);
-    const endIndex = Math.min(pageIndex + this.preloadCount + 1, this.pages().length);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      pages.push(i);
-    }
-    this.infiniteScrollPages.set(pages);
+    this.infiniteScrollPages.set(
+      buildCenteredWindow(pageIndex, this.pages().length, CbxReaderComponent.INFINITE_WINDOW_RADIUS)
+    );
   }
 
   onImageClick(): void {
@@ -1746,6 +1739,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   handleKeyDown(event: KeyboardEvent) {
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
     // Ignore if typing in input/textarea
     const target = event.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
@@ -1876,6 +1872,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   @HostListener('touchstart', ['$event'])
   onTouchStart(event: TouchEvent) {
     this.touchStartX = event.changedTouches[0].screenX;
+    this.touchStartY = event.changedTouches[0].screenY;
     this.touchMoveCount = 0;
   }
 
@@ -1887,6 +1884,12 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   @HostListener('touchend', ['$event'])
   onTouchEnd(event: TouchEvent) {
     this.touchEndX = event.changedTouches[0].screenX;
+    this.touchEndY = event.changedTouches[0].screenY;
+
+    if (this.tryHandleTouchDoubleTap(event)) {
+      return;
+    }
+
     // Filter tremor/jitter: ignore if fewer than 3 move events
     if (this.touchMoveCount >= 3) {
       this.handleSwipeGesture();
@@ -1917,24 +1920,28 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
   }
 
   private handleSwipeGesture() {
-    if (this.scrollMode() === CbxScrollMode.INFINITE || this.scrollMode() === CbxScrollMode.LONG_STRIP) return;
-
     const delta = this.touchEndX - this.touchStartX;
+    const deltaY = this.touchEndY - this.touchStartY;
     const threshold = Math.min(75, window.innerWidth * 0.1);
-    if (Math.abs(delta) < threshold) return;
-
-    const isRtl = this.readingDirection() === CbxReadingDirection.RTL;
-    const shouldGoNext = isRtl ? delta > 0 : delta < 0;
-    const shouldGoPrev = !shouldGoNext;
+    const crossAxisGuard = Math.min(60, window.innerHeight * 0.08);
+    const action = getSwipeNavigationAction(
+      this.scrollMode(),
+      this.readingDirection(),
+      delta,
+      threshold,
+      deltaY,
+      crossAxisGuard
+    ).action;
+    if (action === 'none') return;
 
     // Double-action prevention: at boundaries, require two consecutive swipes
-    if (shouldGoNext && this.currentPage() >= this.pages().length - 1) {
+    if (action === 'next' && this.currentPage() >= this.pages().length - 1) {
       if (!this.hasHitRightScroll()) {
         this.hasHitRightScroll.set(true);
         return;
       }
     }
-    if (shouldGoPrev && this.currentPage() <= 0) {
+    if (action === 'previous' && this.currentPage() <= 0) {
       if (!this.hasHitZeroScroll()) {
         this.hasHitZeroScroll.set(true);
         return;
@@ -1944,7 +1951,7 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     // Reset boundary flags on successful navigation
     this.resetSwipeBoundaryHits();
 
-    if (shouldGoNext) {
+    if (action === 'next') {
       this.nextPage();
     } else {
       this.previousPage();
@@ -2205,7 +2212,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   onClickZonePrev(event: Event): void {
     event.stopPropagation();
-    if (this.scrollMode() === CbxScrollMode.INFINITE) {
+    const action = getClickZoneNavigationAction('prev', this.scrollMode()).action;
+    if (action === 'scrollUp') {
       const container = this.getImageScrollContainer();
       if (container) {
         container.scrollBy({ top: -container.clientHeight * 0.9, behavior: 'smooth' });
@@ -2217,7 +2225,8 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   onClickZoneNext(event: Event): void {
     event.stopPropagation();
-    if (this.scrollMode() === CbxScrollMode.INFINITE) {
+    const action = getClickZoneNavigationAction('next', this.scrollMode()).action;
+    if (action === 'scrollDown') {
       const container = this.getImageScrollContainer();
       if (container) {
         container.scrollBy({ top: container.clientHeight * 0.9, behavior: 'smooth' });
@@ -2229,7 +2238,9 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
 
   onClickZoneMenu(event: Event): void {
     event.stopPropagation();
-    this.onImageClick();
+    if (getClickZoneNavigationAction('menu', this.scrollMode()).action === 'menu') {
+      this.onImageClick();
+    }
   }
 
   private updateMagnifier(event: MouseEvent): void {
@@ -2284,6 +2295,37 @@ export class CbxReaderComponent implements OnInit, OnDestroy {
     if (el) {
       el.style.display = 'none';
     }
+  }
+
+  private tryHandleTouchDoubleTap(event: TouchEvent): boolean {
+    if (this.scrollMode() !== CbxScrollMode.PAGINATED || this.touchMoveCount >= 3) {
+      return false;
+    }
+    const target = event.target as HTMLElement | null;
+    if (!target || this.isInteractiveTarget(target)) {
+      return false;
+    }
+
+    const touch = event.changedTouches[0];
+    const now = Date.now();
+    const intervalMs = now - this.lastTapTime;
+    const distance = Math.hypot(touch.clientX - this.lastTapX, touch.clientY - this.lastTapY);
+
+    this.lastTapTime = now;
+    this.lastTapX = touch.clientX;
+    this.lastTapY = touch.clientY;
+
+    if (intervalMs > 0 && intervalMs <= 300 && distance <= 24) {
+      this.onImageDoubleClick();
+      event.preventDefault();
+      this.lastTapTime = 0;
+      return true;
+    }
+    return false;
+  }
+
+  private isInteractiveTarget(el: HTMLElement): boolean {
+    return !!el.closest('button,[role="button"],a,input,textarea,select,label');
   }
 
   // Shortcuts help dialog

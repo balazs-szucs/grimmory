@@ -21,6 +21,8 @@ import org.springframework.stereotype.Service;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -87,6 +89,39 @@ public class CbxReaderService {
         CachedArchiveMetadata {
             imageEntries = List.copyOf(imageEntries);
             pageDimensions = pageDimensions != null ? List.copyOf(pageDimensions) : null;
+        }
+    }
+
+    public record PageCacheInfo(String etag, long lastModified) {
+    }
+
+    public enum PageConvertFormat {
+        JPEG("jpeg", "jpg"),
+        PNG("png");
+
+        private final Set<String> aliases;
+        private static final Map<String, PageConvertFormat> LOOKUP;
+
+        PageConvertFormat(String... aliases) {
+            this.aliases = Arrays.stream(aliases).map(String::toLowerCase).collect(java.util.stream.Collectors.toSet());
+        }
+
+        static {
+            Map<String, PageConvertFormat> map = new HashMap<>();
+            for (PageConvertFormat format : values()) {
+                for (String alias : format.aliases) {
+                    map.put(alias, format);
+                }
+            }
+            LOOKUP = Map.copyOf(map);
+        }
+
+        public static Optional<PageConvertFormat> fromValue(String value) {
+            if (value == null || value.isBlank()) {
+                return Optional.empty();
+            }
+            String normalized = value.trim().toLowerCase();
+            return Optional.ofNullable(LOOKUP.get(normalized));
         }
     }
 
@@ -347,17 +382,32 @@ public class CbxReaderService {
     }
 
     public void streamPageImage(Long bookId, String bookType, int page, OutputStream outputStream) throws IOException {
+        streamPageImage(bookId, bookType, page, outputStream, null);
+    }
+
+    public void streamPageImage(Long bookId, String bookType, int page, OutputStream outputStream, PageConvertFormat convertFormat) throws IOException {
         Path cbxPath = getBookPath(bookId, bookType);
         CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
         validatePageRequest(bookId, page, metadata.imageEntries());
 
+        if (convertFormat != null) {
+            try (InputStream source = openPageImageInputStream(cbxPath, metadata, bookId, bookType, page)) {
+                BufferedImage img = ImageIO.read(source);
+                if (img == null) {
+                    throw ApiError.FILE_READ_ERROR.createException("Unsupported image data for conversion");
+                }
+                ImageIO.write(img, convertFormat == PageConvertFormat.PNG ? "png" : "jpeg", outputStream);
+                return;
+            }
+        }
+
         // Tier 1: Check L1 Memory Map (OS File Cache) via open ZipFile
         // This is the fastest path for ZIP/CBZ
         try {
-            java.util.zip.ZipFile zip = getZipFile(cbxPath, metadata.lastModified());
+            ZipFile zip = getZipFile(cbxPath, metadata.lastModified());
             if (zip != null) {
                 String entryName = metadata.imageEntries().get(page - 1);
-                java.util.zip.ZipEntry entry = zip.getEntry(entryName);
+                ZipEntry entry = zip.getEntry(entryName);
                 if (entry != null) {
                     try (InputStream is = zip.getInputStream(entry)) {
                         is.transferTo(outputStream);
@@ -380,6 +430,41 @@ public class CbxReaderService {
         // Tier 3: Fallback to full extraction/stream (slowest)
         String entryName = metadata.imageEntries().get(page - 1);
         archiveService.transferEntryTo(cbxPath, entryName, outputStream);
+    }
+
+    private InputStream openPageImageInputStream(Path cbxPath, CachedArchiveMetadata metadata, Long bookId, String bookType, int page) throws IOException {
+        try {
+            ZipFile zip = getZipFile(cbxPath, metadata.lastModified());
+            if (zip != null) {
+                String entryName = metadata.imageEntries().get(page - 1);
+                ZipEntry entry = zip.getEntry(entryName);
+                if (entry != null) {
+                    return zip.getInputStream(entry);
+                }
+            }
+        } catch (IOException e) {
+            log.trace("L1 Zip cache miss for conversion on book {}: {}", bookId, e.getMessage());
+        }
+
+        String cacheKey = getCacheKey(bookId, bookType, metadata.lastModified());
+        if (chapterCacheService.hasPage(cacheKey, page)) {
+            Path cached = chapterCacheService.getCachedPage(cacheKey, page);
+            return Files.newInputStream(cached);
+        }
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        String entryName = metadata.imageEntries().get(page - 1);
+        archiveService.transferEntryTo(cbxPath, entryName, output);
+        return new ByteArrayInputStream(output.toByteArray());
+    }
+
+    public PageCacheInfo getPageCacheInfo(Long bookId, String bookType, int page) throws IOException {
+        Path cbxPath = getBookPath(bookId, bookType);
+        CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
+        validatePageRequest(bookId, page, metadata.imageEntries());
+        String entryName = metadata.imageEntries().get(page - 1);
+        String etag = "\"" + Long.toHexString(metadata.lastModified()) + "-" + page + "-" + Integer.toHexString(entryName.hashCode()) + "\"";
+        return new PageCacheInfo(etag, metadata.lastModified());
     }
 
     private ZipFile getZipFile(Path cbxPath, long lastModified) {

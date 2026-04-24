@@ -1,7 +1,6 @@
 import {HttpClient} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
 import {API_CONFIG} from '../../../core/config/api-config';
-import {AuthService} from '../../../shared/service/auth.service';
 
 export interface CbxPageInfo {
   pageNumber: number;
@@ -13,24 +12,14 @@ export class CbxReaderService {
 
   private readonly pagesUrl = `${API_CONFIG.BASE_URL}/api/v1/cbx`;
   private readonly imageUrl = `${API_CONFIG.BASE_URL}/api/v1/media/book`;
-  private authService = inject(AuthService);
   private http = inject(HttpClient);
-
-  private getToken(): string | null {
-    return this.authService.getInternalAccessToken();
-  }
-
-  private appendToken(url: string): string {
-    const token = this.getToken();
-    return token ? `${url}${url.includes('?') ? '&' : '?'}token=${token}` : url;
-  }
 
   getAvailablePages(bookId: number, bookType?: string) {
     let url = `${this.pagesUrl}/${bookId}/pages`;
     if (bookType) {
       url += `?bookType=${bookType}`;
     }
-    return this.http.get<number[]>(this.appendToken(url));
+    return this.http.get<number[]>(url);
   }
 
   getPageInfo(bookId: number, bookType?: string) {
@@ -38,14 +27,19 @@ export class CbxReaderService {
     if (bookType) {
       url += `?bookType=${bookType}`;
     }
-    return this.http.get<CbxPageInfo[]>(this.appendToken(url));
+    return this.http.get<CbxPageInfo[]>(url);
   }
 
-  getPageImageUrl(bookId: number, page: number, bookType?: string): string {
+  getPageImageUrl(bookId: number, page: number, bookType?: string, convert?: 'jpeg' | 'png'): string {
     let url = `${this.imageUrl}/${bookId}/cbx/pages/${page}`;
+    const query = new URLSearchParams();
     if (bookType) {
-      url += `?bookType=${bookType}`;
+      query.set('bookType', bookType);
     }
-    return this.appendToken(url);
+    if (convert) {
+      query.set('convert', convert);
+    }
+    const qs = query.toString();
+    return qs ? `${url}?${qs}` : url;
   }
 }

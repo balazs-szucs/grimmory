@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -70,9 +71,28 @@ public class BookMediaController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Page number to retrieve") @PathVariable int pageNumber,
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
+            @Parameter(description = "Optional output conversion format (jpeg,png)") @RequestParam(required = false) String convert,
+            HttpServletRequest request,
             HttpServletResponse response) throws IOException {
-        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
-        cbxReaderService.streamPageImage(bookId, bookType, pageNumber, response.getOutputStream());
+        CbxReaderService.PageCacheInfo cacheInfo = cbxReaderService.getPageCacheInfo(bookId, bookType, pageNumber);
+        response.setHeader(HttpHeaders.ETAG, cacheInfo.etag());
+        response.setDateHeader(HttpHeaders.LAST_MODIFIED, cacheInfo.lastModified());
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=3600");
+
+        String ifNoneMatch = request.getHeader(HttpHeaders.IF_NONE_MATCH);
+        long ifModifiedSince = request.getDateHeader(HttpHeaders.IF_MODIFIED_SINCE);
+        if (cacheInfo.etag().equals(ifNoneMatch) || (ifModifiedSince != -1 && cacheInfo.lastModified() <= ifModifiedSince)) {
+            response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+            return;
+        }
+
+        CbxReaderService.PageConvertFormat convertFormat = CbxReaderService.PageConvertFormat.fromValue(convert).orElse(null);
+        if (convertFormat == CbxReaderService.PageConvertFormat.PNG) {
+            response.setContentType(MediaType.IMAGE_PNG_VALUE);
+        } else {
+            response.setContentType(MediaType.IMAGE_JPEG_VALUE);
+        }
+        cbxReaderService.streamPageImage(bookId, bookType, pageNumber, response.getOutputStream(), convertFormat);
     }
 
     @Operation(summary = "Get author photo", description = "Retrieve the photo for a specific author.")
