@@ -743,7 +743,15 @@ export class EmbedPdfBookService {
         }
 
         /* Hide the built-in footer/status bar */
-        [class*="border-t"][class*="bg-bg-surface"][class*="px-4"][class*="py-1"] {
+        [class*="border-t"][class*="bg-bg-surface"][class*="px-4"][class*="py-1"],
+        [class*="border-t"][class*="bg-bg-surface"][class*="px-4"][class*="py-2"],
+        [role="contentinfo"],
+        [data-epdf-i*="footer"],
+        [data-epdf-i*="status"],
+        [class*="fixed"][class*="bottom-0"][class*="inset-x-0"],
+        [class*="sticky"][class*="bottom-0"],
+        [class*="bottom-0"][class*="border-t"],
+        [class*="bottom-0"][class*="bg-bg-surface"] {
           display: none !important;
         }
 
