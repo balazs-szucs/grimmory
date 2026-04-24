@@ -42,7 +42,7 @@ public class CbxReaderController {
 
         List<Integer> pages = cbxReaderService.getAvailablePages(bookId, bookType);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)
                 .body(pages);
     }
@@ -63,7 +63,7 @@ public class CbxReaderController {
 
         List<CbxPageInfo> info = cbxReaderService.getPageInfo(bookId, bookType);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)
                 .body(info);
     }
@@ -84,7 +84,7 @@ public class CbxReaderController {
 
         List<CbxPageDimension> dimensions = cbxReaderService.getPageDimensions(bookId, bookType);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)
                 .body(dimensions);
     }

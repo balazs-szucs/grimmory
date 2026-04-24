@@ -50,7 +50,7 @@ public class EpubReaderController {
 
         EpubBookInfo info = epubReaderService.getBookInfo(bookId, bookType);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)
                 .body(info);
     }
@@ -93,7 +93,7 @@ public class EpubReaderController {
         // Defense in depth for untrusted EPUB resources. See Foliate's security guidance:
         // https://github.com/johnfactotum/foliate-js#security
         response.setHeader("Content-Security-Policy", "script-src 'none'");
-        response.setHeader("Cache-Control", "private, max-age=3600");
+        response.setHeader("Cache-Control", "private, max-age=86400");
         response.setHeader(HttpHeaders.ETAG, etag);
 
         try {

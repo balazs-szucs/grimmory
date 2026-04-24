@@ -41,7 +41,7 @@ public class PdfReaderController {
 
         List<Integer> pages = pdfReaderService.getAvailablePages(bookId, bookType);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)
                 .body(pages);
     }
@@ -62,7 +62,7 @@ public class PdfReaderController {
 
         PdfBookInfo info = pdfReaderService.getBookInfo(bookId, bookType);
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)
                 .body(info);
     }
