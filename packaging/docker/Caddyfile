@@ -9,7 +9,18 @@
         encode zstd gzip
 
         @backend path /api /api/* /ws /ws/* /komga /komga/*
-        reverse_proxy @backend 127.0.0.1:{$GRIMMORY_BACKEND_PORT}
+        reverse_proxy @backend 127.0.0.1:{$GRIMMORY_BACKEND_PORT} {
+            health_uri /api/v1/healthcheck
+            health_interval 1s
+            health_timeout 1s
+            fail_duration 30s
+            max_fails 1
+            lb_try_duration 45s
+            lb_try_interval 250ms
+            transport http {
+                dial_timeout 1s
+            }
+        }
 
         @workerFiles path /ngsw-worker.js /ngsw.json /safety-worker.js /worker-basic.min.js
         handle @workerFiles {
