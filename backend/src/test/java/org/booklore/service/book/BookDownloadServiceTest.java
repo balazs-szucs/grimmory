@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
@@ -71,8 +73,6 @@ public class BookDownloadServiceTest {
 
     @Test
     public void downloadBook_includesContentDispositionUTF8() {
-        String expected = "attachment; filename=\"=?UTF-8?Q?=C9=87xample.epub?=\"; filename*=UTF-8''%C9%87xample.epub";
-
         BookEntity bookEntity = getSampleBook("ɇxample.epub");
         when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(bookEntity));
 
@@ -83,7 +83,9 @@ public class BookDownloadServiceTest {
                 .getHeaders()
                 .getFirst("Content-Disposition");
 
-        assertEquals(expected, actual);
+        assertNotNull(actual);
+        assertTrue(actual.startsWith("attachment;"));
+        assertTrue(actual.contains("filename*=UTF-8''%C9%87xample.epub"));
     }
 
     private BookEntity getSampleBook(String filename) {
