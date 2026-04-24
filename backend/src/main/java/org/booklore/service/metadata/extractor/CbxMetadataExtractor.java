@@ -12,6 +12,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.*;
@@ -474,20 +475,35 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     }
 
     public byte[] extractCover(Path path) {
+        Path coverFile = extractCoverToTempFile(path);
+        if (coverFile == null) {
+            return null;
+        }
+        try {
+            return Files.readAllBytes(coverFile);
+        } catch (IOException e) {
+            log.warn("Failed to read extracted cover file for {}: {}", path.getFileName(), e.getMessage());
+            return null;
+        } finally {
+            deleteTempFileQuietly(coverFile);
+        }
+    }
+
+    public Path extractCoverToTempFile(Path path) {
         return Stream.<Supplier<Stream<String>>>of(
                         () -> extractCoverEntryNameFromComicInfo(path),
                         () -> extractCoverEntryNameFallback(path)
                 )
                 .flatMap(Supplier::get)
-                .map(coverEntry -> readArchiveEntryBytes(path, coverEntry))
+                .map(coverEntry -> extractArchiveEntryToTempFile(path, coverEntry))
                 .filter(this::canDecode)
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
     }
 
-    private boolean canDecode(byte[] imageBytes) {
-        return imageBytes != null && vipsImageService.canDecode(imageBytes);
+    private boolean canDecode(Path imagePath) {
+        return imagePath != null && vipsImageService.canDecode(imagePath);
     }
 
     private Stream<String> extractCoverEntryNameFromComicInfo(Path cbxPath) {
@@ -619,6 +635,30 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
         }
 
         return null;
+    }
+
+    private Path extractArchiveEntryToTempFile(Path cbxPath, String entryName) {
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile("cbx-cover-", ".img");
+            archiveService.extractEntryToPath(cbxPath, entryName, tempFile);
+            return tempFile;
+        } catch (Exception e) {
+            log.warn("Failed to extract archive {} entry {} to a temp file", cbxPath.getFileName(), entryName, e);
+            deleteTempFileQuietly(tempFile);
+            return null;
+        }
+    }
+
+    private void deleteTempFileQuietly(Path tempFile) {
+        if (tempFile == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(tempFile);
+        } catch (IOException e) {
+            log.warn("Failed to delete temporary cover file {}: {}", tempFile, e.getMessage());
+        }
     }
 
     private String baseName(String path) {

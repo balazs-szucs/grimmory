@@ -261,6 +261,22 @@ public class AudiobookMetadataWriter implements MetadataWriter {
     }
 
     @Override
+    public void replaceCoverImageFromPath(BookEntity bookEntity, Path path) {
+        if (path == null) {
+            log.warn("Cover update from path failed: path is null.");
+            return;
+        }
+
+        byte[] coverData = loadImage(path.toString());
+        if (coverData == null) {
+            log.warn("Failed to load image from path: {}", path);
+            return;
+        }
+
+        replaceCoverImageFromBytes(bookEntity, coverData);
+    }
+
+    @Override
     public void replaceCoverImageFromUrl(BookEntity bookEntity, String url) {
         if (url == null || url.isBlank()) {
             log.warn("Cover update via URL failed: empty or null URL.");

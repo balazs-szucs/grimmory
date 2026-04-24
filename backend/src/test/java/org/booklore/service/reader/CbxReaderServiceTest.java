@@ -8,6 +8,8 @@ import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
 import org.booklore.service.reader.ChapterCacheService;
 import org.booklore.util.FileUtils;
+import org.booklore.util.ImageDimensions;
+import org.booklore.util.VipsImageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +23,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,6 +40,9 @@ class CbxReaderServiceTest {
 
     @Mock
     ChapterCacheService chapterCacheService;
+
+    @Mock
+    VipsImageService vipsImageService;
 
     @InjectMocks
     CbxReaderService cbxReaderService;
@@ -162,5 +168,59 @@ class CbxReaderServiceTest {
                 cbxReaderService.initCache(1L, "../traversal")
         );
         assertTrue(ex.getMessage().contains("Invalid book type"), "Expected INVALID_INPUT, got: " + ex.getMessage());
+    }
+
+    @Test
+    void testGetPageDimensions_UsesBoundedPrefixForNonZipArchive() throws Exception {
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
+        when(archiveService.getEntryBytesPrefix(cbzPath, "1.jpg", 64 * 1024)).thenReturn(new byte[]{1, 2, 3});
+        when(vipsImageService.readDimensions(any(InputStream.class))).thenReturn(new ImageDimensions(100, 200));
+
+        try (
+            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+            MockedStatic<Files> filesStatic = mockStatic(Files.class);
+        ) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
+            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
+            filesStatic.when(() -> Files.isRegularFile(cbzPath)).thenReturn(false);
+
+            var dimensions = cbxReaderService.getPageDimensions(1L, null);
+
+            assertEquals(1, dimensions.size());
+            assertEquals(100, dimensions.getFirst().getWidth());
+            assertEquals(200, dimensions.getFirst().getHeight());
+            verify(archiveService).getEntryBytesPrefix(cbzPath, "1.jpg", 64 * 1024);
+            verify(archiveService, never()).withEntryInputStream(any(), any(), any());
+        }
+    }
+
+    @Test
+    void testGetPageDimensions_UsesZipHandleWhenArchiveIsZip() throws Exception {
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
+        when(vipsImageService.readDimensions(any(InputStream.class))).thenReturn(new ImageDimensions(150, 90));
+
+        ZipFile zipFile = mock(ZipFile.class);
+        ZipEntry zipEntry = new ZipEntry("1.jpg");
+        when(mockZipCache.get(anyString(), any())).thenReturn(zipFile);
+        when(zipFile.getEntry("1.jpg")).thenReturn(zipEntry);
+        when(zipFile.getInputStream(zipEntry)).thenReturn(new ByteArrayInputStream(new byte[]{1, 2, 3}));
+
+        try (
+            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+            MockedStatic<Files> filesStatic = mockStatic(Files.class);
+        ) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
+            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
+
+            var dimensions = cbxReaderService.getPageDimensions(1L, null);
+
+            assertEquals(1, dimensions.size());
+            assertEquals(150, dimensions.getFirst().getWidth());
+            assertEquals(90, dimensions.getFirst().getHeight());
+            verify(archiveService, never()).getEntryBytesPrefix(any(), any(), anyInt());
+            verify(archiveService, never()).withEntryInputStream(any(), any(), any());
+        }
     }
 }

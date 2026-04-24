@@ -342,6 +342,25 @@ public class EpubMetadataWriter implements MetadataWriter {
     }
 
     @Override
+    public void replaceCoverImageFromPath(BookEntity bookEntity, Path path) {
+        if (!shouldSaveMetadataToFile(bookEntity.getFullFilePath().toFile())) {
+            return;
+        }
+        if (path == null) {
+            log.warn("Cover update from path failed: path is null.");
+            return;
+        }
+
+        byte[] coverData = loadImage(path.toString());
+        if (coverData == null) {
+            log.warn("Failed to load image from path: {}", path);
+            return;
+        }
+
+        replaceCoverImageInternal(bookEntity, coverData, "path");
+    }
+
+    @Override
     public void replaceCoverImageFromUrl(BookEntity bookEntity, String url) {
         if (!shouldSaveMetadataToFile(bookEntity.getFullFilePath().toFile())) {
             return;

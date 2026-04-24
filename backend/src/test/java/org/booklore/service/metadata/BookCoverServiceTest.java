@@ -36,6 +36,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Executor;
 
@@ -521,14 +522,17 @@ class BookCoverServiceTest {
     class UpdateCoverFromUrl {
 
         @Test
-        void successfullyUpdatesCoverFromUrl() {
+        void successfullyUpdatesCoverFromUrl() throws Exception {
             BookEntity book = buildBook(1L, false);
+            Path downloadedCover = Path.of("downloaded-cover.jpg");
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/cover.jpg")).thenReturn(downloadedCover);
 
             service.updateCoverFromUrl(1L, "https://example.com/cover.jpg");
 
-            verify(fileService).createThumbnailFromUrl(1L, "https://example.com/cover.jpg");
+            verify(fileService).downloadImageToTempFile("https://example.com/cover.jpg");
+            verify(fileService).createThumbnailFromPath(1L, downloadedCover);
             verify(bookRepository).save(book);
             assertThat(book.getMetadata().getCoverUpdatedOn()).isNotNull();
             assertThat(book.getBookCoverHash()).isNotNull();
@@ -585,14 +589,17 @@ class BookCoverServiceTest {
     class UpdateAudiobookCoverFromUrl {
 
         @Test
-        void successfullyUpdatesCoverFromUrl() {
+        void successfullyUpdatesCoverFromUrl() throws Exception {
             BookEntity book = buildBookWithAudiobookLock(1L, false);
+            Path downloadedCover = Path.of("downloaded-audiobook-cover.jpg");
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/audiobook-cover.jpg")).thenReturn(downloadedCover);
 
             service.updateAudiobookCoverFromUrl(1L, "https://example.com/audiobook-cover.jpg");
 
-            verify(fileService).createAudiobookThumbnailFromUrl(1L, "https://example.com/audiobook-cover.jpg");
+            verify(fileService).downloadImageToTempFile("https://example.com/audiobook-cover.jpg");
+            verify(fileService).createAudiobookThumbnailFromPath(1L, downloadedCover);
             verify(bookRepository).save(book);
             assertThat(book.getMetadata().getAudiobookCoverUpdatedOn()).isNotNull();
             assertThat(book.getAudiobookCoverHash()).isNotNull();
@@ -974,7 +981,7 @@ class BookCoverServiceTest {
     class WriteCoverToBookFile {
 
         @Test
-        void writesAndUpdatesHashWhenWriterExists() {
+        void writesAndUpdatesHashWhenWriterExists() throws Exception {
             BookEntity book = buildBook(1L, false);
             BookFileEntity primaryFile = BookFileEntity.builder()
                     .bookType(BookFileType.EPUB).isBookFormat(true)
@@ -993,6 +1000,7 @@ class BookCoverServiceTest {
             when(metadataWriterFactory.getWriter(BookFileType.EPUB)).thenReturn(Optional.of(writer));
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/cover.jpg")).thenReturn(Path.of("downloaded-cover.jpg"));
 
             try (MockedStatic<FileFingerprint> fpMock = mockStatic(FileFingerprint.class)) {
                 fpMock.when(() -> FileFingerprint.generateHash(any())).thenReturn("abc123");
@@ -1005,11 +1013,12 @@ class BookCoverServiceTest {
         }
 
         @Test
-        void skipsWriteWhenNoPrimaryFile() {
+        void skipsWriteWhenNoPrimaryFile() throws Exception {
             BookEntity book = buildBook(1L, false);
             book.setBookFiles(new ArrayList<>());
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/cover.jpg")).thenReturn(Path.of("downloaded-cover.jpg"));
 
             service.updateCoverFromUrl(1L, "https://example.com/cover.jpg");
 
@@ -1021,9 +1030,10 @@ class BookCoverServiceTest {
     class NotifyBookCoverUpdate {
 
         @Test
-        void sendsNotificationWhenUpdatesExist() {
+        void sendsNotificationWhenUpdatesExist() throws Exception {
             BookEntity book = buildBook(1L, false);
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
+            when(fileService.downloadImageToTempFile("https://example.com/cover.jpg")).thenReturn(Path.of("downloaded-cover.jpg"));
 
             BookCoverUpdateProjection projection = mock(BookCoverUpdateProjection.class);
             when(bookRepository.findCoverUpdateInfoByIds(List.of(1L))).thenReturn(List.of(projection));
@@ -1034,10 +1044,11 @@ class BookCoverServiceTest {
         }
 
         @Test
-        void doesNotSendNotificationWhenNoUpdates() {
+        void doesNotSendNotificationWhenNoUpdates() throws Exception {
             BookEntity book = buildBook(1L, false);
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/cover.jpg")).thenReturn(Path.of("downloaded-cover.jpg"));
 
             service.updateCoverFromUrl(1L, "https://example.com/cover.jpg");
 
@@ -1083,7 +1094,7 @@ class BookCoverServiceTest {
     class NetworkStorageGating {
 
         @Test
-        void writeCoverToBookFile_networkStorage_skipsFileWrite() {
+        void writeCoverToBookFile_networkStorage_skipsFileWrite() throws Exception {
             when(appProperties.isLocalStorage()).thenReturn(false);
 
             BookEntity book = buildBook(1L, false);
@@ -1094,6 +1105,7 @@ class BookCoverServiceTest {
             book.setBookFiles(List.of(bookFile));
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/cover.jpg")).thenReturn(Path.of("downloaded-cover.jpg"));
 
             service.updateCoverFromUrl(1L, "https://example.com/cover.jpg");
 
@@ -1102,7 +1114,7 @@ class BookCoverServiceTest {
         }
 
         @Test
-        void writeAudiobookCoverToFile_networkStorage_skipsFileWrite() {
+        void writeAudiobookCoverToFile_networkStorage_skipsFileWrite() throws Exception {
             when(appProperties.isLocalStorage()).thenReturn(false);
 
             BookEntity book = buildBookWithAudiobookLock(1L, false);
@@ -1112,6 +1124,7 @@ class BookCoverServiceTest {
             book.setBookFiles(List.of(audiobookFile));
             when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(book));
             when(bookRepository.findCoverUpdateInfoByIds(any())).thenReturn(List.of());
+            when(fileService.downloadImageToTempFile("https://example.com/audiobook-cover.jpg")).thenReturn(Path.of("downloaded-audiobook-cover.jpg"));
 
             service.updateAudiobookCoverFromUrl(1L, "https://example.com/audiobook-cover.jpg");
 

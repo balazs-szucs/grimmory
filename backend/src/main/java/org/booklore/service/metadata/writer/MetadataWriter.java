@@ -7,6 +7,7 @@ import org.booklore.model.enums.BookFileType;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.nio.file.Path;
 
 public interface MetadataWriter {
 
@@ -18,6 +19,9 @@ public interface MetadataWriter {
     }
 
     default void replaceCoverImageFromBytes(BookEntity bookEntity, byte[] file) {
+    }
+
+    default void replaceCoverImageFromPath(BookEntity bookEntity, Path file) {
     }
 
     default void replaceCoverImageFromUrl(BookEntity bookEntity, String url) {

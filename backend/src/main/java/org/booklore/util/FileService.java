@@ -274,6 +274,20 @@ public class FileService {
         }
     }
 
+    public Path downloadImageToTempFile(String imageUrl) throws IOException {
+        Path tempFile = Files.createTempFile("booklore-remote-image-", ".img");
+        boolean completed = false;
+        try {
+            downloadImageToPath(imageUrl, tempFile);
+            completed = true;
+            return tempFile;
+        } finally {
+            if (!completed) {
+                deleteTempFileQuietly(tempFile);
+            }
+        }
+    }
+
     private byte[] downloadImageBytesFromUrlInternal(String imageUrl) throws IOException {
         URI uri = URI.create(imageUrl);
         if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
@@ -315,6 +329,130 @@ public class FileService {
         }
 
         throw new IOException("Failed to download image bytes. HTTP Status: " + response.getStatusCode());
+    }
+
+    private void downloadImageToPath(String imageUrl, Path targetPath) throws IOException {
+        String currentUrl = imageUrl;
+        int redirectCount = 0;
+
+        while (redirectCount <= MAX_REDIRECTS) {
+            URI uri = validateRemoteImageUri(currentUrl);
+            String host = uri.getHost();
+            validateRemoteImageHost(host);
+
+            log.debug("Downloading image from: {}", currentUrl);
+
+            String redirectLocation = noRedirectRestTemplate.execute(
+                    currentUrl,
+                    HttpMethod.GET,
+                    request -> request.getHeaders().putAll(createImageDownloadHeaders()),
+                    response -> handleImageDownloadResponse(response, uri, host, targetPath)
+            );
+
+            if (redirectLocation == null) {
+                return;
+            }
+
+            currentUrl = redirectLocation;
+            redirectCount++;
+        }
+
+        throw new IOException("Too many redirects (max " + MAX_REDIRECTS + ")");
+    }
+
+    private URI validateRemoteImageUri(String imageUrl) throws IOException {
+        URI uri = URI.create(imageUrl);
+        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IOException("Only HTTP and HTTPS protocols are allowed");
+        }
+        if (uri.getHost() == null) {
+            throw new IOException("Invalid URL: no host found in " + imageUrl);
+        }
+        return uri;
+    }
+
+    private void validateRemoteImageHost(String host) throws IOException {
+        InetAddress[] inetAddresses = InetAddress.getAllByName(host);
+        if (inetAddresses.length == 0) {
+            throw new IOException("Could not resolve host: " + host);
+        }
+        for (InetAddress inetAddress : inetAddresses) {
+            if (isInternalAddress(inetAddress)) {
+                throw new SecurityException("URL points to a local or private internal network address: " + host + " (" + inetAddress.getHostAddress() + ")");
+            }
+        }
+    }
+
+    private HttpHeaders createImageDownloadHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
+        headers.set(HttpHeaders.ACCEPT, "image/*");
+        return headers;
+    }
+
+    private String handleImageDownloadResponse(org.springframework.http.client.ClientHttpResponse response,
+                                               URI requestUri,
+                                               String originalHost,
+                                               Path targetPath) throws IOException {
+        if (response.getStatusCode().is2xxSuccessful()) {
+            try (InputStream body = response.getBody(); var output = Files.newOutputStream(targetPath)) {
+                if (body == null) {
+                    throw new IOException("Image download returned an empty response body");
+                }
+                transferWithLimit(body, output, getRemoteImageLimitBytes());
+            }
+            return null;
+        }
+
+        if (response.getStatusCode().is3xxRedirection()) {
+            String location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
+            if (location == null) {
+                throw new IOException("Redirection response without Location header");
+            }
+            URI redirectUri = requestUri.resolve(location);
+
+            if (isRawIpAddress(redirectUri.getHost())) {
+                try {
+                    redirectUri = new URI(
+                            redirectUri.getScheme(),
+                            redirectUri.getUserInfo(),
+                            originalHost,
+                            redirectUri.getPort(),
+                            redirectUri.getPath(),
+                            redirectUri.getQuery(),
+                            redirectUri.getFragment()
+                    );
+                } catch (URISyntaxException e) {
+                    throw new IOException("Invalid redirect URI: " + e.getMessage(), e);
+                }
+            }
+
+            return redirectUri.toString();
+        }
+
+        throw new IOException("Failed to download image. HTTP Status: " + response.getStatusCode());
+    }
+
+    private long getRemoteImageLimitBytes() {
+        try {
+            return getMaxFileUploadSizeMb() * 1024 * 1024;
+        } catch (RuntimeException e) {
+            log.warn("Falling back to default remote image limit {} bytes: {}", MAX_FILE_SIZE_BYTES, e.getMessage());
+            return MAX_FILE_SIZE_BYTES;
+        }
+    }
+
+    private void transferWithLimit(InputStream inputStream, java.io.OutputStream outputStream, long maxBytes) throws IOException {
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = inputStream.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Image exceeds maximum size of " + maxBytes + " bytes");
+            }
+            outputStream.write(buffer, 0, read);
+        }
     }
 
     private byte[] downloadImageFromUrlInternal(String imageUrl) throws IOException {
@@ -488,19 +626,28 @@ public class FileService {
     }
 
     public void createThumbnailFromUrl(long bookId, String imageUrl) {
+        Path downloadedImage = null;
         try {
-            byte[] imageBytes = downloadImageFromUrl(imageUrl);
-            if (imageBytes == null || imageBytes.length == 0) {
-                log.warn("Skipping thumbnail creation for book {}: download failed", bookId);
-                return;
-            }
-            boolean success = saveCoverImages(imageBytes, bookId);
-            if (!success) {
-                throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
-            }
+            downloadedImage = downloadImageToTempFile(imageUrl);
+            createThumbnailFromPath(bookId, downloadedImage);
             log.info("Cover images created and saved from URL for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating thumbnail from URL: {}", e.getMessage(), e);
+            throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
+        } finally {
+            deleteTempFileQuietly(downloadedImage);
+        }
+    }
+
+    public void createThumbnailFromPath(long bookId, Path imagePath) {
+        try (InputStream inputStream = Files.newInputStream(imagePath)) {
+            boolean success = saveCoverImages(inputStream, bookId);
+            if (!success) {
+                throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
+            }
+            log.info("Cover images created and saved from path for book ID: {}", bookId);
+        } catch (Exception e) {
+            log.error("An error occurred while creating thumbnail from path: {}", e.getMessage(), e);
             throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
         }
     }
@@ -510,23 +657,34 @@ public class FileService {
     // ========================================
 
     public void createAuthorThumbnailFromUrl(long authorId, String imageUrl) {
+        Path downloadedImage = null;
         try {
-            byte[] imageBytes = downloadImageFromUrl(imageUrl);
-            if (imageBytes == null || imageBytes.length == 0) {
-                log.warn("Skipping author thumbnail creation for author {}: download failed", authorId);
-                return;
+            downloadedImage = downloadImageToTempFile(imageUrl);
+            boolean success;
+            try (InputStream inputStream = Files.newInputStream(downloadedImage)) {
+                success = saveAuthorImages(inputStream, authorId);
             }
-            boolean success = saveAuthorImages(imageBytes, authorId);
             if (!success) {
                 log.warn("Failed to save author images for author ID: {}", authorId);
             }
             log.info("Author images created and saved from URL for author ID: {}", authorId);
         } catch (Exception e) {
             log.warn("Failed to create author thumbnail from URL for author {}: {}", authorId, e.getMessage());
+        } finally {
+            deleteTempFileQuietly(downloadedImage);
         }
     }
 
     public boolean saveAuthorImages(byte[] imageData, long authorId) throws IOException {
+        Path tempImage = writeImageBytesToTempFile(imageData);
+        try {
+            return saveAuthorImages(tempImage, authorId);
+        } finally {
+            deleteTempFileQuietly(tempImage);
+        }
+    }
+
+    public boolean saveAuthorImages(Path imagePath, long authorId) throws IOException {
         String folderPath = getAuthorImagesFolder(authorId);
         File folder = new File(folderPath);
         if (!folder.exists() && !folder.mkdirs()) {
@@ -537,7 +695,7 @@ public class FileService {
         Path thumbnailFile = Path.of(folderPath, AUTHOR_THUMBNAIL_FILENAME);
 
         // Flatten + resize + save photo
-        vipsImageService.flattenResizeAndSave(imageData, photoFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        vipsImageService.flattenResizeAndSave(imagePath, photoFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
 
         // Compute aspect-ratio crop for thumbnail from saved photo
         ImageDimensions photoDims = vipsImageService.readDimensionsFromFile(photoFile);
@@ -664,24 +822,42 @@ public class FileService {
     }
 
     public void createAudiobookThumbnailFromUrl(long bookId, String imageUrl) {
+        Path downloadedImage = null;
         try {
-            byte[] imageBytes = downloadImageFromUrl(imageUrl);
-            if (imageBytes == null || imageBytes.length == 0) {
-                log.warn("Skipping audiobook thumbnail creation for book {}: download failed", bookId);
-                return;
-            }
-            boolean success = saveAudiobookCoverImages(imageBytes, bookId);
-            if (!success) {
-                throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
-            }
+            downloadedImage = downloadImageToTempFile(imageUrl);
+            createAudiobookThumbnailFromPath(bookId, downloadedImage);
             log.info("Audiobook cover images created and saved from URL for book ID: {}", bookId);
         } catch (Exception e) {
             log.error("An error occurred while creating audiobook thumbnail from URL: {}", e.getMessage(), e);
+            throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
+        } finally {
+            deleteTempFileQuietly(downloadedImage);
+        }
+    }
+
+    public void createAudiobookThumbnailFromPath(long bookId, Path imagePath) {
+        try (InputStream inputStream = Files.newInputStream(imagePath)) {
+            boolean success = saveAudiobookCoverImages(inputStream, bookId);
+            if (!success) {
+                throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
+            }
+            log.info("Audiobook cover images created and saved from path for book ID: {}", bookId);
+        } catch (Exception e) {
+            log.error("An error occurred while creating audiobook thumbnail from path: {}", e.getMessage(), e);
             throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
         }
     }
 
     public boolean saveAudiobookCoverImages(byte[] imageData, long bookId) throws IOException {
+        Path tempImage = writeImageBytesToTempFile(imageData);
+        try {
+            return saveAudiobookCoverImages(tempImage, bookId);
+        } finally {
+            deleteTempFileQuietly(tempImage);
+        }
+    }
+
+    public boolean saveAudiobookCoverImages(Path imagePath, long bookId) throws IOException {
         String folderPath = getImagesFolder(bookId);
         File folder = new File(folderPath);
         if (!folder.exists() && !folder.mkdirs()) {
@@ -692,7 +868,7 @@ public class FileService {
         Path thumbnailFile = Path.of(folderPath, AUDIOBOOK_THUMBNAIL_FILENAME);
 
         // Read dimensions to compute center-square crop
-        ImageDimensions dims = vipsImageService.readDimensions(imageData);
+        ImageDimensions dims = vipsImageService.readDimensionsFromFile(imagePath);
         int size = Math.min(dims.width(), dims.height());
         int cropX = (dims.width() - size) / 2;
         int cropY = (dims.height() - size) / 2;
@@ -700,7 +876,7 @@ public class FileService {
         int coverSize = Math.min(size, MAX_SQUARE_SIZE);
 
         // Flatten + center-square crop + resize → audiobook cover
-        vipsImageService.flattenCropResizeAndSave(imageData, coverFile,
+        vipsImageService.flattenCropResizeAndSave(imagePath, coverFile,
                 cropX, cropY, size, size, coverSize, coverSize);
 
         // Square thumbnail from saved cover
@@ -746,6 +922,15 @@ public class FileService {
     }
 
     public boolean saveCoverImages(byte[] imageData, long bookId) throws IOException {
+        Path tempImage = writeImageBytesToTempFile(imageData);
+        try {
+            return saveCoverImages(tempImage, bookId);
+        } finally {
+            deleteTempFileQuietly(tempImage);
+        }
+    }
+
+    public boolean saveCoverImages(Path imagePath, long bookId) throws IOException {
         String folderPath = getImagesFolder(bookId);
         File folder = new File(folderPath);
         if (!folder.exists() && !folder.mkdirs()) {
@@ -756,14 +941,14 @@ public class FileService {
         Path thumbnailFile = Path.of(folderPath, THUMBNAIL_FILENAME);
 
         // Read dimensions and compute optional crop region
-        ImageDimensions dims = vipsImageService.readDimensions(imageData);
-        int[] crop = computeCoverCrop(imageData, dims);
+        ImageDimensions dims = vipsImageService.readDimensionsFromFile(imagePath);
+        int[] crop = computeCoverCrop(imagePath, dims);
 
         if (crop != null) {
-            vipsImageService.flattenCropResizeAndSave(imageData, coverFile,
+            vipsImageService.flattenCropResizeAndSave(imagePath, coverFile,
                     crop[0], crop[1], crop[2], crop[3], MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
         } else {
-            vipsImageService.flattenResizeAndSave(imageData, coverFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+            vipsImageService.flattenResizeAndSave(imagePath, coverFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
         }
 
         // Determine thumbnail dimensions based on saved cover aspect ratio
@@ -947,6 +1132,35 @@ public class FileService {
             }
         }
         log.info("Deleted {} book covers", bookIds.size());
+    }
+
+    private void deleteTempFileQuietly(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("Failed to delete temporary file {}: {}", path, e.getMessage());
+        }
+    }
+
+    private Path writeImageBytesToTempFile(byte[] imageData) throws IOException {
+        if (imageData == null || imageData.length == 0) {
+            throw new IOException("Image data is null or empty");
+        }
+
+        Path tempFile = Files.createTempFile("booklore-image-", ".img");
+        boolean completed = false;
+        try {
+            Files.write(tempFile, imageData);
+            completed = true;
+            return tempFile;
+        } finally {
+            if (!completed) {
+                deleteTempFileQuietly(tempFile);
+            }
+        }
     }
 
     public String getIconsSvgFolder() {

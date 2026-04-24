@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -79,9 +80,14 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         Path bookPath = FileUtils.getBookFullPath(bookEntity, bookFile);
 
         try {
-            byte[] coverBytes = extractCoverBytesFromArchive(bookPath);
-            if (coverBytes != null) {
-                boolean saved = fileService.saveCoverImages(coverBytes, bookEntity.getId());
+            Path coverFile = extractCoverFileFromArchive(bookPath);
+            if (coverFile != null) {
+                boolean saved;
+                try (var coverStream = Files.newInputStream(coverFile)) {
+                    saved = fileService.saveCoverImages(coverStream, bookEntity.getId());
+                } finally {
+                    deleteTempFile(coverFile);
+                }
                 if (saved) {
                     return true;
                 } else {
@@ -101,13 +107,24 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         return List.of(BookFileType.CBX);
     }
 
-    private byte[] extractCoverBytesFromArchive(Path path) {
+    private Path extractCoverFileFromArchive(Path path) {
         try {
-            return cbxMetadataExtractor.extractCover(path);
+            return cbxMetadataExtractor.extractCoverToTempFile(path);
         } catch (Exception e) {
             log.warn("Error reading archive cover {}: {}", path.getFileName(), e.getMessage());
         }
         return null;
+    }
+
+    private void deleteTempFile(Path tempFile) {
+        if (tempFile == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(tempFile);
+        } catch (Exception e) {
+            log.warn("Failed to delete temporary CBX cover file {}: {}", tempFile, e.getMessage());
+        }
     }
 
     private void extractAndSetMetadata(BookEntity bookEntity) {

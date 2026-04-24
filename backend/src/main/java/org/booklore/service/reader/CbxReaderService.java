@@ -19,6 +19,7 @@ import org.booklore.util.ImageDimensions;
 import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -159,7 +160,7 @@ public class CbxReaderService {
             List<CbxPageDimension> dimensions = new ArrayList<>();
             for (int i = 0; i < imageEntries.size(); i++) {
                 String entryName = imageEntries.get(i);
-                CbxPageDimension dim = readEntryDimension(cbxPath, entryName, i + 1);
+                CbxPageDimension dim = readEntryDimension(cbxPath, entryName, i + 1, metadata.lastModified());
                 dimensions.add(dim);
             }
             
@@ -173,13 +174,9 @@ public class CbxReaderService {
         }
     }
 
-    private CbxPageDimension readEntryDimension(Path cbxPath, String entryName, int pageNumber) {
+        private CbxPageDimension readEntryDimension(Path cbxPath, String entryName, int pageNumber, long lastModified) {
         try {
-            ImageDimensions dims = archiveService.withEntryInputStream(
-                    cbxPath,
-                    entryName,
-                    vipsImageService::readDimensions
-            );
+            ImageDimensions dims = readEntryDimensions(cbxPath, entryName, lastModified);
             return CbxPageDimension.builder()
                     .pageNumber(pageNumber)
                     .width(dims.width())
@@ -195,6 +192,23 @@ public class CbxReaderService {
                 .height(0)
                 .wide(false)
                 .build();
+    }
+
+    private ImageDimensions readEntryDimensions(Path cbxPath, String entryName, long lastModified) throws IOException {
+        ZipFile zip = getZipFile(cbxPath, lastModified);
+        if (zip != null) {
+            ZipEntry entry = zip.getEntry(entryName);
+            if (entry != null) {
+                try (InputStream inputStream = zip.getInputStream(entry)) {
+                    return vipsImageService.readDimensions(inputStream);
+                }
+            }
+        }
+
+        byte[] prefix = archiveService.getEntryBytesPrefix(cbxPath, entryName, DIMENSION_PREFIX_BYTES);
+        try (InputStream inputStream = new ByteArrayInputStream(prefix)) {
+            return vipsImageService.readDimensions(inputStream);
+        }
     }
 
     /**

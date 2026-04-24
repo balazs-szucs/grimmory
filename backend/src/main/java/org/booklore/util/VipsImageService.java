@@ -132,6 +132,19 @@ public class VipsImageService {
     }
 
     /**
+     * Checks if an image file can be decoded.
+     */
+    public boolean canDecode(Path path) {
+        if (path == null) return false;
+        try {
+            Vips.run(arena -> VImage.newFromFile(arena, path.toString(), SEQUENTIAL_ACCESS));
+            return true;
+        } catch (VipsError e) {
+            return false;
+        }
+    }
+
+    /**
      * Checks if image stream can be decoded.
      */
     public boolean canDecode(InputStream inputStream) {

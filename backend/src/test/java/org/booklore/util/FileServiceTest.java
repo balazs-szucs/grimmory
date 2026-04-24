@@ -127,6 +127,21 @@ class FileServiceTest {
             return new TrimBounds(left, top, img.getWidth() - left, img.getHeight() - top);
         });
 
+        lenient().when(mockVips.findContentBounds(any(Path.class))).thenAnswer(inv -> {
+            Path path = inv.getArgument(0);
+            BufferedImage img = ImageIO.read(path.toFile());
+            if (img == null) return new TrimBounds(0, 0, 1, 1);
+            int top = 0;
+            if (img.getHeight() > 200 && (img.getRGB(0, 0) & 0xFFFFFF) == 0xFFFFFF) {
+                top = 200;
+            }
+            int left = 0;
+            if (img.getWidth() > 200 && (img.getRGB(0, 0) & 0xFFFFFF) == 0xFFFFFF) {
+                left = 200;
+            }
+            return new TrimBounds(left, top, img.getWidth() - left, img.getHeight() - top);
+        });
+
         // Stub flattenResizeAndSave: resize and write a JPEG
         lenient().doAnswer(inv -> {
             byte[] data = inv.getArgument(0);
@@ -148,6 +163,27 @@ class FileServiceTest {
             ImageIO.write(resized, "JPEG", target.toFile());
             return null;
         }).when(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+
+        lenient().doAnswer(inv -> {
+            Path source = inv.getArgument(0);
+            Path target = inv.getArgument(1);
+            int maxWidth = inv.getArgument(2);
+            int maxHeight = inv.getArgument(3);
+
+            BufferedImage img = ImageIO.read(source.toFile());
+            double ratio = Math.min((double) maxWidth / img.getWidth(), (double) maxHeight / img.getHeight());
+            int newWidth = (int) (img.getWidth() * Math.min(1.0, ratio));
+            int newHeight = (int) (img.getHeight() * Math.min(1.0, ratio));
+
+            BufferedImage resized = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = resized.createGraphics();
+            g.drawImage(img, 0, 0, newWidth, newHeight, null);
+            g.dispose();
+
+            Files.createDirectories(target.getParent());
+            ImageIO.write(resized, "JPEG", target.toFile());
+            return null;
+        }).when(mockVips).flattenResizeAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
 
         // Stub flattenThumbnailAndSave (file-to-file): resize and save
         lenient().doAnswer(inv -> {
@@ -291,7 +327,7 @@ class FileServiceTest {
             boolean result = fileService.saveCoverImages(image, 1L);
 
             assertTrue(result);
-            verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
+            verify(mockVips).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
             verify(mockVips).flattenThumbnailAndSave(any(Path.class), any(Path.class), eq(250), eq(350));
         }
 
@@ -304,7 +340,7 @@ class FileServiceTest {
             boolean result = fileService.saveCoverImages(largeImage, 5L);
 
             assertTrue(result);
-            verify(mockVips).flattenResizeAndSave(any(byte[].class), any(Path.class), eq(1000), eq(1500));
+            verify(mockVips).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
         }
     }
 
@@ -321,7 +357,7 @@ class FileServiceTest {
             boolean result = fileService.saveCoverImages(tallImage, 100L);
 
             assertTrue(result);
-            verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
+                verify(mockVips).flattenCropResizeAndSave(any(Path.class), any(Path.class),
                     anyInt(), anyInt(), anyInt(), anyInt(), eq(1000), eq(1500));
         }
 

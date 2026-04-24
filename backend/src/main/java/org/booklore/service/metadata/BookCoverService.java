@@ -33,6 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +69,25 @@ public class BookCoverService {
             notificationService.sendMessageToUser(username, topic, message);
         } else {
             notificationService.sendMessageToPermissions(topic, message, Set.of(PermissionType.ADMIN, PermissionType.MANAGE_LIBRARY));
+        }
+    }
+
+    private Path downloadCoverToTempFile(String url) {
+        try {
+            return fileService.downloadImageToTempFile(url);
+        } catch (IOException e) {
+            throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
+        }
+    }
+
+    private void deleteTempFile(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("Failed to delete temporary cover file {}: {}", path, e.getMessage());
         }
     }
 
@@ -135,8 +156,13 @@ public class BookCoverService {
             throw ApiError.METADATA_LOCKED.createException();
         }
 
-        fileService.createThumbnailFromUrl(bookId, url);
-        writeCoverToBookFile(bookEntity, (writer, book) -> writer.replaceCoverImageFromUrl(book, url));
+        Path downloadedCover = downloadCoverToTempFile(url);
+        try {
+            fileService.createThumbnailFromPath(bookId, downloadedCover);
+            writeCoverToBookFile(bookEntity, (writer, book) -> writer.replaceCoverImageFromPath(book, downloadedCover));
+        } finally {
+            deleteTempFile(downloadedCover);
+        }
         updateBookCoverMetadata(bookEntity);
         bookRepository.save(bookEntity);
         notifyBookCoverUpdate(bookEntity);
@@ -175,8 +201,13 @@ public class BookCoverService {
             throw ApiError.METADATA_LOCKED.createException();
         }
 
-        fileService.createAudiobookThumbnailFromUrl(bookId, url);
-        writeAudiobookCoverToFile(bookEntity, (writer, book) -> writer.replaceCoverImageFromUrl(book, url));
+        Path downloadedCover = downloadCoverToTempFile(url);
+        try {
+            fileService.createAudiobookThumbnailFromPath(bookId, downloadedCover);
+            writeAudiobookCoverToFile(bookEntity, (writer, book) -> writer.replaceCoverImageFromPath(book, downloadedCover));
+        } finally {
+            deleteTempFile(downloadedCover);
+        }
         updateAudiobookCoverMetadata(bookEntity);
         bookRepository.save(bookEntity);
         notifyBookCoverUpdate(bookEntity);
