@@ -1,6 +1,9 @@
 {
     auto_https off
     admin off
+    servers {
+        protocols h1 h2 h2c
+    }
 }
 
 :{$GRIMMORY_HTTP_PORT:6060} {
@@ -9,7 +12,13 @@
         encode
 
         @backend path /api /api/* /ws /ws/* /komga /komga/*
-        reverse_proxy @backend 127.0.0.1:{$GRIMMORY_BACKEND_PORT:8080}
+        reverse_proxy @backend 127.0.0.1:{$GRIMMORY_BACKEND_PORT:8080} {
+            transport http {
+                keepalive 30s
+                keepalive_idle_conns 8
+            }
+            flush_interval -1
+        }
 
         @workerFiles path /ngsw-worker.js /ngsw.json /safety-worker.js /worker-basic.min.js
         handle @workerFiles {

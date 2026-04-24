@@ -81,8 +81,11 @@ if [ "$start_caddy_proxy" = "true" ]; then
 
     while :; do
         if ! kill -0 "$caddy_pid" 2>/dev/null; then
-            wait "$caddy_pid" || caddy_status=$?
-            caddy_status="${caddy_status:-1}"
+            if wait "$caddy_pid"; then
+                caddy_status=0
+            else
+                caddy_status=$?
+            fi
             echo "ERROR: Caddy exited unexpectedly with status $caddy_status." >&2
             shutdown_children
             wait "$app_pid" 2>/dev/null || true
@@ -90,8 +93,12 @@ if [ "$start_caddy_proxy" = "true" ]; then
         fi
 
         if ! kill -0 "$app_pid" 2>/dev/null; then
-            wait "$app_pid" || app_status=$?
-            app_status="${app_status:-0}"
+            if wait "$app_pid"; then
+                app_status=0
+            else
+                app_status=$?
+            fi
+            app_status="${app_status:-1}"
             shutdown_children
             wait "$caddy_pid" 2>/dev/null || true
             exit "$app_status"
