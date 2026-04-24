@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 USER_ID="${USER_ID:-1000}"
 GROUP_ID="${GROUP_ID:-1000}"
@@ -44,6 +44,7 @@ if [ "$start_caddy_proxy" = "true" ]; then
     backend_port="${GRIMMORY_BACKEND_PORT:-8080}"
 
     if [ "$backend_port" = "$public_port" ]; then
+        echo "WARNING: GRIMMORY_HTTP_PORT and GRIMMORY_BACKEND_PORT both resolved to $public_port; shifting backend port to avoid collision." >&2
         if [ "$public_port" = "8080" ]; then
             backend_port="8081"
         else
@@ -59,9 +60,45 @@ if [ "$start_caddy_proxy" = "true" ]; then
     mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
     chown -R "$USER_ID:$GROUP_ID" /tmp/caddy 2>/dev/null || true
 
-    su-exec "$USER_ID:$GROUP_ID" caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
+    echo "Starting Grimmory with Caddy proxy on :$public_port and backend on :$backend_port" >&2
 
-    exec env BOOKLORE_PORT="$backend_port" su-exec "$USER_ID:$GROUP_ID" "$@"
+    su-exec "$USER_ID:$GROUP_ID" caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
+    caddy_pid=$!
+
+    env BOOKLORE_PORT="$backend_port" su-exec "$USER_ID:$GROUP_ID" "$@" &
+    app_pid=$!
+
+    shutdown_children() {
+        if kill -0 "$caddy_pid" 2>/dev/null; then
+            kill -TERM "$caddy_pid" 2>/dev/null || true
+        fi
+        if kill -0 "$app_pid" 2>/dev/null; then
+            kill -TERM "$app_pid" 2>/dev/null || true
+        fi
+    }
+
+    trap 'shutdown_children' INT TERM
+
+    while :; do
+        if ! kill -0 "$caddy_pid" 2>/dev/null; then
+            wait "$caddy_pid" || caddy_status=$?
+            caddy_status="${caddy_status:-1}"
+            echo "ERROR: Caddy exited unexpectedly with status $caddy_status." >&2
+            shutdown_children
+            wait "$app_pid" 2>/dev/null || true
+            exit "$caddy_status"
+        fi
+
+        if ! kill -0 "$app_pid" 2>/dev/null; then
+            wait "$app_pid" || app_status=$?
+            app_status="${app_status:-0}"
+            shutdown_children
+            wait "$caddy_pid" 2>/dev/null || true
+            exit "$app_status"
+        fi
+
+        sleep 1
+    done
 fi
 
 exec su-exec "$USER_ID:$GROUP_ID" "$@"

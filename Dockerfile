@@ -99,7 +99,8 @@ COPY --from=caddy-layer /usr/bin/caddy /usr/bin/caddy
 COPY --from=backend-build /workspace/backend/app.jar /app/app.jar
 COPY --from=frontend-build /workspace/frontend/dist/grimmory/browser /srv/frontend
 
-RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+RUN GRIMMORY_HTTP_PORT=6060 GRIMMORY_BACKEND_PORT=8080 \
+    caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 ARG APP_VERSION=development
 ARG APP_REVISION=unknown
