@@ -124,6 +124,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   private pdfFetchAbortController?: AbortController;
   private cachedPdfBuffer: ArrayBuffer | null = null;
   private suppressProgressSave = false;
+  private initialPage = 1;
 
   // Book mode state
   private bookViewerInitialized = false;
@@ -383,10 +384,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         const globalOrIndividual = myself.userSettings.perBookSetting.pdf;
         let zoomVal: string;
         let spreadVal: 'none' | 'even' | 'odd';
-        let scrollLayoutVal: PdfScrollLayout = 'vertical';
+        let scrollLayoutVal: PdfScrollLayout;
         if (globalOrIndividual === 'Global') {
           zoomVal = myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
           spreadVal = (myself.userSettings.pdfReaderSetting.pageSpread || 'none') === 'off' ? 'none' : (myself.userSettings.pdfReaderSetting.pageSpread as 'none' | 'even' | 'odd') || 'none';
+          scrollLayoutVal = myself.userSettings.pdfReaderSetting.scrollLayout || 'vertical';
         } else {
           zoomVal = pdfPrefs.pdfSettings?.zoom || myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
           const rawSpread = pdfPrefs.pdfSettings?.spread || myself.userSettings.pdfReaderSetting.pageSpread || 'none';
@@ -398,7 +400,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         this.spreadMode.set(spreadVal);
         this.scrollLayout.set(scrollLayoutVal);
         this.canPrint = myself.permissions.canDownload || myself.permissions.admin;
-        this.page.set(pdfMeta.pdfProgress?.page || 1);
+        this.initialPage = pdfMeta.pdfProgress?.page || 1;
+        this.page.set(this.initialPage);
         this.zoom.set(this.normalizeZoom(zoomVal));
         this.bookData = bookData;
         this.isInitialScrollDone.set(false);
@@ -557,7 +560,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         takeUntilDestroyed(this.destroyRef),
         take(1)
       ).subscribe(() => {
-        const currentPage = this.page();
+        const currentPage = this.initialPage;
         if (currentPage > 1) {
           this.embedPdfBook.scrollToPage(currentPage, 'instant');
 
@@ -1016,9 +1019,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         break;
       case 'documentOpened':
         // Scroll to the page the user was on in book mode and re-enable progress saving
-        if (this.embedPdfIframe?.contentWindow && this.page() > 1) {
+        if (this.embedPdfIframe?.contentWindow && this.initialPage > 1) {
           this.embedPdfIframe.contentWindow.postMessage(
-            { type: 'scrollToPage', pageNumber: this.page() },
+            { type: 'scrollToPage', pageNumber: this.initialPage },
             location.origin
           );
         }
@@ -1115,7 +1118,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   // --- Common viewer methods ---
 
   onPageChange(page: number | undefined): void {
-    if (page == null || page === this.page()) {
+    if (page == null || page === this.page() || !this.isInitialScrollDone()) {
       return;
     }
     this.page.set(page);
