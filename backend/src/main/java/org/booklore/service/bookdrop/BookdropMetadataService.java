@@ -50,7 +50,7 @@ public class BookdropMetadataService {
         BookdropFileEntity entity = getOrThrow(bookdropFileId);
         BookMetadata initial = extractInitialMetadata(entity);
         if (initial == null) {
-            log.warn("Metadata extraction returned null for file: {}. Using filename as fallback.", entity.getFileName());
+            log.warn("Metadata extraction returned null for file: {}. Using empty metadata as fallback.", entity.getFileName());
             initial = BookMetadata.builder().build();
         }
         if (initial.getTitle() == null || initial.getTitle().isBlank()) {
