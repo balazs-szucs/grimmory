@@ -6,7 +6,7 @@
 :{$GRIMMORY_HTTP_PORT} {
     route {
         root * /srv/frontend
-        encode zstd gzip
+        encode
 
         @backend path /api /api/* /ws /ws/* /komga /komga/*
         reverse_proxy @backend 127.0.0.1:{$GRIMMORY_BACKEND_PORT}
