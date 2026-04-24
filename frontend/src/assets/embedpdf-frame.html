@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; }
@@ -14,6 +14,17 @@
 <div id="viewer"></div>
 <script>
   (function () {
+    const isSmallViewport = window.innerWidth <= 768;
+    const currentDpr = window.devicePixelRatio || 1;
+    const targetDpr = isSmallViewport ? Math.min(currentDpr, 2) : Math.max(currentDpr, 2.5);
+
+    if (currentDpr !== targetDpr) {
+      Object.defineProperty(window, 'devicePixelRatio', {
+        get: () => targetDpr,
+        configurable: true,
+      });
+    }
+
     const OrigWorker = window.Worker;
     window.Worker = function PatchedWorker(url, opts) {
       console.log('[Shim] Worker created, url type=' + typeof url +
@@ -269,6 +280,15 @@
         border: 1px solid #d0d0d0 !important;
       }
 
+      /* Center PDF content vertically and horizontally when smaller than viewport */
+      [class*="bg-bg-app"] {
+        display: flex !important;
+        flex-direction: column !important;
+      }
+      [class*="bg-bg-app"] > * {
+        margin: auto !important;
+      }
+
       /* Force high-quality image rendering for PDF tiles */
       img {
         image-rendering: high-quality;
@@ -307,6 +327,8 @@
         viewer = null;
       }
 
+      const isSmallViewport = window.innerWidth <= 768;
+
       viewer = EmbedPDF.init({
         type: 'container',
         target: target,
@@ -325,8 +347,10 @@
         zoom: {
           defaultZoomLevel: 'fit-page',
         },
-        render: { defaultImageQuality: 2 },
-        tiling: { tileSize: 1024, overlapPx: 2, extraRings: 1 },
+        render: { defaultImageQuality: isSmallViewport ? 0.85 : 0.92 },
+        tiling: isSmallViewport
+          ? { tileSize: 512, overlapPx: 2, extraRings: 0 }
+          : { tileSize: 1024, overlapPx: 2, extraRings: 1 },
       });
 
       injectGrimmoryStyles(target);
@@ -447,6 +471,34 @@
     if (msg.type === 'prevPage') {
       const scrollPlugin = registry?.getPlugin('scroll')?.provides();
       scrollPlugin?.scrollToPreviousPage('smooth');
+    }
+
+    if (msg.type === 'setScrollLayout') {
+      const scrollPlugin = registry?.getPlugin('scroll')?.provides();
+      if (scrollPlugin) {
+        const page = scrollPlugin.getCurrentPage();
+        if (typeof scrollPlugin.setScrollStrategy === 'function') {
+          scrollPlugin.setScrollStrategy(msg.layout);
+        } else if (typeof scrollPlugin.setScrollMode === 'function') {
+          scrollPlugin.setScrollMode(msg.layout);
+        } else if (typeof scrollPlugin.setLayoutMode === 'function') {
+          scrollPlugin.setLayoutMode(msg.layout);
+        }
+        setTimeout(() => {
+          scrollPlugin.scrollToPage({ pageNumber: page, behavior: 'instant' });
+        }, 80);
+      }
+    }
+
+    if (msg.type === 'setPanMode') {
+      const panPlugin = registry?.getPlugin('pan')?.provides();
+      if (panPlugin) {
+        if (msg.enable) {
+          panPlugin.enablePan();
+        } else {
+          panPlugin.disablePan();
+        }
+      }
     }
   });
 

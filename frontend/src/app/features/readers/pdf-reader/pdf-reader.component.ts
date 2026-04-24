@@ -1,8 +1,8 @@
-import { Component, ElementRef, inject, Injector, NgZone, OnDestroy, OnInit, afterNextRender, viewChild, DestroyRef, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, Injector, NgZone, OnDestroy, OnInit, afterNextRender, viewChild, DestroyRef, signal, computed } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PageTitleService } from "../../../shared/service/page-title.service";
 import { BookService } from '../../book/service/book.service';
-import { forkJoin, from, Observable, of, Subject, Subscription } from "rxjs";
+import { forkJoin, from, Observable, of, Subject } from "rxjs";
 import { debounceTime, filter, map, switchMap, take } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BookSetting } from '../../book/model/book.model';
@@ -12,7 +12,7 @@ import { API_CONFIG } from '../../../core/config/api-config';
 import { PdfAnnotationService } from '../../../shared/service/pdf-annotation.service';
 import { ReaderIconComponent } from '../../readers/ebook-reader/shared/icon.component';
 import { BookMark } from '../../../shared/service/book-mark.service';
-import { EmbedPdfBookService, PdfOutlineItem } from './services/embedpdf-book.service';
+import { EmbedPdfBookService, PdfOutlineItem, PdfScrollLayout } from './services/embedpdf-book.service';
 import type { AnnotationTransferItem } from '@embedpdf/snippet';
 import { PdfBookmarkService } from './services/pdf-bookmark.service';
 import { PdfSidebarComponent, PdfAnnotationListItem } from './components/pdf-sidebar.component';
@@ -43,6 +43,7 @@ type EmbedPdfMessage =
   providers: [EmbedPdfBookService, PdfBookmarkService],
   templateUrl: './pdf-reader.component.html',
   styleUrl: './pdf-reader.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PdfReaderComponent implements OnInit, OnDestroy {
 
@@ -67,6 +68,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   readonly isZoomMenuOpen = signal(false);
   readonly activeAnnotationTool = signal<string | null>(null);
   readonly spreadMode = signal<'none' | 'odd' | 'even'>('none');
+  readonly scrollLayout = signal<PdfScrollLayout>('vertical');
   readonly goToPageInput = signal<number | null>(null);
   readonly outline = signal<PdfOutlineItem[]>([]);
   readonly pdfBookmarks = signal<BookMark[]>([]);
@@ -157,11 +159,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
   private dbAnnotationIds = new Set<string>();
 
   private altBookType?: string;
-  private appSettingsSubscription!: Subscription;
   private annotationSaveSubject = new Subject<void>();
   private annotationCacheSubject = new Subject<void>();
-  private annotationSaveSubscription!: Subscription;
-  private annotationCacheSubscription!: Subscription;
   private annotationsLoaded = false;
   private isImportingAnnotations = false;
   private lastAnnotationData: string | null = null;
@@ -318,8 +317,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       };
     });
 
-    this.annotationSaveSubscription = this.annotationSaveSubject
-      .pipe(debounceTime(1500))
+    this.annotationSaveSubject
+      .pipe(
+        debounceTime(1500),
+        takeUntilDestroyed(this.destroyRef)
+      )
       .subscribe(() => this.persistAnnotations());
 
     // Debounced search
@@ -335,8 +337,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
     // Keep lastAnnotationData warm so persistAnnotationsSync() always has fresh data
 
-    this.annotationCacheSubscription = this.annotationCacheSubject
-      .pipe(debounceTime(500))
+    this.annotationCacheSubject
+      .pipe(
+        debounceTime(500),
+        takeUntilDestroyed(this.destroyRef)
+      )
       .subscribe(() => this.cacheAnnotationData());
 
     this.route.paramMap.pipe(
@@ -378,6 +383,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         const globalOrIndividual = myself.userSettings.perBookSetting.pdf;
         let zoomVal: string;
         let spreadVal: 'none' | 'even' | 'odd';
+        let scrollLayoutVal: PdfScrollLayout = 'vertical';
         if (globalOrIndividual === 'Global') {
           zoomVal = myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
           spreadVal = (myself.userSettings.pdfReaderSetting.pageSpread || 'none') === 'off' ? 'none' : (myself.userSettings.pdfReaderSetting.pageSpread as 'none' | 'even' | 'odd') || 'none';
@@ -385,10 +391,12 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
           zoomVal = pdfPrefs.pdfSettings?.zoom || myself.userSettings.pdfReaderSetting.pageZoom || 'page-fit';
           const rawSpread = pdfPrefs.pdfSettings?.spread || myself.userSettings.pdfReaderSetting.pageSpread || 'none';
           spreadVal = rawSpread === 'off' ? 'none' : rawSpread as 'none' | 'even' | 'odd';
+          scrollLayoutVal = pdfPrefs.pdfSettings?.scrollLayout === 'horizontal' ? 'horizontal' : 'vertical';
           this.isDarkTheme.set(pdfPrefs.pdfSettings?.isDarkTheme ?? true);
         }
         this.spread = spreadVal;
         this.spreadMode.set(spreadVal);
+        this.scrollLayout.set(scrollLayoutVal);
         this.canPrint = myself.permissions.canDownload || myself.permissions.admin;
         this.page.set(pdfMeta.pdfProgress?.page || 1);
         this.zoom.set(this.normalizeZoom(zoomVal));
@@ -450,6 +458,8 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         return;
       }
 
+      this.suppressProgressSave = true; // Added this
+
       await this.embedPdfBook.init(
         targetEl,
         pdfUrl,
@@ -457,6 +467,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
         this.t.getActiveLang()
       );
       this.bookViewerInitialized = true;
+      this.embedPdfBook.setScrollLayout(this.scrollLayout());
 
       if (this.isPanActive()) {
         this.embedPdfBook.setPanMode(true);
@@ -538,6 +549,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
           this.embedPdfBook.setSpreadMode(this.spread);
           this.spreadMode.set(this.spread);
         }
+        this.embedPdfBook.setScrollLayout(this.scrollLayout());
       });
 
       // Use onLayoutReady for initial page scroll (fires when document layout is calculated)
@@ -556,17 +568,24 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
             filter(ev => ev.pageNumber >= currentPage - 1),
             take(1)
           ).subscribe(() => {
-            this.ngZone.run(() => this.isInitialScrollDone.set(true));
+            this.ngZone.run(() => {
+              this.isInitialScrollDone.set(true);
+              this.suppressProgressSave = false;
+            });
           });
           // Fallback in case pageChange$ doesn't fire (e.g. single-page PDF)
           setTimeout(() => {
             if (!this.isInitialScrollDone()) {
               scrollSub.unsubscribe();
-              this.ngZone.run(() => this.isInitialScrollDone.set(true));
+              this.ngZone.run(() => {
+                this.isInitialScrollDone.set(true);
+                this.suppressProgressSave = false;
+              });
             }
           }, 800);
         } else {
           this.isInitialScrollDone.set(true);
+          this.suppressProgressSave = false;
         }
 
         // Load outline, bookmarks, and annotations after layout is ready and settled
@@ -577,6 +596,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
 
     } catch (err) {
       console.error('[BookViewer] Init failed:', err);
+      this.suppressProgressSave = false;
       this.messageService.add({
         severity: 'error',
         summary: this.t.translate('common.error'),
@@ -723,6 +743,9 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     if (this.bookViewerInitialized) {
       this.embedPdfBook.setPanMode(active);
     }
+    if (this.viewerMode() === 'document' && this.embedPdfIframe?.contentWindow) {
+      this.embedPdfIframe.contentWindow.postMessage({ type: 'setPanMode', enable: active }, location.origin);
+    }
   }
 
 
@@ -803,6 +826,17 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     this.spreadMode.set(next);
     this.spread = next;
     this.embedPdfBook.setSpreadMode(next);
+    this.updateViewerSetting();
+  }
+
+  cycleScrollLayout(): void {
+    const nextLayout: PdfScrollLayout = this.scrollLayout() === 'vertical' ? 'horizontal' : 'vertical';
+    this.scrollLayout.set(nextLayout);
+    if (this.viewerMode() === 'book') {
+      this.embedPdfBook.setScrollLayout(nextLayout);
+    } else if (this.embedPdfIframe?.contentWindow) {
+      this.embedPdfIframe.contentWindow.postMessage({ type: 'setScrollLayout', layout: nextLayout }, location.origin);
+    }
     this.updateViewerSetting();
   }
 
@@ -1111,6 +1145,7 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       pdfSettings: {
         spread: this.spread,
         zoom: this.zoom(),
+        scrollLayout: this.scrollLayout(),
         isDarkTheme: this.isDarkTheme(),
       }
     }
@@ -1141,16 +1176,11 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
       this.readingSessionService.endSession(currentPage.toString(), percentage);
     }
 
-    this.annotationSaveSubscription?.unsubscribe();
-    this.annotationCacheSubscription?.unsubscribe();
     // Cannot await async export in ngOnDestroy — use cached annotation data
     this.persistAnnotationsSync();
     this.destroyBookViewer();
     this.destroyDocViewerIframe();
 
-    if (this.appSettingsSubscription) {
-      this.appSettingsSubscription.unsubscribe();
-    }
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     this.mouseMoveCleanup?.();
     this.documentClickCleanup?.();

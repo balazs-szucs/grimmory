@@ -25,6 +25,8 @@ export interface PdfOutlineItem {
   children: PdfOutlineItem[];
 }
 
+export type PdfScrollLayout = 'vertical' | 'horizontal';
+
 @Injectable()
 export class EmbedPdfBookService {
   private zone = inject(NgZone);
@@ -40,6 +42,7 @@ export class EmbedPdfBookService {
   private rotate: RotateCapability | null = null;
   private pan: PanCapability | null = null;
   private i18n: I18nCapability | null = null;
+  private scrollLayout: PdfScrollLayout = 'vertical';
 
   private currentDocumentId: string | null = null;
 
@@ -140,6 +143,7 @@ export class EmbedPdfBookService {
 
     const scrollPlugin = this.registry.getPlugin('scroll');
     this.scroll = scrollPlugin?.provides?.() as ScrollCapability ?? null;
+    this.applyScrollLayout(this.scrollLayout);
 
     const zoomPlugin = this.registry.getPlugin('zoom');
     this.zoom = zoomPlugin?.provides?.() as ZoomCapability ?? null;
@@ -220,6 +224,18 @@ export class EmbedPdfBookService {
 
   setLocale(localeCode: string): void {
     this.applyLocale(localeCode || 'en');
+  }
+
+  setScrollLayout(layout: PdfScrollLayout): void {
+    const page = this.currentPage;
+    this.scrollLayout = layout;
+    this.applyScrollLayout(layout);
+    // Use a short delay to allow the layout engine to recalculate before restoring position
+    setTimeout(() => this.scrollToPage(page, 'instant'), 80);
+  }
+
+  getScrollLayout(): PdfScrollLayout {
+    return this.readScrollLayoutFromPlugin() ?? this.scrollLayout;
   }
 
   scrollToPage(pageNumber: number, behavior: 'instant' | 'smooth' = 'smooth'): void {
@@ -414,6 +430,49 @@ export class EmbedPdfBookService {
     }
 
     this.i18n.setLocale('en');
+  }
+
+  private applyScrollLayout(layout: PdfScrollLayout): void {
+    if (!this.scroll) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scrollLayoutCap = this.scroll as any;
+
+    if (typeof scrollLayoutCap.setScrollStrategy === 'function') {
+      scrollLayoutCap.setScrollStrategy(layout);
+      return;
+    }
+
+    if (typeof scrollLayoutCap.setScrollMode === 'function') {
+      scrollLayoutCap.setScrollMode(layout);
+      return;
+    }
+
+    if (typeof scrollLayoutCap.setLayoutMode === 'function') {
+      scrollLayoutCap.setLayoutMode(layout);
+    }
+  }
+
+  private readScrollLayoutFromPlugin(): PdfScrollLayout | null {
+    if (!this.scroll) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scrollLayoutCap = this.scroll as any;
+
+    if (typeof scrollLayoutCap.getScrollStrategy === 'function') {
+      const strategy = scrollLayoutCap.getScrollStrategy();
+      return strategy === 'horizontal' ? 'horizontal' : 'vertical';
+    }
+
+    if (typeof scrollLayoutCap.getScrollMode === 'function') {
+      const mode = scrollLayoutCap.getScrollMode();
+      return mode === 'horizontal' ? 'horizontal' : 'vertical';
+    }
+
+    if (typeof scrollLayoutCap.getLayoutMode === 'function') {
+      const mode = scrollLayoutCap.getLayoutMode();
+      return mode === 'horizontal' ? 'horizontal' : 'vertical';
+    }
+
+    return null;
   }
 
   private convertBookmarks(items: unknown[]): PdfOutlineItem[] {
@@ -642,6 +701,15 @@ export class EmbedPdfBookService {
       style.setAttribute('data-grimmory-book', '');
       style.textContent = `
         /* ── Grimmory book-mode overrides ── */
+
+        /* Center PDF content vertically and horizontally when smaller than viewport */
+        [class*="bg-bg-app"] {
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        [class*="bg-bg-app"] > * {
+          margin: auto !important;
+        }
 
         /* Force high-quality image rendering for PDF tiles */
         img {
