@@ -38,6 +38,21 @@ RUN set -eux; \
     jar_path="$(find build/libs -maxdepth 1 -name '*.jar' ! -name '*plain.jar' | head -n 1)"; \
     cp "$jar_path" /workspace/backend/app.jar
 
+FROM eclipse-temurin:25-jre-alpine AS backend-aot
+
+RUN apk add --no-cache mariadb mariadb-client libstdc++ libgcc libarchive && \
+    mkdir -p /bookdrop
+
+RUN ln -s /usr/lib/libarchive.so.13 /usr/lib/libarchive.so
+
+COPY packaging/docker/grimmory.jvm.args /app/grimmory.jvm.args
+COPY packaging/docker/train-leyden-cache.sh /usr/local/bin/train-leyden-cache.sh
+RUN chmod +x /usr/local/bin/train-leyden-cache.sh
+
+COPY --from=backend-build /workspace/backend/app.jar /app/app.jar
+
+RUN /usr/local/bin/train-leyden-cache.sh
+
 FROM mwader/static-ffmpeg:8.1 AS ffprobe-layer
 
 FROM scratch AS kepubify-layer-amd64
@@ -64,24 +79,6 @@ FROM kepubify-layer-${TARGETARCH} AS kepubify-layer
 
 FROM eclipse-temurin:25-jre-alpine
 
-ENV JAVA_TOOL_OPTIONS="-XX:+UseShenandoahGC \
-    -XX:ShenandoahGCHeuristics=compact \
-    -XX:+UseCompactObjectHeaders \
-    -XX:MaxRAMPercentage=60.0 \
-    -XX:InitialRAMPercentage=8.0 \
-    -XX:+ExitOnOutOfMemoryError \
-    -XX:+HeapDumpOnOutOfMemoryError \
-    -XX:HeapDumpPath=/tmp/heapdump.hprof \
-    -XX:MaxMetaspaceSize=256m \
-    -XX:ReservedCodeCacheSize=48m \
-    -Xss512k \
-    -XX:CICompilerCount=2 \
-    -XX:+UnlockExperimentalVMOptions \
-    -XX:+UseStringDeduplication \
-    -XX:ShenandoahUncommitDelay=5000 \
-    -XX:ShenandoahGuaranteedGCInterval=30000 \
-    -XX:MaxDirectMemorySize=256m"
-
 RUN apk add --no-cache su-exec libstdc++ libgcc libarchive && \
     mkdir -p /bookdrop
 
@@ -96,7 +93,9 @@ COPY --from=ffprobe-layer /ffprobe /usr/local/bin/ffprobe
 COPY --from=kepubify-layer /kepubify /usr/local/bin/kepubify
 COPY --from=caddy-layer /usr/bin/caddy /usr/bin/caddy
 
+COPY packaging/docker/grimmory.jvm.args /app/grimmory.jvm.args
 COPY --from=backend-build /workspace/backend/app.jar /app/app.jar
+COPY --from=backend-aot /app/grimmory.aot /app/grimmory.aot
 COPY --from=frontend-build /workspace/frontend/dist/grimmory/browser /srv/frontend
 
 RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
@@ -121,4 +120,4 @@ ARG BOOKLORE_PORT=6060
 EXPOSE ${BOOKLORE_PORT}
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["java", "--enable-native-access=ALL-UNNAMED", "--enable-preview", "-jar", "/app/app.jar"]
+CMD ["java", "@/app/grimmory.jvm.args", "-XX:AOTMode=auto", "-XX:AOTCache=/app/grimmory.aot", "-jar", "/app/app.jar"]
