@@ -46,6 +46,18 @@ public class SidecarService {
         return sidecarReader.readSidecarMetadata(bookPath);
     }
 
+    public long getLastModified(Long bookId) {
+        BookEntity book = bookRepository.findByIdWithBookFiles(bookId)
+                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+
+        Path bookPath = book.getFullFilePath();
+        if (bookPath == null) {
+            return 0L;
+        }
+
+        return sidecarReader.getSidecarLastModified(bookPath);
+    }
+
     public SidecarSyncStatus getSyncStatus(Long bookId) {
         BookEntity book = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));

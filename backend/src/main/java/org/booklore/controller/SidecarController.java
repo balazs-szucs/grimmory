@@ -35,20 +35,21 @@ public class SidecarController {
     @CheckBookAccess(bookIdParam = "bookId")
     @GetMapping("/books/{bookId}/sidecar")
     public ResponseEntity<SidecarMetadata> getSidecarContent(@Parameter(description = "Book ID") @PathVariable Long bookId, WebRequest request) {
-        Optional<SidecarMetadata> sidecar = sidecarService.getSidecarContent(bookId);
-        if (sidecar.isEmpty()) {
+        long lastModified = sidecarService.getLastModified(bookId);
+        if (lastModified == 0L) {
             return ResponseEntity.notFound().build();
         }
 
-        SidecarMetadata metadata = sidecar.get();
-        String etag = Integer.toHexString(metadata.hashCode());
+        String etag = Long.toHexString(lastModified);
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
-        return ResponseEntity.ok()
-                .eTag(etag)
-                .body(metadata);
+        Optional<SidecarMetadata> sidecar = sidecarService.getSidecarContent(bookId);
+        return sidecar.map(metadata -> ResponseEntity.ok()
+                        .eTag(etag)
+                        .body(metadata))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "Get sidecar sync status", description = "Get the synchronization status between database and sidecar file")

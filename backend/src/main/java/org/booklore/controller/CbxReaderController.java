@@ -34,13 +34,13 @@ public class CbxReaderController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
             WebRequest request) {
-        List<Integer> pages = cbxReaderService.getAvailablePages(bookId, bookType);
         String etag = Long.toHexString(cbxReaderService.getLastModified(bookId, bookType));
 
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
+        List<Integer> pages = cbxReaderService.getAvailablePages(bookId, bookType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
                 .eTag(etag)
@@ -55,13 +55,13 @@ public class CbxReaderController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
             WebRequest request) {
-        List<CbxPageInfo> info = cbxReaderService.getPageInfo(bookId, bookType);
         String etag = Long.toHexString(cbxReaderService.getLastModified(bookId, bookType));
 
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
+        List<CbxPageInfo> info = cbxReaderService.getPageInfo(bookId, bookType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
                 .eTag(etag)
@@ -76,13 +76,13 @@ public class CbxReaderController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
             WebRequest request) {
-        List<CbxPageDimension> dimensions = cbxReaderService.getPageDimensions(bookId, bookType);
         String etag = Long.toHexString(cbxReaderService.getLastModified(bookId, bookType));
 
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
+        List<CbxPageDimension> dimensions = cbxReaderService.getPageDimensions(bookId, bookType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
                 .eTag(etag)

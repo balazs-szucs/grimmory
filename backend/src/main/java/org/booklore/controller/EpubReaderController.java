@@ -42,13 +42,13 @@ public class EpubReaderController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Optional book type for alternative format (e.g., EPUB)") @RequestParam(required = false) String bookType,
             WebRequest request) {
-        EpubBookInfo info = epubReaderService.getBookInfo(bookId, bookType);
         String etag = Long.toHexString(epubReaderService.getLastModified(bookId, bookType));
 
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
+        EpubBookInfo info = epubReaderService.getBookInfo(bookId, bookType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
                 .eTag(etag)

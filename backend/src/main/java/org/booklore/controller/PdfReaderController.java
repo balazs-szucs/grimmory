@@ -29,10 +29,21 @@ public class PdfReaderController {
     @ApiResponse(responseCode = "200", description = "Page numbers returned successfully")
     @GetMapping("/{bookId}/pages")
     @CheckBookAccess(bookIdParam = "bookId")
-    public List<Integer> listPages(
+    public ResponseEntity<List<Integer>> listPages(
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
-            @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType) {
-        return pdfReaderService.getAvailablePages(bookId, bookType);
+            @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
+            WebRequest request) {
+        String etag = Long.toHexString(pdfReaderService.getLastModified(bookId, bookType));
+
+        if (request.checkNotModified(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
+
+        List<Integer> pages = pdfReaderService.getAvailablePages(bookId, bookType);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
+                .eTag(etag)
+                .body(pages);
     }
 
     @Operation(summary = "Get book info for a PDF book", description = "Retrieve book information including page count and hierarchical outline/table of contents.")
@@ -43,13 +54,13 @@ public class PdfReaderController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
             WebRequest request) {
-        PdfBookInfo info = pdfReaderService.getBookInfo(bookId, bookType);
         String etag = Long.toHexString(pdfReaderService.getLastModified(bookId, bookType));
 
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
+        PdfBookInfo info = pdfReaderService.getBookInfo(bookId, bookType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePrivate().mustRevalidate())
                 .eTag(etag)

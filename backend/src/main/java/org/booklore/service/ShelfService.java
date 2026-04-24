@@ -15,7 +15,6 @@ import org.booklore.model.enums.ShelfType;
 import org.booklore.repository.BookRepository;
 import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserRepository;
-import lombok.AllArgsConstructor;
 import org.booklore.model.enums.AuditAction;
 import org.booklore.service.audit.AuditService;
 import org.springframework.cache.annotation.CacheEvict;

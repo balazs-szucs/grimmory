@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.booklore.model.dto.ReleaseNote;
 import org.booklore.model.dto.VersionInfo;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -31,6 +32,7 @@ public class VersionService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
 
+    @Cacheable("versionInfo")
     public VersionInfo getVersionInfo() {
         String latest = "unknown";
         try {
@@ -41,6 +43,7 @@ public class VersionService {
         return new VersionInfo(appVersion, latest);
     }
 
+    @Cacheable("changelog")
     public List<ReleaseNote> getChangelogSinceCurrentVersion() {
         return fetchReleaseNotesSince(appVersion);
     }

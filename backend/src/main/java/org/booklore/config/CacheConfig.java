@@ -26,7 +26,9 @@ public class CacheConfig {
                 "author-by-name",
                 "author-by-id",
                 "authors-by-book",
-                "recommendations"
+                "recommendations",
+                "versionInfo",
+                "changelog"
         );
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(Duration.ofHours(24))
