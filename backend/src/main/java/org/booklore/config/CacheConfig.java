@@ -18,9 +18,14 @@ public class CacheConfig {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(
                 "publicSettings",
                 "appSettings",
-                "libraries",
-                "shelves",
-                "authors",
+                "library-by-id",
+                "libraries-by-user",
+                "shelves-by-user",
+                "shelf-by-id",
+                "authors-by-user",
+                "author-by-name",
+                "author-by-id",
+                "authors-by-book",
                 "recommendations"
         );
         cacheManager.setCaffeine(Caffeine.newBuilder()

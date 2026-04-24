@@ -14,9 +14,11 @@ import lombok.AllArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.WebRequest;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -36,11 +38,15 @@ public class BookMediaController {
     @ApiResponse(responseCode = "200", description = "Book thumbnail returned successfully")
     @GetMapping("/book/{bookId}/thumbnail")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> getBookThumbnail(@Parameter(description = "ID of the book") @PathVariable long bookId) {
+    public ResponseEntity<Resource> getBookThumbnail(@Parameter(description = "ID of the book") @PathVariable long bookId, WebRequest request) {
         String hash = bookService.getBookCoverHash(bookId);
+        String etag = hash != null ? hash : String.valueOf(bookId);
+        if (request.checkNotModified(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
-                .eTag(hash != null ? hash : String.valueOf(bookId))
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate())
+                .eTag(etag)
                 .body(bookService.getBookThumbnail(bookId));
     }
 
@@ -48,11 +54,15 @@ public class BookMediaController {
     @ApiResponse(responseCode = "200", description = "Book cover returned successfully")
     @GetMapping("/book/{bookId}/cover")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> getBookCover(@Parameter(description = "ID of the book") @PathVariable long bookId) {
+    public ResponseEntity<Resource> getBookCover(@Parameter(description = "ID of the book") @PathVariable long bookId, WebRequest request) {
         String hash = bookService.getBookCoverHash(bookId);
+        String etag = hash != null ? hash : String.valueOf(bookId);
+        if (request.checkNotModified(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
-                .eTag(hash != null ? hash : String.valueOf(bookId))
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate())
+                .eTag(etag)
                 .body(bookService.getBookCover(bookId));
     }
 
@@ -60,11 +70,15 @@ public class BookMediaController {
     @ApiResponse(responseCode = "200", description = "Audiobook thumbnail returned successfully")
     @GetMapping("/book/{bookId}/audiobook-thumbnail")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> getAudiobookThumbnail(@Parameter(description = "ID of the book") @PathVariable long bookId) {
+    public ResponseEntity<Resource> getAudiobookThumbnail(@Parameter(description = "ID of the book") @PathVariable long bookId, WebRequest request) {
         String hash = bookService.getAudiobookCoverHash(bookId);
+        String etag = hash != null ? hash : String.valueOf(bookId);
+        if (request.checkNotModified(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
-                .eTag(hash != null ? hash : String.valueOf(bookId))
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate())
+                .eTag(etag)
                 .body(bookService.getAudiobookThumbnail(bookId));
     }
 
@@ -72,11 +86,15 @@ public class BookMediaController {
     @ApiResponse(responseCode = "200", description = "Audiobook cover returned successfully")
     @GetMapping("/book/{bookId}/audiobook-cover")
     @CheckBookAccess(bookIdParam = "bookId")
-    public ResponseEntity<Resource> getAudiobookCover(@Parameter(description = "ID of the book") @PathVariable long bookId) {
+    public ResponseEntity<Resource> getAudiobookCover(@Parameter(description = "ID of the book") @PathVariable long bookId, WebRequest request) {
         String hash = bookService.getAudiobookCoverHash(bookId);
+        String etag = hash != null ? hash : String.valueOf(bookId);
+        if (request.checkNotModified(etag)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
+        }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
-                .eTag(hash != null ? hash : String.valueOf(bookId))
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate())
+                .eTag(etag)
                 .body(bookService.getAudiobookCover(bookId));
     }
 
@@ -102,7 +120,7 @@ public class BookMediaController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate())
                 .contentType(MediaType.IMAGE_JPEG)
                 .body(photo);
     }
@@ -116,7 +134,7 @@ public class BookMediaController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic())
+                .cacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate())
                 .contentType(MediaType.IMAGE_JPEG)
                 .body(thumbnail);
     }
@@ -130,7 +148,7 @@ public class BookMediaController {
         return (file != null)
                 ? ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-                .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())
+                .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePrivate())
                 .contentType(MediaType.IMAGE_JPEG)
                 .body(file)
                 : ResponseEntity.noContent().build();

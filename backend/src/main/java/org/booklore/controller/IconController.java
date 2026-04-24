@@ -11,10 +11,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.Map;
 
 @Tag(name = "Icons", description = "Endpoints for managing SVG icons")
@@ -49,8 +52,8 @@ public class IconController {
     public ResponseEntity<String> getSvgIconContent(@Parameter(description = "SVG icon name") @PathVariable String svgName) {
         String svgContent = iconService.getSvgIcon(svgName);
         return ResponseEntity.ok()
-                .header("Content-Type", "image/svg+xml")
-                .header("Cache-Control", "public, max-age=86400")
+                .contentType(MediaType.valueOf("image/svg+xml"))
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate())
                 .body(svgContent);
     }
 
@@ -79,7 +82,7 @@ public class IconController {
     public ResponseEntity<Map<String, String>> getAllIconsContent() {
         Map<String, String> iconsMap = iconService.getAllIconsContent();
         return ResponseEntity.ok()
-                .header("Cache-Control", "public, max-age=3600")
+                .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePrivate())
                 .body(iconsMap);
     }
 }

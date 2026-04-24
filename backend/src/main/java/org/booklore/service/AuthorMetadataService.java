@@ -59,7 +59,7 @@ public class AuthorMetadataService {
     private final AuthenticationService authenticationService;
     private final AppSettingService appSettingService;
 
-    @Cacheable(value = "authors", key = "@authenticationService.getAuthenticatedUser().id")
+    @Cacheable(value = "authors-by-user", key = "@authenticationService.getAuthenticatedUser().id")
     public List<AuthorSummary> getAllAuthors() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         List<Object[]> results;
@@ -102,7 +102,12 @@ public class AuthorMetadataService {
                 .toList();
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", key = "#authorId"),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public AuthorDetails matchAuthor(Long authorId, AuthorMatchRequest request) {
         AuthorEntity author = authorRepository.findById(authorId)
@@ -131,7 +136,12 @@ public class AuthorMetadataService {
         return toAuthorDetails(author);
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", key = "#authorId"),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public AuthorDetails quickMatchAuthor(Long authorId, String region) {
         AuthorEntity author = authorRepository.findById(authorId)
@@ -182,7 +192,12 @@ public class AuthorMetadataService {
                 .filter(java.util.Objects::nonNull);
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", allEntries = true),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public void unmatchAuthors(List<Long> authorIds) {
         for (Long authorId : authorIds) {
@@ -199,7 +214,12 @@ public class AuthorMetadataService {
         }
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", allEntries = true),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public void deleteAuthors(List<Long> authorIds) {
         for (Long authorId : authorIds) {
@@ -246,7 +266,12 @@ public class AuthorMetadataService {
         }
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", key = "#authorId"),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public void uploadAuthorPhoto(Long authorId, MultipartFile file) {
         AuthorEntity author = authorRepository.findById(authorId)
@@ -266,7 +291,12 @@ public class AuthorMetadataService {
         }
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", key = "#authorId"),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public AuthorDetails updateAuthor(Long authorId, AuthorUpdateRequest request) {
         AuthorEntity author = authorRepository.findById(authorId)
@@ -308,7 +338,12 @@ public class AuthorMetadataService {
                 .take(50);
     }
 
-    @CacheEvict(value = "authors", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "authors-by-user", allEntries = true),
+            @CacheEvict(value = "author-by-name", allEntries = true),
+            @CacheEvict(value = "author-by-id", key = "#authorId"),
+            @CacheEvict(value = "authors-by-book", allEntries = true)
+    })
     @Transactional
     public void uploadAuthorPhotoFromUrl(Long authorId, String imageUrl) {
         AuthorEntity author = authorRepository.findById(authorId)
@@ -317,7 +352,7 @@ public class AuthorMetadataService {
         fileService.createAuthorThumbnailFromUrl(authorId, imageUrl);
     }
 
-    @Cacheable(value = "authors", key = "#name")
+    @Cacheable(value = "author-by-name", key = "#name")
     public AuthorDetails getAuthorByName(String name) {
         AuthorEntity author = authorRepository.findByNameIgnoreCase(name)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(name));
@@ -325,7 +360,7 @@ public class AuthorMetadataService {
         return toAuthorDetails(author);
     }
 
-    @Cacheable(value = "authors", key = "#authorId")
+    @Cacheable(value = "author-by-id", key = "#authorId")
     public AuthorDetails getAuthorDetails(Long authorId) {
         AuthorEntity author = authorRepository.findById(authorId)
                 .orElseThrow(() -> ApiError.AUTHOR_NOT_FOUND.createException(authorId));
