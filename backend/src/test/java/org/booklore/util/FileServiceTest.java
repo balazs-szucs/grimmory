@@ -214,7 +214,7 @@ class FileServiceTest {
             int largeWidth = 2000;
             int largeHeight = 3000;
             BufferedImage largeImage = createTestImage(largeWidth, largeHeight);
-            
+
             boolean result = fileService.saveCoverImages(largeImage, 5L);
 
             assertTrue(result);
@@ -248,9 +248,476 @@ class FileServiceTest {
 
             boolean result = fileService.saveCoverImages(wideImage, 101L);
 
-            assertTrue(result);
-            verify(mockVips).flattenCropResizeAndSave(any(byte[].class), any(Path.class),
-                    anyInt(), anyInt(), anyInt(), anyInt(), eq(1000), eq(1500));
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(
+                        new File(fileService.getCoverFile(101L)));
+
+                assertNotNull(savedCover);
+
+                // The image should be cropped to a more reasonable aspect ratio
+                double savedRatio = (double) savedCover.getWidth() / savedCover.getHeight();
+                assertTrue(savedRatio < 3.0,
+                        "Cropped image should have reasonable aspect ratio, was: " + savedRatio);
+            }
+
+            @Test
+            @DisplayName("normal aspect ratio image is not cropped")
+            void normalAspectRatioImage_isNotCropped() throws IOException {
+                // Create a normal book cover sized image (ratio ~1.5:1)
+                int width = 600;
+                int height = 900;  // ratio = 1.5:1
+
+                BufferedImage normalImage = createTestImage(width, height);
+                boolean result = fileService.saveCoverImages(normalImage, 102L);
+
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(
+                        new File(fileService.getCoverFile(102L)));
+
+                assertNotNull(savedCover);
+
+                // The image should maintain its original aspect ratio
+                double originalRatio = (double) height / width;
+                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
+                assertEquals(originalRatio, savedRatio, 0.01,
+                        "Normal aspect ratio image should not be cropped");
+            }
+
+            @Test
+            @DisplayName("cropping is disabled when settings are off")
+            void croppingDisabled_imageNotCropped() throws IOException {
+                // Reconfigure with cropping disabled
+                CoverCroppingSettings disabledSettings = CoverCroppingSettings.builder()
+                        .verticalCroppingEnabled(false)
+                        .horizontalCroppingEnabled(false)
+                        .aspectRatioThreshold(2.5)
+                        .smartCroppingEnabled(true).build();
+                AppSettings appSettings = AppSettings.builder()
+                        .coverCroppingSettings(disabledSettings)
+                        .build();
+                when(appSettingService.getAppSettings()).thenReturn(appSettings);
+
+                // Create an extremely tall image
+                int width = 400;
+                int height = 4000;  // ratio = 10:1
+
+                BufferedImage tallImage = createTestImage(width, height);
+                boolean result = fileService.saveCoverImages(tallImage, 103L);
+
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(
+                        new File(fileService.getCoverFile(103L)));
+
+                assertNotNull(savedCover);
+
+                // Since the image exceeds max dimensions, it will be scaled, but aspect ratio preserved
+                double originalRatio = (double) height / width;
+                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
+                assertEquals(originalRatio, savedRatio, 0.01,
+                        "Image should not be cropped when cropping is disabled");
+            }
+
+            @Test
+            @DisplayName("smart cropping enabled for tall image finds content start")
+            void smartCroppingEnabled_tallImage_cropsFromContent() throws IOException {
+                CoverCroppingSettings smartCropSettings = CoverCroppingSettings.builder()
+                        .verticalCroppingEnabled(true)
+                        .horizontalCroppingEnabled(true)
+                        .aspectRatioThreshold(2.5)
+                        .smartCroppingEnabled(true)
+                        .build();
+                AppSettings appSettings = AppSettings.builder()
+                        .coverCroppingSettings(smartCropSettings)
+                        .build();
+                when(appSettingService.getAppSettings()).thenReturn(appSettings);
+
+                int width = 500;
+                int height = 3000;  // ratio = 6:1
+                BufferedImage tallImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = tallImage.createGraphics();
+                g.setColor(Color.WHITE);
+                g.fillRect(0, 0, width, 200);
+                g.setColor(Color.BLUE);
+                g.fillRect(0, 200, width, height - 200);
+                g.dispose();
+
+                boolean result = fileService.saveCoverImages(tallImage, 104L);
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(104L)));
+                assertNotNull(savedCover);
+                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
+                assertTrue(savedRatio < 3.0, "Cropped image should have reasonable aspect ratio");
+            }
+
+            @Test
+            @DisplayName("smart cropping enabled for wide image finds content start")
+            void smartCroppingEnabled_wideImage_cropsFromContent() throws IOException {
+                CoverCroppingSettings smartCropSettings = CoverCroppingSettings.builder()
+                        .verticalCroppingEnabled(true)
+                        .horizontalCroppingEnabled(true)
+                        .aspectRatioThreshold(2.5)
+                        .smartCroppingEnabled(true)
+                        .build();
+                AppSettings appSettings = AppSettings.builder()
+                        .coverCroppingSettings(smartCropSettings)
+                        .build();
+                when(appSettingService.getAppSettings()).thenReturn(appSettings);
+
+                int width = 3000;
+                int height = 400;  // ratio = 7.5:1
+                BufferedImage wideImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = wideImage.createGraphics();
+                g.setColor(Color.WHITE);
+                g.fillRect(0, 0, 200, height);
+                g.setColor(Color.BLUE);
+                g.fillRect(200, 0, width - 200, height);
+                g.dispose();
+
+                boolean result = fileService.saveCoverImages(wideImage, 105L);
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(105L)));
+                assertNotNull(savedCover);
+                double savedRatio = (double) savedCover.getWidth() / savedCover.getHeight();
+                assertTrue(savedRatio < 3.0, "Cropped image should have reasonable aspect ratio");
+            }
+
+            @Test
+            @DisplayName("smart cropping with uniform color image uses top/left")
+            void smartCroppingEnabled_uniformColorImage_usesTopLeft() throws IOException {
+                CoverCroppingSettings smartCropSettings = CoverCroppingSettings.builder()
+                        .verticalCroppingEnabled(true)
+                        .horizontalCroppingEnabled(true)
+                        .aspectRatioThreshold(2.5)
+                        .smartCroppingEnabled(true)
+                        .build();
+                AppSettings appSettings = AppSettings.builder()
+                        .coverCroppingSettings(smartCropSettings)
+                        .build();
+                when(appSettingService.getAppSettings()).thenReturn(appSettings);
+
+                int width = 500;
+                int height = 3000;
+                BufferedImage uniformImage = createTestImage(width, height, Color.BLUE);
+
+                boolean result = fileService.saveCoverImages(uniformImage, 106L);
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(106L)));
+                assertNotNull(savedCover);
+                double savedRatio = (double) savedCover.getHeight() / savedCover.getWidth();
+                assertTrue(savedRatio < 3.0, "Cropped image should have reasonable aspect ratio");
+            }
+
+            @Test
+            @DisplayName("null cover cropping settings returns image unchanged")
+            void nullCoverCroppingSettings_returnsImageUnchanged() throws IOException {
+                AppSettings appSettings = AppSettings.builder()
+                        .coverCroppingSettings(null)
+                        .build();
+                when(appSettingService.getAppSettings()).thenReturn(appSettings);
+
+                int width = 500;
+                int height = 3000;  // Very tall image
+                BufferedImage tallImage = createTestImage(width, height);
+
+                boolean result = fileService.saveCoverImages(tallImage, 107L);
+                assertTrue(result);
+
+                BufferedImage savedCover = ImageIO.read(new File(fileService.getCoverFile(107L)));
+                assertNotNull(savedCover);
+                assertTrue(savedCover.getWidth() <= 1000);
+                assertTrue(savedCover.getHeight() <= 1500);
+            }
+        }
+
+        @Nested
+        @DisplayName("createThumbnailFromBytes")
+        class CreateThumbnailFromBytesTests {
+
+            @Test
+            void validImageBytes_succeeds() throws IOException {
+                BufferedImage image = createTestImage(300, 400);
+                byte[] imageBytes = imageToBytes(image);
+
+                assertDoesNotThrow(() ->
+                        fileService.createThumbnailFromBytes(15L, imageBytes));
+                assertTrue(Files.exists(Path.of(fileService.getCoverFile(15L))));
+            }
+
+            @Test
+            void invalidImageBytes_throwsException() {
+                byte[] invalidData = "not an image".getBytes();
+
+                assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromBytes(16L, invalidData));
+            }
+
+            @Test
+            void emptyImageBytes_throwsRuntimeException() {
+                byte[] emptyData = new byte[0];
+
+                RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromBytes(17L, emptyData));
+                assertEquals("Error reading files from path: Image data is null or empty", exception.getMessage());
+            }
+
+            @Test
+            void nullImageBytes_throwsRuntimeException() {
+                RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromBytes(18L, null));
+                assertEquals("Error reading files from path: Image data is null or empty", exception.getMessage());
+            }
+        }
+
+        @Nested
+        @DisplayName("createThumbnailFromFile")
+        class CreateThumbnailFromFileTests {
+
+            @Test
+            void validJpegFile_succeeds() throws IOException {
+                when(appSettingService.getAppSettings()).thenReturn(
+                        AppSettings.builder()
+                                .maxFileUploadSizeInMb(5)
+                                .build()
+                );
+
+                BufferedImage image = createTestImage(300, 400);
+                byte[] imageBytes = imageToBytes(image);
+                MockMultipartFile file = new MockMultipartFile(
+                        "file", "test.jpg", "image/jpeg", imageBytes);
+
+                assertDoesNotThrow(() ->
+                        fileService.createThumbnailFromFile(5L, file));
+                assertTrue(Files.exists(Path.of(fileService.getCoverFile(5L))));
+            }
+
+            @Test
+            void validPngFile_succeeds() throws IOException {
+                when(appSettingService.getAppSettings()).thenReturn(
+                        AppSettings.builder()
+                                .maxFileUploadSizeInMb(5)
+                                .build()
+                );
+
+                BufferedImage image = createTestImage(300, 400);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(image, "PNG", baos);
+                MockMultipartFile file = new MockMultipartFile(
+                        "file", "test.png", "image/png", baos.toByteArray());
+
+                assertDoesNotThrow(() ->
+                        fileService.createThumbnailFromFile(6L, file));
+            }
+
+            @Test
+            void emptyFile_throwsRuntimeException() {
+                MockMultipartFile emptyFile = new MockMultipartFile(
+                        "file", "empty.jpg", "image/jpeg", new byte[0]);
+
+                // validateCoverFile throws IllegalArgumentException, but it's caught and wrapped in RuntimeException via ApiError
+                RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromFile(7L, emptyFile));
+                assertTrue(exception.getMessage().contains("empty") ||
+                                exception.getCause() instanceof IllegalArgumentException,
+                        "Exception message should indicate file is empty or wrap IllegalArgumentException");
+            }
+
+            @Test
+            void invalidMimeType_throwsRuntimeException() {
+                MockMultipartFile gifFile = new MockMultipartFile(
+                        "file", "test.gif", "image/gif", "fake data".getBytes());
+
+                RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromFile(8L, gifFile));
+                assertTrue(exception.getMessage().contains("Only JPEG and PNG files are allowed") ||
+                                exception.getCause() instanceof IllegalArgumentException,
+                        "Exception message should indicate only JPEG and PNG are allowed or wrap IllegalArgumentException");
+            }
+
+            @Test
+            void fileTooLarge_throwsRuntimeException() {
+                when(appSettingService.getAppSettings()).thenReturn(
+                        AppSettings.builder()
+                                .maxFileUploadSizeInMb(5)
+                                .build()
+                );
+
+                byte[] largeData = new byte[6 * 1024 * 1024]; // 6MB
+                MockMultipartFile largeFile = new MockMultipartFile(
+                        "file", "large.jpg", "image/jpeg", largeData);
+
+                // validateCoverFile throws IllegalArgumentException, but it's caught and wrapped in RuntimeException via ApiError
+                RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromFile(9L, largeFile));
+                assertTrue(exception.getMessage().contains("5 MB") ||
+                                exception.getCause() instanceof IllegalArgumentException,
+                        "Exception message should indicate file size limit or wrap IllegalArgumentException");
+            }
+
+            @Test
+            void fileExactlyAtSizeLimit_succeeds() throws IOException {
+                when(appSettingService.getAppSettings()).thenReturn(
+                        AppSettings.builder()
+                                .maxFileUploadSizeInMb(5)
+                                .build()
+                );
+
+                BufferedImage image = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(image);
+                // Ensure it's under 5MB
+                assertTrue(imageBytes.length < 5 * 1024 * 1024);
+
+                MockMultipartFile file = new MockMultipartFile(
+                        "file", "valid.jpg", "image/jpeg", imageBytes);
+
+                assertDoesNotThrow(() ->
+                        fileService.createThumbnailFromFile(10L, file));
+            }
+
+            @Test
+            void caseInsensitiveMimeType_succeeds() throws IOException {
+                when(appSettingService.getAppSettings()).thenReturn(
+                        AppSettings.builder()
+                                .maxFileUploadSizeInMb(5)
+                                .build()
+                );
+
+                BufferedImage image = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(image);
+                MockMultipartFile file = new MockMultipartFile(
+                        "file", "test.jpg", "IMAGE/JPEG", imageBytes);
+
+                assertDoesNotThrow(() ->
+                        fileService.createThumbnailFromFile(11L, file));
+            }
+
+            @Test
+            void corruptImageData_throwsException() {
+                // Valid MIME type but corrupt image data
+                byte[] corruptData = ("not an image but has jpeg mime type").getBytes();
+                MockMultipartFile corruptFile = new MockMultipartFile(
+                        "file", "corrupt.jpg", "image/jpeg", corruptData);
+
+                assertThrows(RuntimeException.class, () ->
+                        fileService.createThumbnailFromFile(12L, corruptFile));
+            }
+
+            @Test
+            void unsupportedMimeType_gif_throwsRuntimeException() {
+                byte[] gifData = "GIF89a...".getBytes(); // Fake GIF header
+                MockMultipartFile gifFile = new MockMultipartFile(
+                        "file", "test.gif", "image/gif", gifData);
+
+                // validateCoverFile throws IllegalArgumentException, but it's caught and wrapped in RuntimeException via ApiError
+                assertThrows(RuntimeException.class, () ->
+                                fileService.createThumbnailFromFile(13L, gifFile),
+                        "Should throw RuntimeException (wrapping IllegalArgumentException) for unsupported MIME type");
+            }
+
+            @Test
+            void mimeTypeWithExtraParameters_succeeds() throws IOException {
+                when(appSettingService.getAppSettings()).thenReturn(
+                        AppSettings.builder()
+                                .maxFileUploadSizeInMb(5)
+                                .build()
+                );
+
+                BufferedImage image = createTestImage(100, 100);
+                byte[] imageBytes = imageToBytes(image);
+                MockMultipartFile file = new MockMultipartFile(
+                        "file", "test.jpg", "image/jpeg;charset=UTF-8", imageBytes);
+
+                assertDoesNotThrow(() ->
+                        fileService.createThumbnailFromFile(14L, file));
+            }
+        }
+
+        @Nested
+        @DisplayName("setBookCoverPath")
+        class SetBookCoverPathTests {
+
+            @Test
+            void setsTimestampToCurrentTime() {
+                BookMetadataEntity entity = new BookMetadataEntity();
+                Instant before = Instant.now();
+
+                FileService.setBookCoverPath(entity);
+
+                Instant after = Instant.now();
+
+                assertNotNull(entity.getCoverUpdatedOn());
+                assertFalse(entity.getCoverUpdatedOn().isBefore(before));
+                assertFalse(entity.getCoverUpdatedOn().isAfter(after));
+            }
+
+            @Test
+            void overwritesExistingTimestamp() {
+                BookMetadataEntity entity = new BookMetadataEntity();
+                Instant oldTime = Instant.parse("2020-01-01T00:00:00Z");
+                entity.setCoverUpdatedOn(oldTime);
+
+                FileService.setBookCoverPath(entity);
+
+                assertNotEquals(oldTime, entity.getCoverUpdatedOn());
+            }
+        }
+
+        @Nested
+        @DisplayName("deleteBookCovers")
+        class DeleteBookCoversTests {
+
+            @Test
+            void existingCovers_deletesAll() throws IOException {
+                BufferedImage image = createTestImage(100, 100);
+                fileService.saveCoverImages(image, 10L);
+                fileService.saveCoverImages(image, 11L);
+
+                fileService.deleteBookCovers(Set.of(10L, 11L));
+
+                assertAll(
+                        () -> assertFalse(Files.exists(
+                                Path.of(fileService.getImagesFolder(10L)))),
+                        () -> assertFalse(Files.exists(
+                                Path.of(fileService.getImagesFolder(11L))))
+                );
+            }
+
+            @Test
+            void nonExistentCovers_doesNotThrow() {
+                assertDoesNotThrow(() ->
+                        fileService.deleteBookCovers(Set.of(999L, 1000L)));
+            }
+
+            @Test
+            void emptySet_doesNothing() {
+                assertDoesNotThrow(() ->
+                        fileService.deleteBookCovers(Set.of()));
+            }
+
+            @Test
+            void mixedExistingAndNonExisting_deletesExisting() throws Exception {
+                BufferedImage image = createTestImage(100, 100);
+                fileService.saveCoverImages(image, 20L);
+
+                fileService.deleteBookCovers(Set.of(20L, 21L));
+
+                assertFalse(Files.exists(Path.of(fileService.getImagesFolder(20L))));
+            }
+
+            @Test
+            void singleBookId_works() throws IOException {
+                BufferedImage image = createTestImage(100, 100);
+                fileService.saveCoverImages(image, 30L);
+
+                fileService.deleteBookCovers(Set.of(30L));
+
+                assertFalse(Files.exists(Path.of(fileService.getImagesFolder(30L))));
+            }
         }
     }
 
