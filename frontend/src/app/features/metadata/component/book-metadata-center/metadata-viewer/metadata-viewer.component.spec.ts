@@ -60,6 +60,28 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
   });
 }
 
+// Ensure ResizeObserver is mocked for PrimeNG components like Tabs
+if (typeof window !== 'undefined' && !window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  };
+}
+
+// Ensure IntersectionObserver is mocked
+if (typeof window !== 'undefined' && !window.IntersectionObserver) {
+  window.IntersectionObserver = class {
+    root = null;
+    rootMargin = '';
+    thresholds = [0];
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+    takeRecords = vi.fn(() => []);
+  };
+}
+
 describe('MetadataViewerComponent', () => {
   const currentUser = signal<CurrentUser | null>(null);
   const appSettings = signal<AppSettings | null>(null);
