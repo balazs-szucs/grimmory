@@ -49,10 +49,12 @@ public class TaskService {
     private final ObjectMapper objectMapper;
     private final TaskScheduler taskScheduler;
     private final Map<TaskType, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
-    private Predicate<TaskType> visibilityFilter = type -> !type.isHiddenFromUI();
+    private static final Predicate<TaskType> DEFAULT_VISIBILITY_FILTER = type -> !type.isHiddenFromUI();
+    private volatile Predicate<TaskType> visibilityFilter = DEFAULT_VISIBILITY_FILTER;
 
-    public void setVisibilityFilter(Predicate<TaskType> visibilityFilter) {
-        this.visibilityFilter = visibilityFilter;
+    /** Visible for testing. Tests must reset to the default in {@code @AfterEach}. */
+    void setVisibilityFilter(Predicate<TaskType> visibilityFilter) {
+        this.visibilityFilter = visibilityFilter != null ? visibilityFilter : DEFAULT_VISIBILITY_FILTER;
     }
 
     public TaskService(

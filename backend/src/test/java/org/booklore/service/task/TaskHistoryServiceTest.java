@@ -44,6 +44,7 @@ class TaskHistoryServiceTest {
         if (mocks != null) {
             mocks.close();
         }
+        taskHistoryService.setVisibilityFilter(null); // Reset to default
     }
 
     @Test
