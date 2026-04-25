@@ -226,7 +226,14 @@ public class CbxMetadataWriter implements MetadataWriter {
         if (metadata.getHardcoverBookId() != null && !metadata.getHardcoverBookId().isBlank()) {
             primaryUrl = "https://hardcover.app/books/" + metadata.getHardcoverBookId();
         } else if (metadata.getComicvineId() != null && !metadata.getComicvineId().isBlank()) {
-            primaryUrl = "https://comicvine.gamespot.com/issue/" + metadata.getComicvineId();
+            String cvId = metadata.getComicvineId();
+            if (cvId.startsWith("4050-")) {
+                primaryUrl = "https://comicvine.gamespot.com/volume/" + cvId + "/";
+            } else if (cvId.startsWith("4000-")) {
+                primaryUrl = "https://comicvine.gamespot.com/issue/" + cvId + "/";
+            } else {
+                primaryUrl = "https://comicvine.gamespot.com/issue/4000-" + cvId + "/";
+            }
         } else if (metadata.getGoodreadsId() != null && !metadata.getGoodreadsId().isBlank()) {
             primaryUrl = "https://www.goodreads.com/book/show/" + metadata.getGoodreadsId();
         } else if (metadata.getAsin() != null && !metadata.getAsin().isBlank()) {

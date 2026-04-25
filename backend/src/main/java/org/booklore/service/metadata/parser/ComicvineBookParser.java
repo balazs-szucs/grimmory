@@ -384,7 +384,51 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
     @Override
     public BookMetadata fetchDetailedMetadata(String comicvineId) {
-        return fetchIssueDetails(Integer.parseInt(comicvineId), null);
+        if (comicvineId == null || comicvineId.isEmpty()) return null;
+        
+        String prefix = "4000";
+        String idStr = comicvineId;
+        
+        if (comicvineId.contains("-")) {
+            String[] parts = comicvineId.split("-", 2);
+            prefix = parts[0];
+            idStr = parts[1];
+        }
+        
+        int id;
+        try {
+            id = Integer.parseInt(idStr);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid comicvineId format: {}", comicvineId);
+            return null;
+        }
+
+        if ("4050".equals(prefix)) {
+            return fetchVolumeDetails(id);
+        } else {
+            return fetchIssueDetails(id, null);
+        }
+    }
+
+    private BookMetadata fetchVolumeDetails(int volumeId) {
+        String apiToken = getApiToken();
+        if (apiToken == null) return null;
+
+        URI uri = UriComponentsBuilder.fromUriString(COMICVINE_URL)
+                .path("/volumes/")
+                .queryParam("api_key", apiToken)
+                .queryParam("format", "json")
+                .queryParam("filter", "id:" + volumeId)
+                .queryParam("limit", 1)
+                .queryParam("field_list", VOLUME_FIELDS)
+                .build()
+                .toUri();
+
+        ComicvineApiResponse response = sendRequest(uri, ComicvineApiResponse.class);
+        if (response != null && response.getResults() != null && !response.getResults().isEmpty()) {
+            return buildVolumeMetadata(response.getResults().getFirst());
+        }
+        return null;
     }
 
     private BookMetadata fetchIssueDetails(int issueId, Comic volumeContext) {
@@ -597,7 +641,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
         BookMetadata metadata = BookMetadata.builder()
                 .provider(MetadataProvider.Comicvine)
-                .comicvineId(String.valueOf(comic.getId()))
+                .comicvineId("4000-" + comic.getId())
                 .title(formattedTitle)
                 .authors(authors)
                 .thumbnailUrl(comic.getImage() != null ? comic.getImage().getMediumUrl() : null)
@@ -626,7 +670,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         
         return BookMetadata.builder()
                 .provider(MetadataProvider.Comicvine)
-                .comicvineId(String.valueOf(volume.getId()))
+                .comicvineId("4050-" + volume.getId())
                 .title(volume.getName())
                 .seriesName(volume.getName())
                 .seriesTotal(volume.getCountOfIssues())
