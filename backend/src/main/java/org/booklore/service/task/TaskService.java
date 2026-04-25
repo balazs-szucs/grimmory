@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,6 +49,11 @@ public class TaskService {
     private final ObjectMapper objectMapper;
     private final TaskScheduler taskScheduler;
     private final Map<TaskType, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+    private Predicate<TaskType> visibilityFilter = type -> !type.isHiddenFromUI();
+
+    public void setVisibilityFilter(Predicate<TaskType> visibilityFilter) {
+        this.visibilityFilter = visibilityFilter;
+    }
 
     public TaskService(
             AuthenticationService authenticationService,
@@ -116,7 +122,7 @@ public class TaskService {
 
     public List<TaskInfo> getAvailableTasks() {
         return Arrays.stream(TaskType.values())
-                .filter(taskType -> !taskType.isHiddenFromUI())
+                .filter(visibilityFilter)
                 .map(taskType -> {
                     TaskInfo metadata = TaskInfo.fromTaskType(taskType);
                     Task task = taskRegistry.get(taskType);
