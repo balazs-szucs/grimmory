@@ -119,6 +119,62 @@ class AppBookServiceSortingTest {
         verify(bookRepository).findAll(any(Specification.class), any(PageRequest.class));
     }
 
+    @Test
+    void getBooks_sortByAuthor_ascending_putsEmptyAuthorsLast() {
+        List<BookEntity> unsorted = List.of(
+                book(1L, Instant.parse("2024-01-02T00:00:00Z"), "Adam Alpha"),
+                book(2L, Instant.parse("2024-01-03T00:00:00Z")), // No authors
+                book(3L, Instant.parse("2024-01-01T00:00:00Z"), " ") // Blank author name
+        );
+        when(bookRepository.findAll(any(Specification.class))).thenReturn(unsorted);
+
+        AppPageResponse<AppBookSummary> response = service.getBooks(baseRequest("author", "asc"));
+
+        // Adam Alpha (1) should be first, then the empty/blank ones (2 and 3)
+        // Since both 2 and 3 have null sort keys, they should be sorted by addedOn and then ID.
+        // book 3: addedOn 2024-01-01
+        // book 2: addedOn 2024-01-03
+        // So expected order is 1, 3, 2
+        assertEquals(List.of(1L, 3L, 2L), response.getContent().stream().map(AppBookSummary::getId).toList());
+    }
+
+    @Test
+    void getBooks_sortByAuthor_ascending_handlesAccentedCharacters() {
+        List<BookEntity> unsorted = List.of(
+                book(1L, Instant.parse("2024-01-01T00:00:00Z"), "Östlund"),
+                book(2L, Instant.parse("2024-01-02T00:00:00Z"), "Ostlund"),
+                book(3L, Instant.parse("2024-01-03T00:00:00Z"), "Adam")
+        );
+        when(bookRepository.findAll(any(Specification.class))).thenReturn(unsorted);
+
+        AppPageResponse<AppBookSummary> response = service.getBooks(baseRequest("author", "asc"));
+
+        // With Collator.PRIMARY, Ö and O are treated as same base letter if it's PRIMARY strength?
+        // Actually, PRIMARY strength usually ignores case and accents.
+        // Let's see what happens. If they are equal, it falls back to addedOn.
+        // Book 2 (Ostlund) added 2024-01-02
+        // Book 1 (Östlund) added 2024-01-01
+        // Expected if PRIMARY treats them same: Adam (3), Östlund (1), Ostlund (2)
+        
+        assertEquals(List.of(3L, 1L, 2L), response.getContent().stream().map(AppBookSummary::getId).toList());
+    }
+
+    @Test
+    void getBooks_sortByAuthor_ascending_isCaseInsensitive() {
+        List<BookEntity> unsorted = List.of(
+                book(1L, Instant.parse("2024-01-01T00:00:00Z"), "adam"),
+                book(2L, Instant.parse("2024-01-02T00:00:00Z"), "Adam"),
+                book(3L, Instant.parse("2024-01-03T00:00:00Z"), "Bob")
+        );
+        when(bookRepository.findAll(any(Specification.class))).thenReturn(unsorted);
+
+        AppPageResponse<AppBookSummary> response = service.getBooks(baseRequest("author", "asc"));
+
+        // Case insensitive: adam and Adam are same. Falls back to addedOn.
+        // book 1 added earlier than book 2.
+        assertEquals(List.of(1L, 2L, 3L), response.getContent().stream().map(AppBookSummary::getId).toList());
+    }
+
     private BookListRequest baseRequest(String sort, String dir) {
         return new BookListRequest(
                 0, 50, sort, dir,

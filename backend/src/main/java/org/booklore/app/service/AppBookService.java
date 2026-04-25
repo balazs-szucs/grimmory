@@ -39,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
+import java.text.Collator;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -1103,9 +1104,12 @@ public class AppBookService {
         boolean surnameMode = "authorsurnamevorname".equalsIgnoreCase(sortBy);
         boolean ascending = "asc".equalsIgnoreCase(sortDir);
 
+        Collator collator = Collator.getInstance(Locale.ROOT);
+        collator.setStrength(Collator.PRIMARY);
+
         Comparator<BookEntity> comparator = Comparator
                 .comparing((BookEntity book) -> buildAuthorSortKey(book, surnameMode),
-                        Comparator.nullsLast(String::compareTo))
+                        Comparator.nullsLast(collator))
                 .thenComparing(BookEntity::getAddedOn, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(BookEntity::getId, Comparator.nullsLast(Comparator.naturalOrder()));
 
@@ -1132,11 +1136,12 @@ public class AppBookService {
             return null;
         }
 
-        return book.getMetadata().getAuthors().stream()
+        String key = book.getMetadata().getAuthors().stream()
                 .map(AuthorEntity::getName)
                 .map(name -> normalizeAuthorName(name, surnameMode))
                 .filter(name -> !name.isBlank())
                 .collect(Collectors.joining(", "));
+        return key.isEmpty() ? null : key;
     }
 
     private String normalizeAuthorName(String authorName, boolean surnameMode) {
@@ -1150,17 +1155,17 @@ public class AppBookService {
         }
 
         if (!surnameMode) {
-            return cleaned.toLowerCase(Locale.ROOT);
+            return cleaned;
         }
 
         String[] parts = cleaned.split("\\s+");
         if (parts.length < 2) {
-            return cleaned.toLowerCase(Locale.ROOT);
+            return cleaned;
         }
 
         String surname = parts[parts.length - 1];
         String firstNames = String.join(" ", Arrays.copyOf(parts, parts.length - 1));
-        return (surname + ", " + firstNames).toLowerCase(Locale.ROOT);
+        return (surname + ", " + firstNames);
     }
 
     private Sort buildSort(String sortBy, String sortDir) {
