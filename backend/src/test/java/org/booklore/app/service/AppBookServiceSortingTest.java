@@ -149,13 +149,6 @@ class AppBookServiceSortingTest {
 
         AppPageResponse<AppBookSummary> response = service.getBooks(baseRequest("author", "asc"));
 
-        // With Collator.PRIMARY, Ö and O are treated as same base letter if it's PRIMARY strength?
-        // Actually, PRIMARY strength usually ignores case and accents.
-        // Let's see what happens. If they are equal, it falls back to addedOn.
-        // Book 2 (Ostlund) added 2024-01-02
-        // Book 1 (Östlund) added 2024-01-01
-        // Expected if PRIMARY treats them same: Adam (3), Östlund (1), Ostlund (2)
-        
         assertEquals(List.of(3L, 1L, 2L), response.getContent().stream().map(AppBookSummary::getId).toList());
     }
 
