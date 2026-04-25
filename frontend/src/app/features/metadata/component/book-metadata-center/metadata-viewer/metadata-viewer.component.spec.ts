@@ -22,6 +22,7 @@ import {Router} from '@angular/router';
 import {BookNavigationService} from '../../../../book/service/book-navigation.service';
 import {BookMetadataHostService} from '../../../../../shared/service/book-metadata-host.service';
 import {MetadataViewerComponent} from './metadata-viewer.component';
+import {AudiobookService} from '../../../../readers/audiobook-player/audiobook.service';
 
 interface CurrentUser {
   permissions?: {
@@ -215,11 +216,13 @@ describe('MetadataViewerComponent', () => {
             config: {reRenderOnLangChange: true},
             langChanges$: of('en'),
             events$: of({}),
-            getActiveLang: () => 'en'
+            getActiveLang: () => 'en',
+            _loadDependencies: () => of([])
           }
         },
         {provide: LibraryService, useValue: {findLibraryById}},
-        {provide: BookMetadataManageService, useValue: {}},
+        {provide: BookMetadataManageService, useValue: {supportsDualCovers: signal(false)}},
+        {provide: AudiobookService, useValue: {}},
         {
           provide: BookDialogHelperService,
           useValue: {
