@@ -182,6 +182,7 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
 
     // --- Test Dependencies ---
+    testImplementation(platform("org.junit:junit-bom:6.0.3"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-test-autoconfigure")
     testImplementation("org.assertj:assertj-core:3.27.7")
