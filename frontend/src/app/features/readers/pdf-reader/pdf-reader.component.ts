@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, inject, Injector, NgZone, OnDestroy, OnInit, afterNextRender, viewChild, DestroyRef, signal, computed } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PageTitleService } from "../../../shared/service/page-title.service";
 import { BookService } from '../../book/service/book.service';
@@ -39,7 +40,7 @@ type EmbedPdfMessage =
 @Component({
   selector: 'app-pdf-reader',
   standalone: true,
-  imports: [ProgressSpinner, TranslocoPipe, ReaderIconComponent, FormsModule, PdfSidebarComponent],
+  imports: [CommonModule, ProgressSpinner, TranslocoPipe, ReaderIconComponent, FormsModule, PdfSidebarComponent],
   providers: [EmbedPdfBookService, PdfBookmarkService],
   templateUrl: './pdf-reader.component.html',
   styleUrl: './pdf-reader.component.scss',
@@ -796,6 +797,26 @@ export class PdfReaderComponent implements OnInit, OnDestroy {
     this.isSearchOpen.set(false);
     this.searchQuery.set('');
     this.embedPdfBook.stopSearch();
+  }
+
+  performAction(id: string): void {
+    switch (id) {
+      case 'sidebar': this.toggleSidebar(); break;
+      case 'search': this.toggleSearch(); break;
+      case 'highlight': this.toggleAnnotationTool('highlight'); break;
+      case 'freeText': this.toggleAnnotationTool('freeText'); break;
+      case 'ink': this.toggleAnnotationTool('ink'); break;
+      case 'pan': this.togglePanMode(); break;
+      case 'bookmark': this.toggleBookmark(); break;
+      case 'zoomOut': this.embedPdfBook.zoomOut(); break;
+      case 'zoomIn': this.embedPdfBook.zoomIn(); break;
+      case 'spreadMode': this.cycleSpreadMode(); break;
+      case 'scrollLayout': this.cycleScrollLayout(); break;
+      case 'rotate': this.rotateClockwise(); break;
+      case 'theme': this.toggleDarkTheme(); break;
+      case 'fullscreen': this.toggleFullscreen(); break;
+      case 'overflow': this.toggleToolbarOverflow(); break;
+    }
   }
 
   onSearchQueryChange(value: string): void {
