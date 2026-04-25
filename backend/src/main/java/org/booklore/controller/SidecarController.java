@@ -10,12 +10,14 @@ import org.booklore.config.security.annotation.CheckBookAccess;
 import org.booklore.model.dto.sidecar.SidecarMetadata;
 import org.booklore.model.enums.SidecarSyncStatus;
 import org.booklore.service.metadata.sidecar.SidecarService;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.WebRequest;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
@@ -30,6 +32,7 @@ public class SidecarController {
     @Operation(summary = "Get sidecar content", description = "Get the content of the sidecar JSON file for a book")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Sidecar content returned successfully"),
+            @ApiResponse(responseCode = "304", description = "Not modified"),
             @ApiResponse(responseCode = "404", description = "Book or sidecar file not found")
     })
     @CheckBookAccess(bookIdParam = "bookId")
@@ -47,6 +50,7 @@ public class SidecarController {
 
         Optional<SidecarMetadata> sidecar = sidecarService.getSidecarContent(bookId);
         return sidecar.map(metadata -> ResponseEntity.ok()
+                        .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                         .eTag(etag)
                         .body(metadata))
                 .orElseGet(() -> ResponseEntity.notFound().build());

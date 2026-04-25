@@ -41,10 +41,7 @@ public class ShelfService {
     private final UserRepository userRepository;
     private final AuditService auditService;
 
-    @Caching(evict = {
-            @CacheEvict(value = "shelves-by-user", allEntries = true),
-            @CacheEvict(value = "shelf-by-id", allEntries = true)
-    })
+    @CacheEvict(value = "shelves-by-user", allEntries = true)
     @Transactional
     public Shelf createShelf(ShelfCreateRequest request) {
         Long userId = getAuthenticatedUserId();
@@ -68,7 +65,7 @@ public class ShelfService {
 
     @Caching(evict = {
             @CacheEvict(value = "shelves-by-user", allEntries = true),
-            @CacheEvict(value = "shelf-by-id", allEntries = true)
+            @CacheEvict(value = "shelf-by-id", key = "#id")
     })
     @Transactional
     public Shelf updateShelf(Long id, ShelfCreateRequest request) {
@@ -100,7 +97,7 @@ public class ShelfService {
 
     @Caching(evict = {
             @CacheEvict(value = "shelves-by-user", allEntries = true),
-            @CacheEvict(value = "shelf-by-id", allEntries = true)
+            @CacheEvict(value = "shelf-by-id", key = "#shelfId")
     })
     @Transactional
     public void deleteShelf(Long shelfId) {

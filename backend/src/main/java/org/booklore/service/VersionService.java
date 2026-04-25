@@ -43,7 +43,7 @@ public class VersionService {
         return new VersionInfo(appVersion, latest);
     }
 
-    @Cacheable("changelog")
+    @Cacheable(value = "changelog", key = "#root.target.appVersion")
     public List<ReleaseNote> getChangelogSinceCurrentVersion() {
         return fetchReleaseNotesSince(appVersion);
     }

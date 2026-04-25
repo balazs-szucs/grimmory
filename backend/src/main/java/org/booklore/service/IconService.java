@@ -240,6 +240,30 @@ public class IconService {
         return svgCache;
     }
 
+    public long getIconsLastModified() {
+        Path iconsPath = getIconsSvgPath();
+        if (!Files.exists(iconsPath)) {
+            return 0L;
+        }
+
+        try (Stream<Path> paths = Files.list(iconsPath)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(SVG_EXTENSION))
+                    .mapToLong(path -> {
+                        try {
+                            return Files.getLastModifiedTime(path).toMillis();
+                        } catch (IOException e) {
+                            return 0L;
+                        }
+                    })
+                    .max()
+                    .orElse(0L);
+        } catch (IOException e) {
+            log.error("Failed to check icons directory last modified: {}", e.getMessage());
+            return 0L;
+        }
+    }
+
     public Map<String, String> getAllIconsContent() {
         Path iconsPath = getIconsSvgPath();
 

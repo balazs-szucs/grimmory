@@ -82,11 +82,11 @@ public class IconController {
     @ApiResponse(responseCode = "200", description = "All icon contents retrieved successfully")
     @GetMapping("/all/content")
     public ResponseEntity<Map<String, String>> getAllIconsContent(WebRequest request) {
-        Map<String, String> iconsMap = iconService.getAllIconsContent();
-        String etag = Integer.toHexString(iconsMap.hashCode());
+        String etag = Long.toHexString(iconService.getIconsLastModified());
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
+        Map<String, String> iconsMap = iconService.getAllIconsContent();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                 .eTag(etag)

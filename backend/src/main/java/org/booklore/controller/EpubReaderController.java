@@ -93,7 +93,8 @@ public class EpubReaderController {
         // Defense in depth for untrusted EPUB resources. See Foliate's security guidance:
         // https://github.com/johnfactotum/foliate-js#security
         response.setHeader("Content-Security-Policy", "script-src 'none'");
-        response.setHeader("Cache-Control", "private, max-age=86400");
+        response.setHeader(HttpHeaders.CACHE_CONTROL,
+                CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate().getHeaderValue());
         response.setHeader(HttpHeaders.ETAG, etag);
 
         try {
