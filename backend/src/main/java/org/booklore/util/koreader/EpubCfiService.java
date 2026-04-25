@@ -31,6 +31,7 @@ public class EpubCfiService {
     private static final Pattern XPOINTER_BODY_PATTERN = Pattern.compile("^/body/DocFragment\\[(\\d+)]/body(.*)$");
     private static final Pattern XPOINTER_TEXT_OFFSET_PATTERN = Pattern.compile("/text\\(\\)\\.(\\d+)$");
     private static final Pattern XPOINTER_SEGMENT_PATTERN = Pattern.compile("^(\\w+)(?:\\[(\\d+)])?$");
+    private static final Pattern CFI_CLEANER_PATTERN = Pattern.compile("!/4(?=/)");
 
     private final Cache<String, Document> documentCache;
 
@@ -197,7 +198,7 @@ public class EpubCfiService {
         if (cfi == null) {
             return null;
         }
-        return cfi.replaceFirst("!/4(?=/)", "!");
+        return CFI_CLEANER_PATTERN.matcher(cfi).replaceFirst("!");
     }
 
     private Integer resolveSourceOffset(Document document, String xpointer) {
