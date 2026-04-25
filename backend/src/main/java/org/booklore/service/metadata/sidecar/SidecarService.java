@@ -46,6 +46,24 @@ public class SidecarService {
         return sidecarReader.readSidecarMetadata(bookPath);
     }
 
+    public org.booklore.model.dto.sidecar.SidecarResponse getSidecarResponse(Long bookId) {
+        BookEntity book = bookRepository.findByIdWithBookFiles(bookId)
+                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+
+        Path bookPath = book.getFullFilePath();
+        if (bookPath == null) {
+            return org.booklore.model.dto.sidecar.SidecarResponse.builder()
+                    .lastModified(0L)
+                    .metadata(Optional.empty())
+                    .build();
+        }
+
+        return org.booklore.model.dto.sidecar.SidecarResponse.builder()
+                .lastModified(sidecarReader.getSidecarLastModified(bookPath))
+                .metadata(sidecarReader.readSidecarMetadata(bookPath))
+                .build();
+    }
+
     public long getLastModified(Long bookId) {
         BookEntity book = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));

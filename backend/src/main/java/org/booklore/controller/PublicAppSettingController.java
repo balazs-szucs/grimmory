@@ -29,14 +29,14 @@ public class PublicAppSettingController {
     @GetMapping
     public ResponseEntity<PublicAppSetting> getPublicSettings(WebRequest request) {
         PublicAppSetting settings = appSettingService.getPublicSettings();
-        String etag = Integer.toHexString(settings.hashCode());
+        String etag = Long.toHexString(settings.hashCode());
 
         if (request.checkNotModified(etag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePrivate().mustRevalidate())
+                .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePublic().mustRevalidate())
                 .eTag(etag)
                 .body(settings);
     }

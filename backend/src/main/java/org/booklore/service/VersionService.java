@@ -43,7 +43,7 @@ public class VersionService {
         return new VersionInfo(appVersion, latest);
     }
 
-    @Cacheable(value = "changelog", key = "#root.target.appVersion", unless = "#result == null || #result.isEmpty()")
+    @Cacheable(value = "changelog", key = "#root.target.appVersion", unless = "#result == null")
     public List<ReleaseNote> getChangelogSinceCurrentVersion() {
         return fetchReleaseNotesSince(appVersion);
     }
@@ -96,12 +96,12 @@ public class VersionService {
             }
 
             log.info("Returning {} newer releases", updates.size());
+            return updates;
 
         } catch (Exception e) {
             log.error("Failed to fetch release notes", e);
+            return null;
         }
-
-        return updates;
     }
 
     private boolean isVersionGreater(String version1, String version2) {

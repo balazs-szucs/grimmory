@@ -32,7 +32,7 @@ public class CacheConfig {
         );
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(Duration.ofHours(24))
-                .maximumSize(100));
+                .maximumSize(1000));
         return cacheManager;
     }
 }

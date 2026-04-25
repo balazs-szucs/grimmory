@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.booklore.config.security.annotation.CheckBookAccess;
 import org.booklore.model.dto.sidecar.SidecarMetadata;
+import org.booklore.model.dto.sidecar.SidecarResponse;
 import org.booklore.model.enums.SidecarSyncStatus;
 import org.booklore.service.metadata.sidecar.SidecarService;
 import org.springframework.http.CacheControl;
@@ -38,7 +39,8 @@ public class SidecarController {
     @CheckBookAccess(bookIdParam = "bookId")
     @GetMapping("/books/{bookId}/sidecar")
     public ResponseEntity<SidecarMetadata> getSidecarContent(@Parameter(description = "Book ID") @PathVariable Long bookId, WebRequest request) {
-        long lastModified = sidecarService.getLastModified(bookId);
+        SidecarResponse sidecarResponse = sidecarService.getSidecarResponse(bookId);
+        long lastModified = sidecarResponse.getLastModified();
         if (lastModified == 0L) {
             return ResponseEntity.notFound().build();
         }
@@ -48,8 +50,7 @@ public class SidecarController {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).build();
         }
 
-        Optional<SidecarMetadata> sidecar = sidecarService.getSidecarContent(bookId);
-        return sidecar.map(metadata -> ResponseEntity.ok()
+        return sidecarResponse.getMetadata().map(metadata -> ResponseEntity.ok()
                         .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate())
                         .eTag(etag)
                         .body(metadata))
