@@ -98,6 +98,26 @@ describe('BookCardLiteComponent', () => {
     expect(hostService.requestBookSwitch).toHaveBeenCalledWith(1);
     expect(router.navigate).not.toHaveBeenCalled();
   });
+
+  it('applies eager/high attributes when priorityImage is enabled', () => {
+    component.book = buildBook();
+    component.priorityImage = true;
+    fixture.detectChanges();
+
+    const image = fixture.nativeElement.querySelector('.book-cover') as HTMLImageElement;
+    expect(image.getAttribute('loading')).toBe('eager');
+    expect(image.getAttribute('fetchpriority')).toBe('high');
+  });
+
+  it('keeps lazy/low attributes for non-priority images', () => {
+    component.book = buildBook();
+    component.priorityImage = false;
+    fixture.detectChanges();
+
+    const image = fixture.nativeElement.querySelector('.book-cover') as HTMLImageElement;
+    expect(image.getAttribute('loading')).toBe('lazy');
+    expect(image.getAttribute('fetchpriority')).toBe('low');
+  });
 });
 
 function buildBook(overrides: Partial<Book> = {}): Book {

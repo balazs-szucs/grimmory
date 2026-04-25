@@ -25,6 +25,7 @@ export class BookCardLiteComponent {
   @Input() book!: Book;
   @Input() isActive: boolean = false;
   @Input() showSeriesNumber: boolean = false;
+  @Input() priorityImage: boolean = false;
 
   private router = inject(Router);
   protected urlHelper = inject(UrlHelperService);
@@ -40,6 +41,14 @@ export class BookCardLiteComponent {
     const primaryIsAudiobook = this.book.primaryFile?.bookType === 'AUDIOBOOK';
     const hasEbookAlternative = this.book.alternativeFormats?.some(f => f.bookType !== 'AUDIOBOOK') ?? false;
     return primaryIsAudiobook && !hasEbookAlternative;
+  }
+
+  getImageLoading(): 'eager' | 'lazy' {
+    return this.priorityImage ? 'eager' : 'lazy';
+  }
+
+  getImageFetchPriority(): 'high' | 'low' {
+    return this.priorityImage ? 'high' : 'low';
   }
 
   getThumbnailUrl(): string | null {
