@@ -74,7 +74,9 @@ public class AppAuthorService {
         CriteriaQuery<Tuple> dataCq = cb.createTupleQuery();
         Root<AuthorEntity> dataRoot = dataCq.from(AuthorEntity.class);
         
-        Expression<Long> bookCount = AppAuthorSpecification.bookCount(dataRoot, cb);
+        // Pass the effective library filter for book count
+        Collection<Long> countLibraryIds = libraryId != null ? List.of(libraryId) : accessibleLibraryIds;
+        Expression<Long> bookCount = AppAuthorSpecification.bookCount(dataRoot, cb, countLibraryIds);
 
         dataCq.multiselect(
             dataRoot.get(AuthorEntity_.id).alias("id"),
@@ -184,18 +186,12 @@ public class AppAuthorService {
 
 
     private Specification<AuthorEntity> buildSpecification(Set<Long> accessibleLibraryIds, Long libraryId, String search, Boolean hasPhoto) {
-        Specification<AuthorEntity> spec = Specification.where(AppAuthorSpecification.notDeleted())
-                .and(AppAuthorSpecification.hasDigitalFile());
+        Collection<Long> effectiveLibraryIds = libraryId != null ? List.of(libraryId) : accessibleLibraryIds;
+        Specification<AuthorEntity> spec = AppAuthorSpecification.visibleTo(effectiveLibraryIds);
 
-        if (libraryId != null) {
-            spec = spec.and(AppAuthorSpecification.inLibrary(libraryId));
-        } else if (accessibleLibraryIds != null) {
-            if (accessibleLibraryIds.isEmpty()) {
-                // Non-admin user with no library access: force empty result.
-                spec = spec.and((root, query, cb) -> cb.disjunction());
-            } else {
-                spec = spec.and(AppAuthorSpecification.inLibraries(accessibleLibraryIds));
-            }
+        if (libraryId == null && accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            // Non-admin user with no library access: force empty result.
+            spec = spec.and((root, query, cb) -> cb.disjunction());
         }
 
         if (search != null && !search.isBlank()) {
