@@ -207,10 +207,14 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             return Collections.emptyList();
         }
 
-        List<Comic> originalOrder = new ArrayList<>(volumes);
+        Map<Comic, Integer> originalIndex = new IdentityHashMap<>(volumes.size());
+        for (int idx = 0; idx < volumes.size(); idx++) {
+            originalIndex.put(volumes.get(idx), idx);
+        }
+
         volumes.sort((v1, v2) -> {
-            int score1 = calculateVolumeScore(v1, finalSeriesName, normalizedIssue, extractedYear, originalOrder.indexOf(v1));
-            int score2 = calculateVolumeScore(v2, finalSeriesName, normalizedIssue, extractedYear, originalOrder.indexOf(v2));
+            int score1 = calculateVolumeScore(v1, finalSeriesName, normalizedIssue, extractedYear, originalIndex.get(v1));
+            int score2 = calculateVolumeScore(v2, finalSeriesName, normalizedIssue, extractedYear, originalIndex.get(v2));
             return Integer.compare(score2, score1);
         });
 
