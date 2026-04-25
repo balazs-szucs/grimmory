@@ -201,7 +201,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         final String finalSeriesName = seriesName;
         log.debug("searchVolumesAndIssues: seriesName='{}', issueNumber='{}', year='{}'", finalSeriesName, issueNumber, extractedYear);
         
-        List<Comic> volumes = searchVolumes(finalSeriesName);
+        List<Comic> volumes = new ArrayList<>(searchVolumes(finalSeriesName));
         if (volumes.isEmpty()) {
             log.debug("No volumes found for series '{}'", finalSeriesName);
             return Collections.emptyList();
@@ -322,7 +322,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         }
 
         if (!volumes.isEmpty()) {
-            volumeCache.put(cacheKey, new CachedVolumes(volumes));
+            volumeCache.put(cacheKey, new CachedVolumes(List.copyOf(volumes)));
         } else if (seriesName.contains(" - ")) {
             String alternativeName = seriesName.replace(" - ", ": ");
             log.debug("No results for '{}', trying alternative name '{}'", seriesName, alternativeName);
@@ -435,8 +435,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
         ComicvineSingleResponse response = sendRequest(uri, ComicvineSingleResponse.class);
         if (response != null && response.getResults() != null) {
-            response.getResults().setId(volumeId);
-            return buildVolumeMetadata(response.getResults());
+            return buildVolumeMetadata(response.getResults(), volumeId);
         }
         return null;
     }
@@ -691,6 +690,11 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
                 .externalUrl(volume.getSiteDetailUrl())
                 .authors(authors.isEmpty() ? null : authors)
                 .build();
+    }
+
+    private BookMetadata buildVolumeMetadata(Comic volume, int volumeId) {
+        volume.setId(volumeId);
+        return buildVolumeMetadata(volume);
     }
 
     private BookMetadata convertToBookMetadata(Comic comic, int issueId, Comic volumeContext) {
