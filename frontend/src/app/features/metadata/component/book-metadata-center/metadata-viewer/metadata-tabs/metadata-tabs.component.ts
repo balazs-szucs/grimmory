@@ -81,8 +81,27 @@ export interface DetachBookFileEvent {
   styleUrl: './metadata-tabs.component.scss'
 })
 export class MetadataTabsComponent {
-  @Input() book!: Book;
-  @Input() bookInSeries: Book[] = [];
+  private _book!: Book;
+  private _bookInSeries: Book[] = [];
+  private _otherBooksInSeriesCache: Book[] | null = null;
+
+  @Input()
+  set book(value: Book) {
+    this._book = value;
+    this._otherBooksInSeriesCache = null;
+  }
+  get book(): Book {
+    return this._book;
+  }
+
+  @Input()
+  set bookInSeries(value: Book[]) {
+    this._bookInSeries = value;
+    this._otherBooksInSeriesCache = null;
+  }
+  get bookInSeries(): Book[] {
+    return this._bookInSeries;
+  }
   @Input() recommendedBooks: BookRecommendation[] = [];
 
   protected urlHelper = inject(UrlHelperService);
@@ -106,7 +125,10 @@ export class MetadataTabsComponent {
   }
 
   get otherBooksInSeries(): Book[] {
-    return this.bookInSeries.filter(bookInSeriesItem => bookInSeriesItem.id !== this.book?.id);
+    if (!this._otherBooksInSeriesCache) {
+      this._otherBooksInSeriesCache = this.bookInSeries.filter(bookInSeriesItem => bookInSeriesItem.id !== this.book?.id);
+    }
+    return this._otherBooksInSeriesCache;
   }
 
   read(bookId: number, reader?: 'epub-streaming', bookType?: BookType): void {
