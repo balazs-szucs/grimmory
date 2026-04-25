@@ -32,6 +32,7 @@ public class BookRuleEvaluatorService {
     private static final Set<RuleField> COMPOSITE_FIELDS = Set.of(
             RuleField.SERIES_STATUS, RuleField.SERIES_GAPS, RuleField.SERIES_POSITION
     );
+    private static final Predicate[] EMPTY_PREDICATE_ARRAY = new Predicate[0];
 
     public Specification<BookEntity> toSpecification(GroupRule groupRule, Long userId) {
         return (root, query, cb) -> {
@@ -88,8 +89,8 @@ public class BookRuleEvaluatorService {
         }
 
         return group.getJoin() == org.booklore.model.dto.JoinType.AND
-                ? cb.and(predicates.toArray(new Predicate[0]))
-                : cb.or(predicates.toArray(new Predicate[0]));
+                ? cb.and(predicates.toArray(EMPTY_PREDICATE_ARRAY))
+                : cb.or(predicates.toArray(EMPTY_PREDICATE_ARRAY));
     }
 
     private Predicate buildRulePredicate(Rule rule, CriteriaQuery<?> query, CriteriaBuilder cb, Root<BookEntity> root, Join<BookEntity, UserBookProgressEntity> progressJoin, Long userId) {
@@ -870,7 +871,7 @@ public class BookRuleEvaluatorService {
                     })
                     .toList();
 
-            return cb.and(predicates.toArray(new Predicate[0]));
+            return cb.and(predicates.toArray(EMPTY_PREDICATE_ARRAY));
         } else {
             Subquery<Long> subquery = query.subquery(Long.class);
             Root<BookEntity> subRoot = subquery.from(BookEntity.class);
