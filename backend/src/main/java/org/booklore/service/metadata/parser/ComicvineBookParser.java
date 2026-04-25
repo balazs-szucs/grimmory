@@ -105,7 +105,9 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         if (metadataList.isEmpty()) return null;
 
         BookMetadata top = metadataList.getFirst();
-        if (top.getComicvineId() != null && (top.getComicMetadata() == null || !hasComicDetails(top.getComicMetadata()))) {
+        String topId = top.getComicvineId();
+        boolean isVolume = topId != null && topId.startsWith("4050-");
+        if (topId != null && !isVolume && (top.getComicMetadata() == null || !hasComicDetails(top.getComicMetadata()))) {
             BookMetadata detailed = fetchDetailedMetadata(top.getComicvineId());
             if (detailed != null && detailed.getComicMetadata() != null) {
                 top.setComicMetadata(detailed.getComicMetadata());
@@ -435,7 +437,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
         ComicvineSingleResponse response = sendRequest(uri, ComicvineSingleResponse.class);
         if (response != null && response.getResults() != null) {
-            return buildVolumeMetadata(response.getResults(), volumeId);
+            return buildVolumeMetadata(response.getResults());
         }
         return null;
     }
@@ -454,7 +456,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
         ComicvineSingleResponse response = sendRequest(uri, ComicvineSingleResponse.class);
         if (response != null && response.getResults() != null) {
-            return convertToBookMetadata(response.getResults(), issueId, volumeContext);
+            return convertToBookMetadata(response.getResults(), volumeContext);
         }
         return null;
     }
@@ -692,15 +694,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
                 .build();
     }
 
-    private BookMetadata buildVolumeMetadata(Comic volume, int volumeId) {
-        volume.setId(volumeId);
-        return buildVolumeMetadata(volume);
-    }
 
-    private BookMetadata convertToBookMetadata(Comic comic, int issueId, Comic volumeContext) {
-        comic.setId(issueId);
-        return convertToBookMetadata(comic, volumeContext);
-    }
 
     private boolean hasComicDetails(ComicMetadata comic) {
         return hasNonEmptySet(comic.getCharacters())
