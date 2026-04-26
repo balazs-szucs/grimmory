@@ -96,11 +96,16 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
-    implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.boot:spring-boot-configuration-processor")
+    implementation("org.springframework.boot:spring-boot-starter-actuator") {
+        exclude(group = "org.springframework.boot", module = "spring-boot-starter-jmx")
+        exclude(group = "io.micrometer", module = "micrometer-core") // PROD: No metrics objects/overhead
+    }
+    compileOnly("org.springframework.boot:spring-boot-configuration-processor")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-mail")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+
+    // --- Context Indexer for faster/leaner startup ---
+    annotationProcessor("org.springframework:spring-context-indexer")
 
     // --- Reactive Streams ---
     implementation("io.projectreactor:reactor-core")
@@ -148,20 +153,19 @@ dependencies {
     implementation("org.jsoup:jsoup:1.22.2")
 
     // --- Mapping (DTOs & Entities) ---
-    implementation("org.mapstruct:mapstruct:1.6.3")
+    compileOnly("org.mapstruct:mapstruct:1.6.3")
     annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
 
     // --- API Documentation ---
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
-    implementation("org.apache.commons:commons-compress:1.28.0")
-    implementation("org.tukaani:xz:1.12") // Required by commons-compress for 7z support
+    implementation("org.tukaani:xz:1.12") 
     implementation("org.apache.commons:commons-text:1.15.0")
 
     // --- MIME Detection ---
     implementation("org.apache.tika:tika-core:3.3.0")
 
     // --- XML Support (JAXB) ---
-    implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
+    compileOnly("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")
     runtimeOnly("org.glassfish.jaxb:jaxb-runtime:4.0.7")
 
     // --- Template Engine ---
