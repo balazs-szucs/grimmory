@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -34,8 +35,14 @@ public class AppSettingService {
     private final AuthenticationService authenticationService;
     private final AuditService auditService;
 
-    private final Cache<String, AppSettings> appSettingsCache = Caffeine.newBuilder().build();
-    private final Cache<String, PublicAppSetting> publicSettingsCache = Caffeine.newBuilder().build();
+    private final Cache<String, AppSettings> appSettingsCache = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofHours(24))
+            .maximumSize(100)
+            .build();
+    private final Cache<String, PublicAppSetting> publicSettingsCache = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofHours(24))
+            .maximumSize(100)
+            .build();
 
     public AppSettingService(AppProperties appProperties, SettingPersistenceHelper settingPersistenceHelper, @Lazy AuthenticationService authenticationService, @Lazy AuditService auditService) {
         this.appProperties = appProperties;
@@ -71,9 +78,8 @@ public class AppSettingService {
             case AppSettingKey k when k.name().startsWith("OIDC_") -> AuditAction.OIDC_CONFIG_CHANGED;
             default -> AuditAction.SETTINGS_UPDATED;
         };
-        auditService.log(action, "Updated setting: " + key);
-        
         invalidateCaches();
+        auditService.log(action, "Updated setting: " + key);
     }
 
     private void validateOidcForceOnlyMode(Object val) {
