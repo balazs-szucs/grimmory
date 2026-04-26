@@ -103,6 +103,7 @@ dependencies {
     compileOnly("org.springframework.boot:spring-boot-configuration-processor")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-mail")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // --- Context Indexer for faster/leaner startup ---
     annotationProcessor("org.springframework:spring-context-indexer")
