@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.service.security.JwtSecretService;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -27,6 +28,8 @@ import java.util.Date;
 public class JwtUtils {
 
     private final JwtSecretService jwtSecretService;
+    private static final int MIN_SECRET_BYTES = 32;
+
     @Getter
     public static final long accessTokenExpirationMs = 1000L * 60 * 60 * 2;  // 2 hours
     @Getter
@@ -35,19 +38,20 @@ public class JwtUtils {
     @PostConstruct
     public void validateSecret() {
         try {
-            byte[] key = getSecretBytes();
-            if (key.length < 32) {
-                throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256");
-            }
-        } catch (Exception e) {
-            log.warn("Could not validate JWT secret at startup (database might not be ready), will validate on first use: {}", e.getMessage());
+            getSecretBytes();
+        } catch (IllegalStateException e) {
+            // Misconfiguration — fail fast.
+            throw e;
+        } catch (DataAccessException e) {
+            // DB not ready yet; will be re-validated on first use.
+            log.warn("Could not validate JWT secret at startup (database not ready), will validate on first use: {}", e.getMessage());
         }
     }
 
     private byte[] getSecretBytes() {
         byte[] key = jwtSecretService.getSecret().getBytes(StandardCharsets.UTF_8);
-        if (key.length < 32) {
-            throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256");
+        if (key.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException("JWT secret must be at least " + MIN_SECRET_BYTES + " bytes for HS256");
         }
         return key;
     }
@@ -74,7 +78,7 @@ public class JwtUtils {
             return signedJWT.serialize();
         } catch (KeyLengthException e) {
             log.error("JWT secret is too short: {}", e.getMessage());
-            throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256", e);
+            throw new IllegalStateException("JWT secret must be at least " + MIN_SECRET_BYTES + " bytes for HS256", e);
         } catch (Exception e) {
             log.error("Error generating JWT token", e);
             throw new RuntimeException("Could not generate token", e);
