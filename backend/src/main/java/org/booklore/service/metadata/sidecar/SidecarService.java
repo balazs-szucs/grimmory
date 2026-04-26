@@ -58,9 +58,14 @@ public class SidecarService {
                     .build();
         }
 
+        long lastModified = sidecarReader.getSidecarLastModified(bookPath);
+        Optional<SidecarMetadata> metadata = lastModified == 0L
+                ? Optional.empty()
+                : sidecarReader.readSidecarMetadata(bookPath);
+
         return org.booklore.model.dto.sidecar.SidecarResponse.builder()
-                .lastModified(sidecarReader.getSidecarLastModified(bookPath))
-                .metadata(sidecarReader.readSidecarMetadata(bookPath))
+                .lastModified(lastModified)
+                .metadata(metadata)
                 .build();
     }
 

@@ -79,7 +79,7 @@ public class ShelfService {
         shelfEntity.setIconType(request.getIconType());
         shelfEntity.setPublic(request.isPublicShelf());
         Shelf result = shelfMapper.toShelf(shelfRepository.save(shelfEntity));
-        evictShelfCache(getAuthenticatedUserId(), wasPublic || request.isPublicShelf());
+        evictShelfCache(shelfEntity.getUser().getId(), wasPublic || request.isPublicShelf());
         auditService.log(AuditAction.SHELF_UPDATED, "Shelf", id, "Updated shelf: " + request.getName());
         return result;
     }
@@ -100,14 +100,12 @@ public class ShelfService {
     @CacheEvict(value = "shelf-by-id", key = "#shelfId")
     @Transactional
     public void deleteShelf(Long shelfId) {
-        ShelfEntity shelfEntity = shelfRepository.findById(shelfId).orElse(null);
-        if (shelfEntity != null) {
-            boolean isPublic = shelfEntity.isPublic();
-            Long userId = shelfEntity.getUser().getId();
-            shelfRepository.delete(shelfEntity);
-            evictShelfCache(userId, isPublic);
-            auditService.log(AuditAction.SHELF_DELETED, "Shelf", shelfId, "Deleted shelf: " + shelfId);
-        }
+        ShelfEntity shelfEntity = findShelfByIdOrThrow(shelfId);
+        boolean isPublic = shelfEntity.isPublic();
+        Long userId = shelfEntity.getUser().getId();
+        shelfRepository.delete(shelfEntity);
+        evictShelfCache(userId, isPublic);
+        auditService.log(AuditAction.SHELF_DELETED, "Shelf", shelfId, "Deleted shelf: " + shelfId);
     }
 
     private void evictShelfCache(Long userId, boolean isPublic) {

@@ -21,15 +21,11 @@ public class AuthorService {
     private final AuthorMapper authorMapper;
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "authors-by-book", key = "#bookId")
     public List<String> getAuthorsByBookId(Long bookId) {
         if (!bookRepository.existsById(bookId)) {
             throw ApiError.BOOK_NOT_FOUND.createException(bookId);
         }
-        return getAuthorsByBookIdInternal(bookId);
-    }
-
-    @Cacheable(value = "authors-by-book", key = "#bookId")
-    List<String> getAuthorsByBookIdInternal(Long bookId) {
         List<AuthorEntity> authorEntities = authorRepository.findAuthorsByBookId(bookId);
         return authorEntities.stream().map(authorMapper::toAuthorEntityName).toList();
     }

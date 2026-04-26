@@ -98,7 +98,9 @@ public class EpubReaderController {
         response.setHeader("Content-Security-Policy", "script-src 'none'");
         response.setHeader(HttpHeaders.CACHE_CONTROL,
                 CacheControl.maxAge(Duration.ofDays(1)).cachePrivate().mustRevalidate().getHeaderValue());
-        response.setHeader(HttpHeaders.ETAG, etag);
+        if (etag != null) {
+            response.setHeader(HttpHeaders.ETAG, etag);
+        }
 
         try {
             epubReaderService.streamFile(bookId, bookType, cleanPath, response.getOutputStream());

@@ -128,7 +128,7 @@ public class SidecarMetadataReader {
                 return Files.getLastModifiedTime(sidecarPath).toMillis();
             }
         } catch (IOException e) {
-            log.warn("Failed to get last modified time for sidecar: {}", sidecarPath);
+            log.warn("Failed to get last modified time for sidecar {}: {}", sidecarPath, e.getMessage());
         }
         return 0L;
     }
