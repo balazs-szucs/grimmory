@@ -1,25 +1,27 @@
 package org.booklore.config.security;
 
-import org.booklore.model.entity.BookLoreUserEntity;
-import org.booklore.service.security.JwtSecretService;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.JWSSigner;
+import com.nimbusds.jose.JWSVerifier;
+import com.nimbusds.jose.KeyLengthException;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jose.crypto.MACVerifier;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.model.entity.BookLoreUserEntity;
+import org.booklore.service.security.JwtSecretService;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 
 @Slf4j
-@Service
 @Component
 @RequiredArgsConstructor
 public class JwtUtils {
@@ -30,23 +32,53 @@ public class JwtUtils {
     @Getter
     public static final long refreshTokenExpirationMs = 1000L * 60 * 60 * 24 * 30; // 30 days
 
-    private SecretKey getSigningKey() {
-        String secretKey = jwtSecretService.getSecret();
-        return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+    @PostConstruct
+    public void validateSecret() {
+        try {
+            byte[] key = getSecretBytes();
+            if (key.length < 32) {
+                throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256");
+            }
+        } catch (Exception e) {
+            log.warn("Could not validate JWT secret at startup (database might not be ready), will validate on first use: {}", e.getMessage());
+        }
+    }
+
+    private byte[] getSecretBytes() {
+        byte[] key = jwtSecretService.getSecret().getBytes(StandardCharsets.UTF_8);
+        if (key.length < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256");
+        }
+        return key;
     }
 
     public String generateToken(BookLoreUserEntity user, boolean isRefreshToken) {
         long expirationTime = isRefreshToken ? refreshTokenExpirationMs : accessTokenExpirationMs;
         Instant now = Instant.now();
-        return Jwts.builder()
-                .issuer("booklore")
-                .subject(user.getUsername())
-                .claim("userId", user.getId())
-                .claim("isDefaultPassword", user.isDefaultPassword())
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusMillis(expirationTime)))
-                .signWith(getSigningKey(), Jwts.SIG.HS256)
-                .compact();
+
+        try {
+            JWSSigner signer = new MACSigner(getSecretBytes());
+
+            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                    .issuer("booklore")
+                    .subject(user.getUsername())
+                    .claim("userId", user.getId())
+                    .claim("isDefaultPassword", user.isDefaultPassword())
+                    .issueTime(Date.from(now))
+                    .expirationTime(Date.from(now.plusMillis(expirationTime)))
+                    .build();
+
+            SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
+            signedJWT.sign(signer);
+
+            return signedJWT.serialize();
+        } catch (KeyLengthException e) {
+            log.error("JWT secret is too short: {}", e.getMessage());
+            throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256", e);
+        } catch (Exception e) {
+            log.error("Error generating JWT token", e);
+            throw new RuntimeException("Could not generate token", e);
+        }
     }
 
     public String generateAccessToken(BookLoreUserEntity user) {
@@ -57,45 +89,93 @@ public class JwtUtils {
         return generateToken(user, true);
     }
 
+    /**
+     * Parses and verifies the JWT token signature.
+     * Does NOT check for expiration or other claims.
+     */
+    private SignedJWT parseAndVerify(String token) throws Exception {
+        SignedJWT signedJWT = SignedJWT.parse(token);
+        JWSVerifier verifier = new MACVerifier(getSecretBytes());
+        if (!signedJWT.verify(verifier)) {
+            throw new RuntimeException("Invalid token signature");
+        }
+        return signedJWT;
+    }
+
+    /**
+     * Validates the token's signature, expiration, and issuer.
+     */
     public boolean validateToken(String token) {
         try {
-            extractClaims(token);
+            SignedJWT signedJWT = parseAndVerify(token);
+            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+            validateClaims(claims);
             return true;
-        } catch (ExpiredJwtException e) {
-            log.debug("Token expired: {}", e.getMessage());
-        } catch (JwtException e) {
+        } catch (Exception e) {
             log.debug("Invalid token: {}", e.getMessage());
+            return false;
         }
-        return false;
     }
 
-    public Claims extractClaims(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+    /**
+     * Checks if claims are valid (not expired and correct issuer).
+     * @throws RuntimeException if claims are invalid.
+     */
+    private void validateClaims(JWTClaimsSet claims) {
+        // Check expiration
+        Date expirationTime = claims.getExpirationTime();
+        if (expirationTime == null || new Date().after(expirationTime)) {
+            throw new RuntimeException("Token expired or has no expiration");
+        }
 
-        // Graceful issuer enforcement: reject tokens with a wrong issuer,
-        // but allow legacy tokens that have no issuer claim (issued before this check).
-        // After a full token rotation cycle (~30 days), switch to hard .requireIssuer().
+        // Check issuer
         String issuer = claims.getIssuer();
         if (issuer != null && !"booklore".equals(issuer)) {
-            throw new JwtException("Invalid issuer: " + issuer);
+            throw new RuntimeException("Invalid issuer: " + issuer);
         }
-
-        return claims;
     }
 
+    /**
+     * Extracts claims from a token after verifying signature and validating expiration/issuer.
+     * @throws RuntimeException if token is invalid or expired.
+     */
+    public JWTClaimsSet extractClaims(String token) {
+        try {
+            SignedJWT signedJWT = parseAndVerify(token);
+            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+            validateClaims(claims);
+            return claims;
+        } catch (Exception e) {
+            throw new RuntimeException("Error extracting claims: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Extracts username from token.
+     * @throws RuntimeException if token is invalid or expired.
+     */
     public String extractUsername(String token) {
-        return extractClaims(token).getSubject();
+        try {
+            return extractClaims(token).getSubject();
+        } catch (Exception e) {
+            log.warn("Failed to extract username from token: {}", e.getMessage());
+            throw e;
+        }
     }
 
+    /**
+     * Extracts user ID from token.
+     * @throws RuntimeException if token is invalid or expired.
+     */
     public Long extractUserId(String token) {
-        Object userIdClaim = extractClaims(token).get("userId");
-        if (userIdClaim instanceof Number) {
-            return ((Number) userIdClaim).longValue();
+        try {
+            Object userIdClaim = extractClaims(token).getClaim("userId");
+            if (userIdClaim instanceof Number) {
+                return ((Number) userIdClaim).longValue();
+            }
+            throw new IllegalArgumentException("Invalid userId claim type");
+        } catch (Exception e) {
+            throw new RuntimeException("Error extracting userId from token: " + e.getMessage(), e);
         }
-        throw new IllegalArgumentException("Invalid userId claim type");
     }
 }
