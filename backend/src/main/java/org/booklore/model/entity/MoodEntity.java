@@ -3,12 +3,19 @@ package org.booklore.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
+import org.hibernate.annotations.NaturalId;
+import org.hibernate.annotations.NaturalIdCache;
 
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
 @Entity
+@Cacheable
+@NaturalIdCache
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 @Getter
 @Setter
 @Builder
@@ -21,9 +28,11 @@ public class MoodEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NaturalId
     @Column(name = "name", nullable = false, unique = true)
     private String name;
 
+    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
     @ManyToMany(mappedBy = "moods", fetch = FetchType.LAZY)
     @BatchSize(size = 20)
     @Builder.Default
@@ -33,12 +42,12 @@ public class MoodEntity {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof MoodEntity that)) return false;
-        return id != null && Objects.equals(id, that.id);
+        return Objects.equals(name, that.name);
     }
 
     @Override
     public int hashCode() {
-        return getClass().hashCode();
+        return Objects.hash(name);
     }
 }
 
