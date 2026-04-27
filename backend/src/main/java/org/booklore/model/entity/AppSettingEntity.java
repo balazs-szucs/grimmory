@@ -12,7 +12,7 @@ import java.util.Objects;
 
 @Entity
 @Cacheable
-@NaturalIdCache
+@NaturalIdCache(region = "org.booklore.model.entity.AppSettingEntity_NaturalId")
 @Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
 @Table(name = "app_settings")
 @Getter

@@ -14,7 +14,7 @@ import java.util.Set;
 
 @Entity
 @Cacheable
-@NaturalIdCache
+@NaturalIdCache(region = "org.booklore.model.entity.AuthorEntity_NaturalId")
 @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 @Getter
 @Setter

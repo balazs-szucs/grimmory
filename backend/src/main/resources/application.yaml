@@ -101,11 +101,10 @@ spring:
           use_second_level_cache: true
           use_query_cache: true
           region:
-            factory_class: jcache
-        jakarta:
-          cache:
+            factory_class: org.hibernate.cache.jcache.internal.JCacheRegionFactory
+          jcache:
             provider: com.github.benmanes.caffeine.jcache.spi.CaffeineCachingProvider
-            uri: classpath:hibernate-caffeine.conf
+          missing_cache_strategy: create
         log_slow_query: ${HIBERNATE_SLOW_QUERY_MS:500}  # Log queries taking longer than 500ms (see org.hibernate.SQL_SLOW)
         generate_statistics: ${HIBERNATE_STATISTICS:false}
   threads:
