@@ -3,6 +3,7 @@ package org.booklore.service;
 import com.github.gotson.nightcompress.Archive;
 import com.github.gotson.nightcompress.ArchiveEntry;
 import com.github.gotson.nightcompress.LibArchiveException;
+import org.grimmory.epub4j.native_parsing.NativeArchive;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.exception.ApiError;
 import org.booklore.nativelib.NativeLibraries;
@@ -90,6 +91,22 @@ public class ArchiveService {
 
     public long transferEntryTo(Path path, String entryName, OutputStream outputStream) throws IOException {
         requireAvailable();
+
+        // 1. Try NativeArchive (Panama) first. It is more stable and does not suffer from
+        // the JNI handle-reuse bugs seen in nightcompress on some platforms.
+        if (NativeLibraries.get().isEpubNativeAvailable()) {
+            try (NativeArchive archive = NativeArchive.open(path)) {
+                CountingOutputStream countingOut = new CountingOutputStream(outputStream);
+                archive.streamEntry(entryName, countingOut);
+                return countingOut.getByteCount();
+            } catch (Exception e) {
+                // If it's a format NativeArchive doesn't support (e.g. RAR if it's ZIP-only),
+                // or any other error, we fall back to nightcompress.
+                log.debug("NativeArchive streaming failed for {}, falling back to nightcompress: {}", path.getFileName(), e.getMessage());
+            }
+        }
+
+        // 2. Fallback to NightCompress (JNI).
         // We cannot directly use the NightCompress `InputStream` as it is limited
         // in its implementation and will cause fatal errors.  Instead, we can use
         // the `transferTo` on an output stream to copy data around.
@@ -183,6 +200,19 @@ public class ArchiveService {
 
     public long extractEntryToPath(Path path, String entryName, Path outputPath) throws IOException {
         requireAvailable();
+
+        // Prefer NativeArchive (Panama)
+        if (NativeLibraries.get().isEpubNativeAvailable()) {
+            try (NativeArchive archive = NativeArchive.open(path);
+                 OutputStream os = Files.newOutputStream(outputPath)) {
+                CountingOutputStream countingOut = new CountingOutputStream(os);
+                archive.streamEntry(entryName, countingOut);
+                return countingOut.getByteCount();
+            } catch (Exception e) {
+                log.debug("NativeArchive extraction failed for {}, falling back to nightcompress: {}", path.getFileName(), e.getMessage());
+            }
+        }
+
         ReentrantLock lock = getFileLock(path);
         lock.lock();
         try (InputStream inputStream = Archive.getInputStream(path, entryName)) {
@@ -196,5 +226,32 @@ public class ArchiveService {
         }
 
         throw new IOException("Entry not found in archive");
+    }
+
+    /**
+     * Simple wrapper to count bytes written to an OutputStream.
+     */
+    private static class CountingOutputStream extends java.io.FilterOutputStream {
+        private long byteCount = 0;
+
+        public CountingOutputStream(OutputStream out) {
+            super(out);
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            out.write(b);
+            byteCount++;
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            out.write(b, off, len);
+            byteCount += len;
+        }
+
+        public long getByteCount() {
+            return byteCount;
+        }
     }
 }

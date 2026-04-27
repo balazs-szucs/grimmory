@@ -41,8 +41,6 @@ public final class NativeLibraries {
             return true;
         }));
 
-        probes.put(Library.LIBARCHIVE, new Probe("libarchive", com.github.gotson.nightcompress.Archive::isAvailable));
-
         probes.put(Library.EPUB4J_NATIVE, new Probe("epub4j-native", () -> {
             Boolean clean = tryInvokeStaticBoolean(
                     "org.grimmory.epub4j.native_parsing.EpubNativeLibrary"
@@ -57,6 +55,8 @@ public final class NativeLibraries {
             );
             return true;
         }));
+
+        probes.put(Library.LIBARCHIVE, new Probe("libarchive", com.github.gotson.nightcompress.Archive::isAvailable));
 
         probes.put(Library.GUMBO, new Probe("gumbo", () ->
                 Boolean.TRUE.equals(tryInvokeStaticBoolean("org.grimmory.epub4j.native_parsing.GumboLibrary"))
