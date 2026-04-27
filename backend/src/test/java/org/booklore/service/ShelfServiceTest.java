@@ -124,7 +124,6 @@ class ShelfServiceTest {
                 .build();
 
         when(shelfRepository.findById(1L)).thenReturn(Optional.of(existingShelf));
-        when(authenticationService.getAuthenticatedUser()).thenReturn(user);
         when(shelfRepository.save(any(ShelfEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(shelfMapper.toShelf(any(ShelfEntity.class))).thenReturn(Shelf.builder().name("Updated Shelf").build());
 
@@ -156,7 +155,6 @@ class ShelfServiceTest {
                 .build();
 
         when(shelfRepository.findById(1L)).thenReturn(Optional.of(existingShelf));
-        when(authenticationService.getAuthenticatedUser()).thenReturn(user);
         when(shelfRepository.save(any(ShelfEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(shelfMapper.toShelf(any(ShelfEntity.class))).thenReturn(
                 Shelf.builder().name("Updated Shelf").icon("bookmark").iconType(IconType.CUSTOM_SVG).build());
