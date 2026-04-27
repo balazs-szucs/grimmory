@@ -92,8 +92,7 @@ public class ArchiveService {
     public long transferEntryTo(Path path, String entryName, OutputStream outputStream) throws IOException {
         requireAvailable();
 
-        // 1. Try NativeArchive (Panama) first. It is more stable and does not suffer from
-        // the JNI handle-reuse bugs seen in nightcompress on some platforms.
+        // 1. Try NativeArchive (Panama) first. It is more stable
         if (NativeLibraries.get().isEpubNativeAvailable()) {
             try (NativeArchive archive = NativeArchive.open(path)) {
                 CountingOutputStream countingOut = new CountingOutputStream(outputStream);
