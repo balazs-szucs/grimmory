@@ -3,6 +3,8 @@ package org.booklore.repository;
 import org.booklore.model.dto.*;
 
 import org.booklore.model.entity.ReadingSessionEntity;
+import org.springframework.data.jpa.repository.QueryHints;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +20,7 @@ import java.util.stream.Stream;
 @Repository
 public interface ReadingSessionRepository extends JpaRepository<ReadingSessionEntity, Long> {
 
+    @QueryHints(@QueryHint(name = "org.hibernate.fetchSize", value = "200"))
     @Query("""
             SELECT rs.startTime
             FROM ReadingSessionEntity rs
@@ -133,6 +136,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSessionEn
             @Param("bookId") Long bookId,
             Pageable pageable);
 
+    @QueryHints(@QueryHint(name = "org.hibernate.fetchSize", value = "200"))
     @Query("""
             SELECT
                 b.id as bookId,
@@ -153,6 +157,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSessionEn
             """)
     Stream<PageTurnerSessionDto> findPageTurnerSessionsByUser(@Param("userId") Long userId);
 
+    @QueryHints(@QueryHint(name = "org.hibernate.fetchSize", value = "200"))
     @Query("""
             SELECT
                 b.id as bookId,
@@ -171,14 +176,6 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSessionEn
     Stream<CompletionRaceSessionDto> findCompletionRaceSessionsByUserAndYear(
             @Param("userId") Long userId,
             @Param("year") int year);
-
-    @Query("""
-            SELECT DISTINCT cast(rs.startTime as LocalDate)
-            FROM ReadingSessionEntity rs
-            WHERE rs.user.id = :userId
-            ORDER BY cast(rs.startTime as LocalDate)
-            """)
-    List<LocalDate> findDistinctReadingDatesByUser(@Param("userId") Long userId);
 
     @Query("""
             SELECT rs.startTime as startTime,
@@ -210,6 +207,7 @@ public interface ReadingSessionRepository extends JpaRepository<ReadingSessionEn
             @Param("periodStart") Instant periodStart,
             @Param("periodEnd") Instant periodEnd);
 
+    @QueryHints(@QueryHint(name = "org.hibernate.fetchSize", value = "200"))
     @Query("""
             SELECT rs.startTime
             FROM ReadingSessionEntity rs
