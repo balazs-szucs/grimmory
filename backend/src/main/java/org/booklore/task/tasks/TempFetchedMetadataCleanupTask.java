@@ -71,7 +71,7 @@ public class TempFetchedMetadataCleanupTask implements Task {
 
     @Override
     public String getMetadata() {
-        long count = metadataFetchJobRepository.count();
+        long count = metadataFetchJobRepository.countAll();
         return "Metadata " + (count != 1 ? "rows" : "row") + " pending cleanup: " + count;
     }
 }
