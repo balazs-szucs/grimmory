@@ -294,8 +294,9 @@ public class GoogleParser implements BookParser {
             if (seriesNumber == null && seriesInfo.getBookDisplayNumber() != null) {
                 try {
                     seriesNumber = Float.parseFloat(seriesInfo.getBookDisplayNumber());
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException _) {
                     // Not a valid number, ignore
+                    return null;
                 }
             }
             
