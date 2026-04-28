@@ -156,7 +156,7 @@ public class BookFileAttachmentService {
                                     "Invalid source file name for file id " + file.getId());
                         }
 
-                        String newSubPath = relativeSubPath.toString().replace('\\', '/');
+                        String newSubPath = relativeSubPath.toString();
                         Path targetFilePath = targetLibraryRoot.resolve(relativeSubPath).resolve(fileNamePath).normalize();
                         if (!targetFilePath.startsWith(targetLibraryRoot)) {
                             throw ApiError.GENERIC_BAD_REQUEST.createException(
