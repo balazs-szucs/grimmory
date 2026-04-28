@@ -3,9 +3,9 @@ package org.booklore.service.metadata;
 import org.booklore.model.dto.CoverImage;
 import org.booklore.model.dto.request.CoverFetchRequest;
 
-import reactor.core.publisher.Flux;
+import java.util.function.Consumer;
 
 public interface BookCoverProvider {
-    Flux<CoverImage> getCovers(CoverFetchRequest request);
+    void getCovers(CoverFetchRequest request, Consumer<CoverImage> consumer);
 }
 

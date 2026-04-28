@@ -30,6 +30,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 public class AudibleParserTest {
     @Mock private AppSettingService mockAppSettingService;
+    @Mock private org.booklore.service.metadata.RateLimitService rateLimitService;
 
     @InjectMocks
     private AudibleParser audibleParser;
@@ -103,6 +104,12 @@ public class AudibleParserTest {
 
     @BeforeEach
     public void setup() throws Exception {
+        lenient().when(rateLimitService.execute(anyString(), anyLong(), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> {
+                    java.util.function.Supplier<?> supplier = invocation.getArgument(2);
+                    return java.util.concurrent.CompletableFuture.completedFuture(supplier.get());
+                });
+
         when(mockAppSettingService.getAppSettings()).thenReturn(getAppSettings("com"));
 
         mockJsoup = mockStatic(Jsoup.class);

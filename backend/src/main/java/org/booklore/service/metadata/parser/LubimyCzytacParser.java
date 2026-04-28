@@ -21,8 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.booklore.service.metadata.RateLimitService;
 
 @Service
 @Slf4j
@@ -42,6 +45,7 @@ public class LubimyCzytacParser implements BookParser {
     private static final Pattern WHITESPACE_HYPHEN_PATTERN = Pattern.compile("[\\s-]");
 
     private final AppSettingService appSettingService;
+    private final RateLimitService rateLimitService;
 
     @Override
     public List<BookMetadata> fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
@@ -107,6 +111,17 @@ public class LubimyCzytacParser implements BookParser {
     }
 
     @Override
+    public void fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        List<BookMetadata> results = fetchMetadata(book, fetchMetadataRequest);
+        if (results != null) {
+            for (BookMetadata metadata : results) {
+                if (isCancelled.getAsBoolean()) return;
+                consumer.accept(metadata);
+            }
+        }
+    }
+
+    @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         List<BookMetadata> results = fetchMetadata(book, fetchMetadataRequest);
         return results.isEmpty() ? null : results.getFirst();
@@ -146,30 +161,28 @@ public class LubimyCzytacParser implements BookParser {
     }
 
     private Document fetchWithRetry(String url) {
-        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                return Jsoup.connect(url)
-                        .userAgent(USER_AGENT)
-                        .timeout(CONNECTION_TIMEOUT_MS)
-                        .get();
+        return rateLimitService.execute("Lubimyczytac", 1000, () -> {
+            for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    return Jsoup.connect(url)
+                            .userAgent(USER_AGENT)
+                            .timeout(CONNECTION_TIMEOUT_MS)
+                            .get();
 
-            } catch (IOException e) {
-                if (!isConnectivityError(e)) {
-                    log.error("Error connecting to LubimyCzytac", e);
-                    return null;
-                } else {
-                    log.warn("Attempt {}/{} failed to connect to {}. Retrying...", attempt, MAX_RETRIES, url);
-                    try {
-                        Thread.sleep(1000 * attempt);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
+                } catch (IOException e) {
+                    if (!isConnectivityError(e)) {
+                        log.error("Error connecting to LubimyCzytac", e);
+                        return null;
+                    } else if (attempt < MAX_RETRIES) {
+                        log.warn("Attempt {}/{} failed to connect to {}. Retrying...", attempt, MAX_RETRIES, url);
+                        // No sleep here, RateLimitService handles overall pacing
+                        // and retry pacing is implicitly handled by the next call's interval
                     }
                 }
             }
-        }
-
-        log.error("Error connecting to LubimyCzytac. All {} retry attempts failed", MAX_RETRIES);
-        return null;
+            log.error("Error connecting to LubimyCzytac. All {} retry attempts failed", MAX_RETRIES);
+            return null;
+        }).join();
     }
 
     private static List<String> extractBookUrls(Document doc) {

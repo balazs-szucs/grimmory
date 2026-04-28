@@ -15,24 +15,34 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.io.IOException;
 
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+import org.booklore.util.PacedConsumer;
+import org.springframework.scheduling.TaskScheduler;
+import org.booklore.service.metadata.DuckDuckGoCoverService;
+
 @Tag(name = "Authors", description = "Endpoints for retrieving authors related to books")
 @RequestMapping("/api/v1/authors")
 @RestController
 @AllArgsConstructor
+@Slf4j
 public class AuthorController {
 
     private final AuthorService authorService;
     private final AuthorMetadataService authorMetadataService;
+    private final DuckDuckGoCoverService duckDuckGoCoverService;
+    private final TaskScheduler taskScheduler;
+    private final org.springframework.core.task.AsyncTaskExecutor taskExecutor;
 
     @Operation(summary = "Get all authors", description = "Retrieve all authors with book counts.")
     @ApiResponse(responseCode = "200", description = "Authors returned successfully")
@@ -128,8 +138,42 @@ public class AuthorController {
     @ApiResponse(responseCode = "200", description = "Authors auto-matched successfully")
     @PreAuthorize("@securityUtil.canEditMetadata() or @securityUtil.isAdmin()")
     @PostMapping(value = "/auto-match", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<AuthorSummary> autoMatchAuthors(@RequestBody List<Long> authorIds) {
-        return authorMetadataService.autoMatchAuthors(authorIds);
+    public SseEmitter autoMatchAuthors(@RequestBody List<Long> authorIds) {
+        SseEmitter emitter = new SseEmitter(300_000L); // 5 minutes timeout
+        java.util.concurrent.atomic.AtomicBoolean clientGone = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        emitter.onCompletion(() -> clientGone.set(true));
+        emitter.onTimeout(() -> clientGone.set(true));
+        emitter.onError(e -> clientGone.set(true));
+
+        taskExecutor.execute(() -> {
+            try (org.booklore.util.PacedConsumer<AuthorSummary> pacedConsumer = new org.booklore.util.PacedConsumer<>(summary -> {
+                if (clientGone.get()) return;
+                synchronized (emitter) {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .data(summary)
+                                .build());
+                    } catch (IOException e) {
+                        clientGone.set(true);
+                        log.warn("Client disconnected during author auto-match SSE stream", e);
+                    }
+                }
+            }, 50, taskScheduler)) {
+                authorMetadataService.autoMatchAuthors(authorIds, clientGone::get, pacedConsumer);
+            } catch (Exception e) {
+                if (!clientGone.get()) {
+                    log.error("Author auto-match failed", e);
+                    emitter.completeWithError(e);
+                }
+            } finally {
+                if (!clientGone.get()) {
+                    emitter.complete();
+                }
+            }
+        });
+
+        return emitter;
     }
 
     @Operation(summary = "Unmatch authors", description = "Clear metadata for multiple authors.")
@@ -145,10 +189,44 @@ public class AuthorController {
     @ApiResponse(responseCode = "200", description = "Photo search results returned successfully")
     @PreAuthorize("@securityUtil.canEditMetadata() or @securityUtil.isAdmin()")
     @GetMapping(value = "/{authorId}/search-photos", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<CoverImage> searchAuthorPhotos(
+    public SseEmitter searchAuthorPhotos(
             @Parameter(description = "ID of the author") @PathVariable long authorId,
             @Parameter(description = "Author name to search") @RequestParam("q") String query) {
-        return authorMetadataService.searchAuthorPhotos(query);
+        SseEmitter emitter = new SseEmitter(180_000L); // 3 minutes timeout
+        java.util.concurrent.atomic.AtomicBoolean clientGone = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        emitter.onCompletion(() -> clientGone.set(true));
+        emitter.onTimeout(() -> clientGone.set(true));
+        emitter.onError(e -> clientGone.set(true));
+
+        taskExecutor.execute(() -> {
+            try (org.booklore.util.PacedConsumer<CoverImage> pacedConsumer = new org.booklore.util.PacedConsumer<>(image -> {
+                if (clientGone.get()) return;
+                synchronized (emitter) {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .data(image)
+                                .build());
+                    } catch (IOException e) {
+                        clientGone.set(true);
+                        log.warn("Client disconnected during author photo search SSE stream", e);
+                    }
+                }
+            }, 30, taskScheduler)) {
+                authorMetadataService.searchAuthorPhotos(query, clientGone::get, pacedConsumer);
+            } catch (Exception e) {
+                if (!clientGone.get()) {
+                    log.error("Author photo search failed", e);
+                    emitter.completeWithError(e);
+                }
+            } finally {
+                if (!clientGone.get()) {
+                    emitter.complete();
+                }
+            }
+        });
+
+        return emitter;
     }
 
     @Operation(summary = "Upload author photo from URL", description = "Download an image from a URL and save it as the author's photo.")

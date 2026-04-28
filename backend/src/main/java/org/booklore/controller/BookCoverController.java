@@ -12,27 +12,35 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import reactor.core.publisher.Flux;
-import reactor.core.scheduler.Schedulers;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.io.IOException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.booklore.util.PacedConsumer;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.core.task.AsyncTaskExecutor;
 
 @RestController
 @RequestMapping("/api/v1/books")
 @AllArgsConstructor
+@Slf4j
 @Tag(name = "Book Metadata", description = "Endpoints for managing book metadata, covers, and metadata operations")
 public class BookCoverController {
 
     private final BookCoverService bookCoverService;
     private final DuckDuckGoCoverService duckDuckGoCoverService;
+    private final TaskScheduler taskScheduler;
+    private final AsyncTaskExecutor taskExecutor;
 
     @Operation(summary = "Upload cover image from file", description = "Upload a cover image for a book from a file. Requires metadata edit permission or admin.")
     @ApiResponse(responseCode = "200", description = "Cover image uploaded successfully")
@@ -153,14 +161,43 @@ public class BookCoverController {
     @PostMapping(value = "/{bookId}/metadata/covers", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("@securityUtil.canEditMetadata() or @securityUtil.isAdmin()")
     @CheckBookAccess(bookIdParam = "bookId")
-    public Flux<ServerSentEvent<CoverImage>> getImages(
+    public SseEmitter getImages(
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Cover fetch request") @RequestBody CoverFetchRequest request) {
-        return duckDuckGoCoverService.getCovers(request)
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(image -> ServerSentEvent.<CoverImage>builder()
-                        .data(image)
-                        .build())
-                .onErrorMap(e -> ApiError.INTERNAL_SERVER_ERROR.createException("DuckDuckGo cover fetch failed"));
+        SseEmitter emitter = new SseEmitter(180_000L); // 3 minutes timeout
+        AtomicBoolean clientGone = new AtomicBoolean(false);
+
+        emitter.onCompletion(() -> clientGone.set(true));
+        emitter.onTimeout(() -> clientGone.set(true));
+        emitter.onError(e -> clientGone.set(true));
+
+        taskExecutor.execute(() -> {
+            try (PacedConsumer<CoverImage> pacedConsumer = new PacedConsumer<>(image -> {
+                if (clientGone.get()) return;
+                synchronized (emitter) {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .data(image)
+                                .build());
+                    } catch (IOException e) {
+                        clientGone.set(true);
+                        log.warn("Client disconnected during cover image SSE stream", e);
+                    }
+                }
+            }, 30, taskScheduler)) {
+                duckDuckGoCoverService.getCovers(request, clientGone::get, pacedConsumer);
+            } catch (Exception e) {
+                if (!clientGone.get()) {
+                    log.error("Failed to fetch cover images", e);
+                    emitter.completeWithError(e);
+                }
+            } finally {
+                if (!clientGone.get()) {
+                    emitter.complete();
+                }
+            }
+        });
+
+        return emitter;
     }
 }

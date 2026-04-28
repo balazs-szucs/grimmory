@@ -23,11 +23,14 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.booklore.service.metadata.RateLimitService;
 
 @Slf4j
 @Service
@@ -44,13 +47,14 @@ public class GoogleParser implements BookParser {
     private final ObjectMapper objectMapper;
     private final AppSettingService appSettingService;
     private final HttpClient httpClient;
+    private final RateLimitService rateLimitService;
     private static final String GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes";
-    private final AtomicLong lastRequestTime = new AtomicLong(0);
 
-    public GoogleParser(ObjectMapper objectMapper, AppSettingService appSettingService, HttpClient httpClient) {
+    public GoogleParser(ObjectMapper objectMapper, AppSettingService appSettingService, HttpClient httpClient, RateLimitService rateLimitService) {
         this.objectMapper = objectMapper;
         this.appSettingService = appSettingService;
         this.httpClient = httpClient;
+        this.rateLimitService = rateLimitService;
     }
 
     @Override
@@ -102,6 +106,17 @@ public class GoogleParser implements BookParser {
         return results;
     }
 
+    @Override
+    public void fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        List<BookMetadata> results = fetchMetadata(book, fetchMetadataRequest);
+        if (results != null) {
+            for (BookMetadata metadata : results) {
+                if (isCancelled.getAsBoolean()) return;
+                consumer.accept(metadata);
+            }
+        }
+    }
+
     private String buildSearchTerm(String title, String author) {
         String searchTerm = SPECIAL_CHARACTERS_PATTERN.matcher(title).replaceAll("").trim();
         searchTerm = "intitle:" + truncateToMaxWords(searchTerm);
@@ -136,37 +151,37 @@ public class GoogleParser implements BookParser {
     }
 
     private List<BookMetadata> fetchFromApi(String query, boolean isIsbnSearch) {
-        try {
-            waitForRateLimit();
+        return rateLimitService.execute("Google", MIN_REQUEST_INTERVAL_MS, () -> {
+            try {
+                // Use smaller maxResults for ISBN searches (typically return 1-3 results)
+                // Use larger maxResults for title/author searches to find best match
+                int maxResults = isIsbnSearch ? 5 : MAX_RESULTS;
 
-            // Use smaller maxResults for ISBN searches (typically return 1-3 results)
-            // Use larger maxResults for title/author searches to find best match
-            int maxResults = isIsbnSearch ? 5 : MAX_RESULTS;
+                UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(getApiUrl())
+                        .queryParam("q", query)
+                        .queryParam("maxResults", maxResults);
+                
+                URI uri = uriBuilder.build().toUri();
 
-            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(getApiUrl())
-                    .queryParam("q", query)
-                    .queryParam("maxResults", maxResults);
-            
-            URI uri = uriBuilder.build().toUri();
+                log.info("Google Books API URL: {}", uri);
 
-            log.info("Google Books API URL: {}", uri);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(uri)
+                        .GET()
+                        .build();
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .GET()
-                    .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            return handleApiResponse(response);
-        } catch (IOException e) {
-            log.error("IO error while fetching metadata from Google Books API: {}", e.getMessage());
-            return List.of();
-        } catch (InterruptedException e) {
-            log.error("Request to Google Books API was interrupted");
-            Thread.currentThread().interrupt();
-            return List.of();
-        }
+                return handleApiResponse(response);
+            } catch (IOException e) {
+                log.error("IO error while fetching metadata from Google Books API: {}", e.getMessage());
+                return List.<BookMetadata>of();
+            } catch (InterruptedException e) {
+                log.error("Request to Google Books API was interrupted");
+                Thread.currentThread().interrupt();
+                return List.<BookMetadata>of();
+            }
+        }).join();
     }
 
     private List<BookMetadata> handleApiResponse(HttpResponse<String> response) throws IOException {
@@ -591,19 +606,6 @@ public class GoogleParser implements BookParser {
         }
 
         return builder.build().toUri().toString();
-    }
-
-    private void waitForRateLimit() {
-        long now = System.currentTimeMillis();
-        long timeSinceLastRequest = now - lastRequestTime.get();
-        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-            try {
-                Thread.sleep(MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        lastRequestTime.set(System.currentTimeMillis());
     }
 
     /**

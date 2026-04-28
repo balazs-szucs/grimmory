@@ -14,18 +14,29 @@ import org.mockito.MockitoAnnotations;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class RanobeDbParserTest {
 
     @Mock
     private AppSettingService appSettingService;
 
+    @Mock
+    private org.booklore.service.metadata.RateLimitService rateLimitService;
+
     @InjectMocks
     private RanobeDbParser parser;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        lenient().when(rateLimitService.execute(anyString(), anyLong(), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> {
+                    java.util.function.Supplier<?> supplier = invocation.getArgument(2);
+                    return java.util.concurrent.CompletableFuture.completedFuture(supplier.get());
+                });
     }
 
     @Test

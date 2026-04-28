@@ -35,9 +35,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import org.springframework.core.task.AsyncTaskExecutor;
 
 import org.booklore.model.dto.request.IsbnLookupRequest;
 
@@ -46,6 +46,12 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.springframework.scheduling.TaskScheduler;
+import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -66,6 +72,7 @@ public class BookMetadataService {
     private final MetadataClearFlagsMapper metadataClearFlagsMapper;
     private final PlatformTransactionManager transactionManager;
     private final AppSettingService appSettingService;
+    private final TaskScheduler taskScheduler;
 
     @Transactional
     public BookMetadata updateBookMetadata(long bookId, MetadataUpdateWrapper metadataUpdateWrapper,
@@ -91,19 +98,43 @@ public class BookMetadataService {
     }
 
     @Transactional(readOnly = true)
-    public Flux<BookMetadata> getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request) {
-        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
-        Book book = bookMapper.toBook(bookEntity);
+    public Book getFullBookDto(long bookId) {
+        BookEntity bookEntity = bookRepository.findByIdWithAllRelationships(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        return bookMapper.toBook(bookEntity);
+    }
 
-        return Flux.fromIterable(request.getProviders())
-                .flatMap(provider ->
-                    Flux.defer(() -> getParser(provider).fetchMetadataStream(book, request))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .onErrorResume(e -> {
-                                log.error("Error fetching metadata from provider: {}", provider, e);
-                                return Flux.empty();
-                            })
-                );
+    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request, Consumer<BookMetadata> consumer) {
+        getProspectiveMetadataListForBookId(bookId, request, () -> false, consumer);
+    }
+
+    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate.setReadOnly(true);
+        Book book = transactionTemplate.execute(status -> getFullBookDto(bookId));
+
+        List<MetadataProvider> providers = request.getProviders();
+        if (providers == null || providers.isEmpty()) return;
+
+        try (var scope = StructuredTaskScope.open()) {
+            for (MetadataProvider provider : providers) {
+                scope.fork(() -> {
+                    if (isCancelled.getAsBoolean()) return null;
+                    try {
+                        BookParser parser = getParser(provider);
+                        parser.fetchMetadata(book, request, isCancelled, metadata -> {
+                            if (isCancelled.getAsBoolean()) return;
+                            consumer.accept(metadata);
+                        });
+                    } catch (Exception e) {
+                        log.error("Error fetching metadata from provider: {}", provider, e);
+                    }
+                    return null;
+                });
+            }
+            scope.join();
+        } catch (Exception e) {
+            log.error("Failed to complete structured task scope for metadata fetching", e);
+        }
     }
 
     public List<BookMetadata> fetchMetadataListFromAProvider(MetadataProvider provider, Book book, FetchMetadataRequest request) {

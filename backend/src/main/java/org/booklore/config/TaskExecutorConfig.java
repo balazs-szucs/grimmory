@@ -19,16 +19,7 @@ public class TaskExecutorConfig {
 
     @Bean(name = "taskExecutor")
     public AsyncTaskExecutor taskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setThreadNamePrefix("async-");
-        executor.setCorePoolSize(Runtime.getRuntime().availableProcessors());
-        executor.setMaxPoolSize(Runtime.getRuntime().availableProcessors() * 2);
-        executor.setQueueCapacity(500);
-        executor.setTaskDecorator(DelegatingSecurityContextRunnable::new);
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(60);
-        executor.initialize();
-        return executor;
+        return new VirtualThreadTaskExecutor("virtual-");
     }
 
     @Bean

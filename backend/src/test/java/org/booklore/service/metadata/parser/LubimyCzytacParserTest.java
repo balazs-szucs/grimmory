@@ -25,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,8 +34,10 @@ class LubimyCzytacParserTest {
     @Mock
     private AppSettingService appSettingService;
 
-    private MockedStatic<Jsoup> mockJsoup;
+    @Mock
+    private org.booklore.service.metadata.RateLimitService rateLimitService;
 
+    private MockedStatic<Jsoup> mockJsoup;
     @InjectMocks
     private LubimyCzytacParser parser;
 
@@ -43,12 +46,17 @@ class LubimyCzytacParserTest {
     private String exampleBookHtmlFixture;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() throws IOException {
         exampleSearchHtmlFixture = readFixture("example-search.html");
         exampleBookHtmlFixture = readFixture("example-book.html");
 
         mockJsoup = mockStatic(Jsoup.class);
-
+        lenient().when(rateLimitService.execute(anyString(), anyLong(), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> {
+                    java.util.function.Supplier<?> supplier = invocation.getArgument(2);
+                    return java.util.concurrent.CompletableFuture.completedFuture(supplier.get());
+                });
     }
 
     @AfterEach

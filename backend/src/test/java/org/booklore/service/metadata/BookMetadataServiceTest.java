@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -66,6 +67,7 @@ class BookMetadataServiceTest {
     @Mock private MetadataClearFlagsMapper metadataClearFlagsMapper;
     @Mock private PlatformTransactionManager transactionManager;
     @Mock private AppSettingService appSettingService;
+    @Mock private TaskScheduler taskScheduler;
 
     private Map<MetadataProvider, BookParser> parserMap;
     private BookMetadataService service;
@@ -77,7 +79,8 @@ class BookMetadataServiceTest {
                 bookRepository, bookMapper, bookMetadataMapper, bookMetadataUpdater,
                 notificationService, bookMetadataRepository, bookQueryService,
                 auditService, parserMap, cbxMetadataExtractor, metadataExtractorFactory,
-                metadataClearFlagsMapper, transactionManager, appSettingService
+                metadataClearFlagsMapper, transactionManager, appSettingService,
+                taskScheduler
         );
     }
 
@@ -583,12 +586,12 @@ class BookMetadataServiceTest {
 
         @Test
         void throwsWhenBookNotFound() {
-            when(bookRepository.findByIdWithBookFiles(99L)).thenReturn(Optional.empty());
+            when(bookRepository.findByIdWithAllRelationships(99L)).thenReturn(Optional.empty());
             FetchMetadataRequest request = FetchMetadataRequest.builder()
                     .providers(List.of(MetadataProvider.Google))
                     .build();
 
-            assertThatThrownBy(() -> service.getProspectiveMetadataListForBookId(99L, request))
+            assertThatThrownBy(() -> service.getProspectiveMetadataListForBookId(99L, request, metadata -> {}))
                     .isInstanceOf(APIException.class);
         }
     }

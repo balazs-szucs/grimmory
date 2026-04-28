@@ -102,8 +102,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
-    // --- Reactive Streams ---
-    implementation("io.projectreactor:reactor-core")
 
     // --- Database & Migration ---
     implementation("org.mariadb.jdbc:mariadb-java-client:3.5.8")

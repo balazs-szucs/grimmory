@@ -15,6 +15,7 @@ import org.booklore.service.audit.AuditService;
 import org.booklore.service.metadata.DuckDuckGoCoverService;
 import org.booklore.service.metadata.parser.AuthorParser;
 import org.booklore.util.FileService;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,8 @@ class AuthorMetadataServiceTest {
     @Mock private DuckDuckGoCoverService duckDuckGoCoverService;
     @Mock private AuthenticationService authenticationService;
     @Mock private AppSettingService appSettingService;
+    @Mock private PlatformTransactionManager transactionManager;
+    @Mock private org.springframework.core.task.AsyncTaskExecutor taskExecutor;
 
     private AuthorMetadataService service;
 
@@ -59,7 +62,9 @@ class AuthorMetadataServiceTest {
                 fileService,
                 duckDuckGoCoverService,
                 authenticationService,
-                appSettingService
+                appSettingService,
+                transactionManager,
+                taskExecutor
         );
 
         BookLoreUser.UserPermissions adminPermissions = new BookLoreUser.UserPermissions();

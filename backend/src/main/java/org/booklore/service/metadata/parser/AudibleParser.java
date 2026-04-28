@@ -27,9 +27,12 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.booklore.service.metadata.RateLimitService;
 
 @Slf4j
 @Service
@@ -62,7 +65,7 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
 
     private final AppSettingService appSettingService;
     private final ObjectMapper objectMapper;
-    private final AtomicLong lastRequestTime = new AtomicLong(0);
+    private final RateLimitService rateLimitService;
 
     private record LocaleInfo(String acceptLanguage, Locale locale) {}
 
@@ -76,6 +79,25 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
     }
 
     @Override
+    public void fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        List<String> audibleIds = getAudibleIds(book, fetchMetadataRequest);
+        if (audibleIds.isEmpty()) return;
+
+        for (int i = 0; i < audibleIds.size() && i < COUNT_DETAILED_METADATA_TO_GET; i++) {
+            if (isCancelled.getAsBoolean()) break;
+            try {
+                String audibleId = audibleIds.get(i);
+                BookMetadata metadata = getBookMetadata(audibleId);
+                if (metadata != null) {
+                    consumer.accept(metadata);
+                }
+            } catch (Exception e) {
+                log.error("Error fetching metadata for Audible ID: {}", audibleIds.get(i), e);
+            }
+        }
+    }
+
+    @Override
     public List<BookMetadata> fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         List<String> audibleIds = getAudibleIds(book, fetchMetadataRequest);
         if (audibleIds.isEmpty()) {
@@ -84,16 +106,10 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
         List<BookMetadata> results = new ArrayList<>();
         for (int i = 0; i < audibleIds.size() && results.size() < COUNT_DETAILED_METADATA_TO_GET; i++) {
             try {
-                if (i > 0) {
-                    Thread.sleep(ThreadLocalRandom.current().nextLong(500, 1501));
-                }
                 BookMetadata metadata = getBookMetadata(audibleIds.get(i));
                 if (metadata != null) {
                     results.add(metadata);
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
             } catch (Exception e) {
                 log.error("Error fetching metadata for Audible ID: {}", audibleIds.get(i), e);
             }
@@ -149,45 +165,45 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
             return Collections.emptyList();
         }
 
-        List<String> bookIds = new ArrayList<>();
-        try {
-            enforceRateLimit();
-            Document doc = fetchDocument(queryUrl);
+        return rateLimitService.execute("Audible", MIN_REQUEST_INTERVAL_MS, () -> {
+            List<String> bookIds = new ArrayList<>();
+            try {
+                Document doc = fetchDocument(queryUrl);
 
-            Elements allLinks = doc.select("a[href*='/pd/']");
-            for (Element link : allLinks) {
-                String href = link.attr("href");
-                Matcher matcher = ASIN_PATH_PATTERN.matcher(href);
-                if (matcher.find()) {
-                    String asin = matcher.group(1);
-                    if (asin != null && !asin.isEmpty() && !bookIds.contains(asin)) {
-                        bookIds.add(asin);
+                Elements allLinks = doc.select("a[href*='/pd/']");
+                for (Element link : allLinks) {
+                    String href = link.attr("href");
+                    Matcher matcher = ASIN_PATH_PATTERN.matcher(href);
+                    if (matcher.find()) {
+                        String asin = matcher.group(1);
+                        if (asin != null && !asin.isEmpty() && !bookIds.contains(asin)) {
+                            bookIds.add(asin);
+                        }
                     }
                 }
+
+            } catch (Exception e) {
+                log.error("Failed to get Audible IDs: {}", e.getMessage(), e);
             }
-
-        } catch (Exception e) {
-            log.error("Failed to get Audible IDs: {}", e.getMessage(), e);
-        }
-
-        log.info("Audible: Found {} book ids", bookIds.size());
-        return bookIds;
+            log.info("Audible: Found {} book ids", bookIds.size());
+            return bookIds;
+        }).join();
     }
 
     private BookMetadata getBookMetadata(String audibleId) {
-        log.info("Audible: Fetching metadata for: {}", audibleId);
+        return rateLimitService.execute("Audible", MIN_REQUEST_INTERVAL_MS, () -> {
+            log.info("Audible: Fetching metadata for: {}", audibleId);
+            String domain = getDomain();
+            String url = "https://www.audible." + domain + "/pd/" + audibleId;
 
-        String domain = getDomain();
-        String url = "https://www.audible." + domain + "/pd/" + audibleId;
-
-        try {
-            enforceRateLimit();
-            Document doc = fetchDocument(url);
-            return buildBookMetadataFromJsonLd(doc, audibleId);
-        } catch (Exception e) {
-            log.error("Failed to fetch Audible metadata for ID {}: {}", audibleId, e.getMessage());
-            return null;
-        }
+            try {
+                Document doc = fetchDocument(url);
+                return buildBookMetadataFromJsonLd(doc, audibleId);
+            } catch (Exception e) {
+                log.error("Failed to fetch Audible metadata for ID {}: {}", audibleId, e.getMessage());
+                return null;
+            }
+        }).join();
     }
 
     private BookMetadata buildBookMetadataFromJsonLd(Document doc, String audibleId) {
@@ -502,22 +518,6 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
             log.error("Error fetching Audible URL: {}", url, e);
             throw new RuntimeException(e);
         }
-    }
-
-    private void enforceRateLimit() {
-        long now = System.currentTimeMillis();
-        long lastRequest = lastRequestTime.get();
-        long elapsed = now - lastRequest;
-
-        if (elapsed < MIN_REQUEST_INTERVAL_MS) {
-            try {
-                Thread.sleep(MIN_REQUEST_INTERVAL_MS - elapsed);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        lastRequestTime.set(System.currentTimeMillis());
     }
 
     private String getDomain() {

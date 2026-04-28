@@ -26,9 +26,11 @@ import org.booklore.util.FileService;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.web.multipart.MultipartFile;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +42,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -55,6 +59,7 @@ public class AuthorMetadataService {
     private final DuckDuckGoCoverService duckDuckGoCoverService;
     private final AuthenticationService authenticationService;
     private final AppSettingService appSettingService;
+    private final PlatformTransactionManager transactionManager;
 
     public List<AuthorSummary> getAllAuthors() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
@@ -151,29 +156,41 @@ public class AuthorMetadataService {
         throw ApiError.GENERIC_BAD_REQUEST.createException("No metadata found for author: " + author.getName());
     }
 
-    public Flux<AuthorSummary> autoMatchAuthors(List<Long> authorIds) {
-        return Flux.fromIterable(authorIds)
-                .concatMap(authorId ->
-                        Mono.fromCallable(() -> {
-                            AuthorEntity author = authorRepository.findById(authorId).orElse(null);
-                            if (author == null) return null;
-                            AuthorDetails details = quickMatchAuthor(authorId, "us");
-                            return AuthorSummary.builder()
+    private final AsyncTaskExecutor taskExecutor;
+
+    public void autoMatchAuthors(List<Long> authorIds, Consumer<AuthorSummary> consumer) {
+        autoMatchAuthors(authorIds, () -> false, consumer);
+    }
+
+    public void autoMatchAuthors(List<Long> authorIds, BooleanSupplier isCancelled, Consumer<AuthorSummary> consumer) {
+        if (authorIds == null || authorIds.isEmpty()) return;
+
+        try (var scope = StructuredTaskScope.open()) {
+            for (Long authorId : authorIds) {
+                scope.fork(() -> {
+                    if (isCancelled.getAsBoolean()) return null;
+                    try {
+                        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+                        AuthorDetails details = transactionTemplate.execute(status -> quickMatchAuthor(authorId, "us"));
+                        if (details != null) {
+                            AuthorSummary summary = AuthorSummary.builder()
                                     .id(details.getId())
                                     .name(details.getName())
                                     .asin(details.getAsin())
                                     .hasPhoto(Files.exists(Paths.get(fileService.getAuthorThumbnailFile(authorId))))
                                     .build();
-                        })
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .delayElement(java.time.Duration.ofMillis(
-                                java.util.concurrent.ThreadLocalRandom.current().nextLong(250, 750)))
-                        .onErrorResume(e -> {
-                            log.warn("Failed to auto-match author ID {}: {}", authorId, e.getMessage());
-                            return Mono.empty();
-                        })
-                )
-                .filter(java.util.Objects::nonNull);
+                            consumer.accept(summary);
+                        }
+                    } catch (Exception e) {
+                        log.error("Failed to auto-match author with ID: {}", authorId, e);
+                    }
+                    return null;
+                });
+            }
+            scope.join();
+        } catch (Exception e) {
+            log.error("Failed to complete structured task scope for author auto-matching", e);
+        }
     }
 
     @Transactional
@@ -292,10 +309,18 @@ public class AuthorMetadataService {
         return toAuthorDetails(author);
     }
 
-    public Flux<CoverImage> searchAuthorPhotos(String name) {
+    public void searchAuthorPhotos(String name, Consumer<CoverImage> consumer) {
+        searchAuthorPhotos(name, () -> false, consumer);
+    }
+
+    public void searchAuthorPhotos(String name, BooleanSupplier isCancelled, Consumer<CoverImage> consumer) {
         String searchTerm = name + " author photo portrait";
-        return duckDuckGoCoverService.searchImages(searchTerm)
-                .take(50);
+        AtomicInteger count = new AtomicInteger(0);
+        duckDuckGoCoverService.searchImages(searchTerm, isCancelled, image -> {
+            if (count.getAndIncrement() < 50) {
+                consumer.accept(image);
+            }
+        });
     }
 
     @Transactional

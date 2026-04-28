@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.security.annotation.CheckBookAccess;
 import org.booklore.model.MetadataUpdateWrapper;
 import org.booklore.model.dto.BookMetadata;
@@ -15,34 +16,75 @@ import org.booklore.model.enums.MetadataReplaceMode;
 import org.booklore.service.metadata.BookMetadataService;
 import org.booklore.service.metadata.MetadataManagementService;
 import org.booklore.service.metadata.MetadataMatchService;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.scheduling.TaskScheduler;
+import java.io.IOException;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController
 @RequestMapping("/api/v1/books")
 @AllArgsConstructor
+@Slf4j
 @Tag(name = "Book Metadata", description = "Endpoints for managing book metadata, covers, and metadata operations")
 public class MetadataController {
 
     private final BookMetadataService bookMetadataService;
     private final MetadataMatchService metadataMatchService;
     private final MetadataManagementService metadataManagementService;
+    private final TaskScheduler taskScheduler;
+    private final AsyncTaskExecutor taskExecutor;
 
     @Operation(summary = "Get prospective metadata for a book", description = "Fetch prospective metadata for a book by its ID. Requires metadata edit permission or admin.")
     @ApiResponse(responseCode = "200", description = "Prospective metadata returned successfully")
     @PostMapping(value = "/{bookId}/metadata/prospective", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("@securityUtil.canEditMetadata() or @securityUtil.isAdmin()")
     @CheckBookAccess(bookIdParam = "bookId")
-    public Flux<BookMetadata> getMetadataList(
+    public SseEmitter getMetadataList(
             @Parameter(description = "Fetch metadata request") @RequestBody(required = false) FetchMetadataRequest fetchMetadataRequest,
             @Parameter(description = "ID of the book") @PathVariable Long bookId) {
-        return bookMetadataService.getProspectiveMetadataListForBookId(bookId, fetchMetadataRequest);
+        SseEmitter emitter = new SseEmitter(180_000L); // 3 minutes timeout
+        AtomicBoolean clientGone = new AtomicBoolean(false);
+
+        emitter.onCompletion(() -> clientGone.set(true));
+        emitter.onTimeout(() -> clientGone.set(true));
+        emitter.onError(e -> clientGone.set(true));
+
+        taskExecutor.execute(() -> {
+            try (org.booklore.util.PacedConsumer<BookMetadata> pacedConsumer = new org.booklore.util.PacedConsumer<>(metadata -> {
+                if (clientGone.get()) return;
+                synchronized (emitter) {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .data(metadata)
+                                .build());
+                    } catch (IOException e) {
+                        clientGone.set(true);
+                        log.warn("Client disconnected during metadata SSE stream", e);
+                    }
+                }
+            }, 50, taskScheduler)) {
+                bookMetadataService.getProspectiveMetadataListForBookId(bookId, fetchMetadataRequest, clientGone::get, pacedConsumer);
+            } catch (Exception e) {
+                if (!clientGone.get()) {
+                    log.error("Failed to fetch prospective metadata list", e);
+                    emitter.completeWithError(e);
+                }
+            } finally {
+                if (!clientGone.get()) {
+                    emitter.complete();
+                }
+            }
+        });
+
+        return emitter;
     }
 
     @Operation(summary = "Update book metadata", description = "Update metadata for a book. Requires metadata edit permission or admin.")

@@ -25,9 +25,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.booklore.service.metadata.RateLimitService;
 
 @Slf4j
 @Service
@@ -89,6 +92,7 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
     private static final LocaleInfo DEFAULT_LOCALE_INFO = new LocaleInfo("en-US,en;q=0.9", Locale.US);
 
     private final AppSettingService appSettingService;
+    private final RateLimitService rateLimitService;
 
     private record LocaleInfo(String acceptLanguage, Locale locale) {}
     private record TitleInfo(String title, String subtitle) {}
@@ -112,21 +116,33 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
         List<BookMetadata> results = new ArrayList<>();
         for (int i = 0; i < amazonBookIds.size() && results.size() < COUNT_DETAILED_METADATA_TO_GET; i++) {
             try {
-                if (i > 0) {
-                    Thread.sleep(ThreadLocalRandom.current().nextLong(500, 1501));
-                }
                 BookMetadata metadata = getBookMetadata(amazonBookIds.get(i));
                 if (metadata != null) {
                     results.add(metadata);
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
             } catch (Exception e) {
                 log.error("Error fetching metadata for ASIN: {}", amazonBookIds.get(i), e);
             }
         }
         return results;
+    }
+
+    @Override
+    public void fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        List<String> amazonBookIds = getAmazonBookIds(book, fetchMetadataRequest);
+        if (amazonBookIds.isEmpty()) return;
+
+        for (String asin : amazonBookIds) {
+            if (isCancelled.getAsBoolean()) return;
+            try {
+                BookMetadata metadata = getBookMetadata(asin);
+                if (metadata != null) {
+                    consumer.accept(metadata);
+                }
+            } catch (Exception e) {
+                log.error("Error fetching metadata for ASIN: {}", asin, e);
+            }
+        }
     }
 
     @Override
@@ -794,59 +810,56 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
     }
 
     private Document fetchDocument(String url) {
-        try {
-            String domain = appSettingService.getAppSettings().getMetadataProviderSettings().getAmazon().getDomain();
-            String amazonCookie = appSettingService.getAppSettings().getMetadataProviderSettings().getAmazon().getCookie();
+        return rateLimitService.execute("Amazon", 2000, () -> {
+            try {
+                String domain = appSettingService.getAppSettings().getMetadataProviderSettings().getAmazon().getDomain();
+                String amazonCookie = appSettingService.getAppSettings().getMetadataProviderSettings().getAmazon().getCookie();
 
-            LocaleInfo localeInfo = getLocaleInfoForDomain(domain);
+                LocaleInfo localeInfo = getLocaleInfoForDomain(domain);
 
-            Connection connection = Jsoup.connect(url)
-                    .header("accept", "text/html, application/json")
-                    .header("accept-language", localeInfo.acceptLanguage)
-                    .header("content-type", "application/json")
-                    .header("device-memory", "8")
-                    .header("downlink", "10")
-                    .header("dpr", "2")
-                    .header("ect", "4g")
-                    .header("origin", "https://www.amazon." + domain)
-                    .header("priority", "u=1, i")
-                    .header("rtt", "50")
-                    .header("sec-ch-device-memory", "8")
-                    .header("sec-ch-dpr", "2")
-                    .header("sec-ch-ua", "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not_A Brand\";v=\"24\"")
-                    .header("sec-ch-ua-mobile", "?0")
-                    .header("sec-ch-ua-platform", "\"macOS\"")
-                    .header("sec-ch-viewport-width", "1170")
-                    .header("sec-fetch-dest", "empty")
-                    .header("sec-fetch-mode", "cors")
-                    .header("sec-fetch-site", "same-origin")
-                    .header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
-                    .header("viewport-width", "1170")
-                    .header("x-amz-amabot-click-attributes", "disable")
-                    .header("x-requested-with", "XMLHttpRequest")
-                    .method(Connection.Method.GET);
+                Connection connection = Jsoup.connect(url)
+                        .header("accept", "text/html, application/json")
+                        .header("accept-language", localeInfo.acceptLanguage)
+                        .header("content-type", "application/json")
+                        .header("device-memory", "8")
+                        .header("downlink", "10")
+                        .header("dpr", "2")
+                        .header("ect", "4g")
+                        .header("origin", "https://www.amazon." + domain)
+                        .header("priority", "u=1, i")
+                        .header("rtt", "50")
+                        .header("sec-ch-device-memory", "8")
+                        .header("sec-ch-dpr", "2")
+                        .header("sec-ch-ua", "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not_A Brand\";v=\"24\"")
+                        .header("sec-ch-ua-mobile", "?0")
+                        .header("sec-ch-ua-platform", "\"macOS\"")
+                        .header("sec-ch-viewport-width", "1392")
+                        .header("sec-fetch-dest", "empty")
+                        .header("sec-fetch-mode", "cors")
+                        .header("sec-fetch-site", "same-origin")
+                        .header("service-worker-navigation-preload", "true")
+                        .header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
+                        .header("viewport-width", "1392")
+                        .header("x-requested-with", "XMLHttpRequest");
 
-            if (amazonCookie != null && !amazonCookie.isBlank()) {
-                connection.header("cookie", amazonCookie);
+                if (amazonCookie != null && !amazonCookie.isBlank()) {
+                    connection.header("cookie", amazonCookie);
+                }
+
+                return connection.get();
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 503) {
+                    log.warn("Amazon anti-scraping detected (503). Setting backoff.");
+                    rateLimitService.setBackoffUntil("Amazon", System.currentTimeMillis() + 60000);
+                    throw new AmazonAntiScrapingException("Amazon 503 Anti-Scraping");
+                }
+                log.error("HTTP error fetching Amazon URL. Status={}, URL=[{}]", e.getStatusCode(), url);
+                throw new RuntimeException(e);
+            } catch (IOException e) {
+                log.error("IO error fetching Amazon URL: {}", url, e);
+                throw new RuntimeException(e);
             }
-
-            Connection.Response response = connection.execute();
-            return response.parse();
-        } catch (HttpStatusException e) {
-            if (e.getStatusCode() == 503) {
-                log.info("Amazon service unavailable (503). Please note: this is NOT a Booklore bug. Likely causes include: rate-limiting or failed captcha. Action required: Update cookies or select an alternative metadata source in the Metadata 2 UI. URL: {}", url);
-                throw new AmazonAntiScrapingException("Amazon 503 Anti-Scraping");
-            }
-            if (e.getStatusCode() == 500) {
-                log.info("Amazon internal server error (500). Please note: this is NOT a Booklore bug. Likely causes include: temporary server issues or anti-bot measures. Action required: Retry later or select an alternative metadata source in the Metadata 2 UI. URL: {}", url);
-                throw new AmazonAntiScrapingException("Amazon 500 Internal Server Error");
-            }
-            log.error("HTTP error fetching URL. Status={}, URL=[{}]", e.getStatusCode(), url, e);
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            log.error("Error parsing url: {}", url, e);
-            throw new RuntimeException(e);
-        }
+        }).join();
     }
 
     private static LocaleInfo getLocaleInfoForDomain(String domain) {

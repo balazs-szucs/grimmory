@@ -22,7 +22,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class GoogleParserTest {
@@ -35,12 +35,22 @@ class GoogleParserTest {
     @Mock
     private HttpClient httpClient;
 
+    @Mock
+    private org.booklore.service.metadata.RateLimitService rateLimitService;
+
     private GoogleParser googleParser;
 
     @BeforeEach
-    void setUp() {
+    @SuppressWarnings("unchecked")
+    void setUp() throws Exception {
         MockitoAnnotations.openMocks(this);
         objectMapper = new ObjectMapper();
+
+        when(rateLimitService.execute(anyString(), anyLong(), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> {
+                    java.util.function.Supplier<?> supplier = invocation.getArgument(2);
+                    return java.util.concurrent.CompletableFuture.completedFuture(supplier.get());
+                });
         
         // Mock AppSettings chain
         MetadataProviderSettings.Google googleSettings = new MetadataProviderSettings.Google();
@@ -55,7 +65,7 @@ class GoogleParserTest {
         
         when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
-        googleParser = new GoogleParser(objectMapper, appSettingService, httpClient);
+        googleParser = new GoogleParser(objectMapper, appSettingService, httpClient, rateLimitService);
     }
 
     @Test

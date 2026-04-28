@@ -25,11 +25,15 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.booklore.service.metadata.RateLimitService;
 
 @Slf4j
 @Service
@@ -38,34 +42,32 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
     private static final String COMICVINE_URL = "https://comicvine.gamespot.com/api/";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final Pattern DIGIT_PATTERN = Pattern.compile("\\d+");
-    private static final Pattern SERIES_ISSUE_PATTERN = Pattern.compile("^(.+?)\\s+#?(\\d+(?:\\.\\d+)?)(?:\\s|$)", Pattern.CASE_INSENSITIVE);
     private static final Pattern DIGITAL_PATTERN = Pattern.compile("\\(digital\\)", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARENTHETICAL_PATTERN = Pattern.compile("\\([^)]*\\)");
     private static final Pattern BRACKETED_PATTERN = Pattern.compile("\\[[^\\]]*\\]");
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
-    private static final Pattern SPECIAL_ISSUE_PATTERN = Pattern.compile("(annual|special|one-?shot)\\s+(\\d+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern YEAR_PATTERN = Pattern.compile("\\(?(\\d{4})\\)?");
-    private static final long MIN_REQUEST_INTERVAL_MS = 2000;
-
-    private static final String VOLUME_FIELDS = "id,name,publisher,start_year,count_of_issues,description,deck,image,site_detail_url,aliases,first_issue,last_issue";
-    private static final String ISSUE_LIST_FIELDS = "api_detail_url,cover_date,store_date,description,deck,id,image,issue_number,name,volume,site_detail_url,aliases,person_credits,character_credits,team_credits,story_arc_credits,location_credits";
-    private static final String ISSUE_DETAIL_FIELDS = "api_detail_url,cover_date,store_date,description,deck,id,image,issue_number,name,person_credits,volume,site_detail_url,aliases,character_credits,team_credits,story_arc_credits,location_credits";
-    private static final String SEARCH_FIELDS = "api_detail_url,cover_date,store_date,description,deck,id,image,issue_number,name,publisher,volume,site_detail_url,resource_type,start_year,count_of_issues,aliases,person_credits";
-    private static final Pattern ISSUE_NUMBER_PATTERN = Pattern.compile("issue\\s*#?\\d+");
-    private static final Pattern ID_FORMAT_PATTERN = Pattern.compile("\\d+-?\\d*");
+    private static final Pattern SPECIAL_ISSUE_PATTERN = Pattern.compile("\\b(annual|special|one-shot|one shot)\\s+#?(\\d+)?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SERIES_ISSUE_PATTERN = Pattern.compile("^(.*?)\\s+#?(\\d+(?:\\.\\d+)?)$");
+    private static final Pattern ISSUE_NUMBER_PATTERN = Pattern.compile("^#?\\d+(?:\\.\\d+)?$");
+    private static final Pattern DIGIT_PATTERN = Pattern.compile("^\\d+$");
     private static final Pattern TRAILING_SLASHES_PATTERN = Pattern.compile("/+$");
-    private static final Pattern VOLUME_SUFFIX_PATTERN = Pattern.compile("\\s+Vol\\.?\\s*\\d+$");
+    private static final Pattern ID_FORMAT_PATTERN = Pattern.compile("^\\d+-\\d+$");
+    private static final Pattern VOLUME_SUFFIX_PATTERN = Pattern.compile("\\s*\\(\\d{4}\\)|\\s*Vol\\.?\\s*\\d+|\\s*Volume\\s*\\d+", Pattern.CASE_INSENSITIVE);
+    private static final Pattern YEAR_PATTERN = Pattern.compile("\\b(19|20)\\d{2}\\b");
+
+    private static final String VOLUME_FIELDS = "id,name,start_year,publisher,count_of_issues,description,deck,image,site_detail_url";
+    private static final String ISSUE_LIST_FIELDS = "id,issue_number,name,image,site_detail_url,person_credits,character_credits,team_credits,location_credits,story_arc_credits";
+    private static final String ISSUE_DETAIL_FIELDS = "id,issue_number,volume,name,person_credits,character_credits,team_credits,story_arc_credits,location_credits,image,description,deck,store_date,cover_date,site_detail_url";
+    private static final String SEARCH_FIELDS = "id,name,issue_number,volume,description,deck,image,site_detail_url,resource_type,start_year,publisher,count_of_issues";
+    private static final long MIN_REQUEST_INTERVAL_MS = 1000;
 
     private final ObjectMapper objectMapper;
     private final AppSettingService appSettingService;
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient;
+    private final RateLimitService rateLimitService;
 
-    private final AtomicBoolean rateLimited = new AtomicBoolean(false);
-    private final AtomicLong rateLimitResetTime = new AtomicLong(0);
-    private final AtomicLong lastRequestTime = new AtomicLong(0);
+    private final Map<String, CachedVolumes> volumeCache = new ConcurrentHashMap<>();
     private final AtomicLong apiCallCounter = new AtomicLong(0);
-    private final Map<String, CachedVolumes> volumeCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static class CachedVolumes {
         final List<Comic> volumes;
@@ -97,6 +99,17 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             return Collections.emptyList();
         }
         return getMetadataListByTerm(searchTerm);
+    }
+
+    @Override
+    public void fetchMetadata(Book book, FetchMetadataRequest fetchMetadataRequest, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        List<BookMetadata> results = fetchMetadata(book, fetchMetadataRequest);
+        if (results != null) {
+            for (BookMetadata metadata : results) {
+                if (isCancelled.getAsBoolean()) return;
+                consumer.accept(metadata);
+            }
+        }
     }
 
     @Override
@@ -153,17 +166,14 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         String series = original.series();
         List<String> alternatives = new ArrayList<>();
         
-        // Try removing "The " prefix
         if (series.toLowerCase().startsWith("the ")) {
             alternatives.add(series.substring(4));
         }
         
-        // Try adding "The " prefix
         if (!series.toLowerCase().startsWith("the ")) {
             alternatives.add("The " + series);
         }
         
-        // Try replacing hyphens with colons and vice versa
         if (series.contains(" - ")) {
             alternatives.add(series.replace(" - ", ": "));
         }
@@ -171,7 +181,6 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             alternatives.add(series.replace(": ", " - "));
         }
         
-        // Try removing common suffixes like "(2023)" or "Vol. X"
         String cleaned = VOLUME_SUFFIX_PATTERN.matcher(series).replaceAll("").trim();
         if (!cleaned.equals(series)) {
             alternatives.add(cleaned);
@@ -435,76 +444,47 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
     }
 
     private <T> T sendRequestWithRetry(URI uri, Class<T> responseType, int retriesLeft) {
-        if (rateLimited.get()) {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime < rateLimitResetTime.get()) {
-                log.warn("ComicVine API is currently rate limited. Skipping request. Rate limit resets at: {}",
-                        Instant.ofEpochMilli(rateLimitResetTime.get()));
-                return null;
-            } else {
-                rateLimited.compareAndSet(true, false);
-                log.info("ComicVine rate limit period expired, resuming normal requests");
-            }
-        }
+        return rateLimitService.execute("Comicvine", MIN_REQUEST_INTERVAL_MS, () -> {
+            long callNumber = apiCallCounter.incrementAndGet();
+            String endpoint = extractEndpointFromUri(uri);
 
-        long now = System.currentTimeMillis();
-        long timeSinceLastRequest = now - lastRequestTime.get();
-        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-            long sleepTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
-            log.debug("Rate limiting: sleeping {}ms before next request", sleepTime);
             try {
-                Thread.sleep(sleepTime);
-            } catch (InterruptedException ignored) {
+                log.debug("ComicVine API call #{} to {}", callNumber, endpoint);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(uri)
+                        .header("User-Agent", "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)")
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                log.debug("ComicVine API call #{} completed: status={}, size={}bytes", 
+                        callNumber, response.statusCode(), response.body() != null ? response.body().length() : 0);
+
+                if (response.statusCode() == 200) {
+                    return objectMapper.readValue(response.body(), responseType);
+                } else if (response.statusCode() == 420 || response.statusCode() == 429) {
+                    handleRateLimit(response);
+                    return null;
+                } else if (response.statusCode() >= 500 && retriesLeft > 0) {
+                    log.warn("ComicVine API returned status {}. Retrying... ({} retries left)", 
+                             response.statusCode(), retriesLeft);
+                    return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
+                } else {
+                    log.error("Comicvine API returned status code {}. Body: {}", response.statusCode(), response.body());
+                }
+            } catch (IOException e) {
+                if (retriesLeft > 0) {
+                    log.warn("IOException during ComicVine request. Retrying... ({} retries left)", retriesLeft, e);
+                    return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
+                } else {
+                    log.error("Error fetching data from Comicvine API after retries", e);
+                }
+            } catch (InterruptedException e) {
+                log.error("Request interrupted", e);
                 Thread.currentThread().interrupt();
             }
-        }
-        lastRequestTime.set(System.currentTimeMillis());
-        
-        long callNumber = apiCallCounter.incrementAndGet();
-        String endpoint = extractEndpointFromUri(uri);
-
-        try {
-            log.debug("ComicVine API call #{} to {}", callNumber, endpoint);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .header("User-Agent", "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)")
-                    .GET()
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            log.debug("ComicVine API call #{} completed: status={}, size={}bytes", 
-                    callNumber, response.statusCode(), response.body() != null ? response.body().length() : 0);
-
-            if (response.statusCode() == 200) {
-                return objectMapper.readValue(response.body(), responseType);
-            } else if (response.statusCode() == 420 || response.statusCode() == 429) {
-                handleRateLimit(response);
-                return null;
-            } else if (response.statusCode() >= 500 && retriesLeft > 0) {
-                log.warn("ComicVine API returned status {}. Retrying... ({} retries left)", 
-                         response.statusCode(), retriesLeft);
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException ignored) {}
-                return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
-            } else {
-                log.error("Comicvine API returned status code {}. Body: {}", response.statusCode(), response.body());
-            }
-        } catch (IOException e) {
-            if (retriesLeft > 0) {
-                log.warn("IOException during ComicVine request. Retrying... ({} retries left)", retriesLeft, e);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ignored) {}
-                return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
-            } else {
-                log.error("Error fetching data from Comicvine API after retries", e);
-            }
-        } catch (InterruptedException e) {
-            log.error("Request interrupted", e);
-            Thread.currentThread().interrupt();
-        }
-        return null;
+            return null;
+        }).join();
     }
 
     private void handleRateLimit(HttpResponse<String> response) {
@@ -529,10 +509,8 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             }
         }
 
-        if (rateLimited.compareAndSet(false, true)) {
-            rateLimitResetTime.set(System.currentTimeMillis() + resetDelayMs);
-            log.info("Rate limit will reset at: {}", Instant.ofEpochMilli(rateLimitResetTime.get()));
-        }
+        rateLimitService.setBackoffUntil("Comicvine", System.currentTimeMillis() + resetDelayMs);
+        log.info("Rate limit will reset at: {}", Instant.ofEpochMilli(System.currentTimeMillis() + resetDelayMs));
     }
 
     private String extractEndpointFromUri(URI uri) {

@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
+import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
@@ -27,11 +28,10 @@ import java.util.Collections;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 public class AmazonBookParserTest {
     @Mock private AppSettingService mockAppSettingService;
+    @Mock private org.booklore.service.metadata.RateLimitService rateLimitService;
 
-    @InjectMocks
     private AmazonBookParser amazonBookParser;
 
     private MockedStatic<Jsoup> mockJsoup;
@@ -74,6 +74,7 @@ public class AmazonBookParserTest {
         when(mockConnection.header(any(String.class), any(String.class))).thenReturn(mockConnection);
         when(mockConnection.method(any(Connection.Method.class))).thenReturn(mockConnection);
         when(mockConnection.execute()).thenReturn(mockResponse);
+        when(mockConnection.get()).thenReturn(document);
 
         when(mockResponse.parse()).thenReturn(document);
 
@@ -107,9 +108,17 @@ public class AmazonBookParserTest {
 
     @BeforeEach
     public void setup() throws Exception {
+        MockitoAnnotations.openMocks(this);
+        lenient().when(rateLimitService.execute(anyString(), anyLong(), any(java.util.function.Supplier.class)))
+                .thenAnswer(invocation -> {
+                    java.util.function.Supplier<?> supplier = invocation.getArgument(2);
+                    return java.util.concurrent.CompletableFuture.completedFuture(supplier.get());
+                });
+
         when(mockAppSettingService.getAppSettings()).thenReturn(getAppSettings( "com"));
 
         mockJsoup = mockStatic(Jsoup.class);
+        amazonBookParser = new AmazonBookParser(mockAppSettingService, rateLimitService);
     }
 
     @AfterEach
