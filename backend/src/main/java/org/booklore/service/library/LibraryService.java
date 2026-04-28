@@ -156,6 +156,8 @@ public class LibraryService {
         BookLoreUserEntity userEntity = userRepository.findById(bookLoreUser.getId())
                 .orElseThrow(() -> ApiError.USER_NOT_FOUND.createException(bookLoreUser.getId()));
 
+        // Stream.toList() returns an unmodifiable list, while JPA/Hibernate requires a mutable collection for entity
+        // relationship fields
         LibraryEntity libraryEntity = LibraryEntity.builder()
                 .name(request.getName())
                 .libraryPaths(
