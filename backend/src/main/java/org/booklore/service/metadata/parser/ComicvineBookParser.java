@@ -42,23 +42,23 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
 
     private static final String COMICVINE_URL = "https://comicvine.gamespot.com/api/";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-private static final Pattern DIGIT_PATTERN = Pattern.compile("\\d+");
-private static final Pattern SERIES_ISSUE_PATTERN = Pattern.compile("^(.+?)\\s+#?(\\d+(?:\\.\\d+)?)(?:\\s|$)", Pattern.CASE_INSENSITIVE);
-private static final Pattern SERIES_ISSUE_NUMBER_PATTERN = Pattern.compile("\\s#?(\\d+(?:\\.\\d+)?)");
+    private static final Pattern DIGIT_PATTERN = Pattern.compile("\\d+");
+    private static final Pattern SERIES_ISSUE_PATTERN = Pattern.compile("^(.+?)\\s+#?(\\d+(?:\\.\\d+)?)(?:\\s|$)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SERIES_ISSUE_NUMBER_PATTERN = Pattern.compile("\\s#?(\\d+(?:\\.\\d+)?)");
     private static final Pattern DIGITAL_PATTERN = Pattern.compile("\\(digital\\)", Pattern.CASE_INSENSITIVE);
     private static final Pattern PARENTHETICAL_PATTERN = Pattern.compile("\\([^()]*\\)");
     private static final Pattern BRACKETED_PATTERN = Pattern.compile("\\[[^\\[\\]]*\\]");
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
-private static final Pattern SPECIAL_ISSUE_PATTERN = Pattern.compile("\\b(annual|special|one-shot|one shot)\\s+#?(\\d+)?\\b", Pattern.CASE_INSENSITIVE);
-private static final Pattern YEAR_PATTERN = Pattern.compile("\\(?(\\d{4})\\)?");
-private static final String VOLUME_FIELDS = "id,name,start_year,publisher,count_of_issues,description,deck,image,site_detail_url";
-private static final String ISSUE_LIST_FIELDS = "id,issue_number,name,image,site_detail_url,person_credits,character_credits,team_credits,location_credits,story_arc_credits";
-private static final String ISSUE_DETAIL_FIELDS = "id,issue_number,volume,name,person_credits,character_credits,team_credits,story_arc_credits,location_credits,image,description,deck,store_date,cover_date,site_detail_url";
-private static final String SEARCH_FIELDS = "id,name,issue_number,volume,description,deck,image,site_detail_url,resource_type,start_year,publisher,count_of_issues";
-private static final Pattern ISSUE_NUMBER_PATTERN = Pattern.compile("^#?\\d+(?:\\.\\d+)?$");
-private static final Pattern ID_FORMAT_PATTERN = Pattern.compile("^\\d+-\\d+$");
-private static final Pattern VOLUME_SUFFIX_PATTERN = Pattern.compile("\\s*\\(\\d{4}\\)|\\s*Vol\\.?\\s*\\d+|\\s*Volume\\s*\\d+", Pattern.CASE_INSENSITIVE);
-private static final long MIN_REQUEST_INTERVAL_MS = 2000;
+    private static final Pattern SPECIAL_ISSUE_PATTERN = Pattern.compile("\\b(annual|special|one-shot|one shot)\\s+#?(\\d+)?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern YEAR_PATTERN = Pattern.compile("\\(?(\\d{4})\\)?");
+    private static final String VOLUME_FIELDS = "id,name,start_year,publisher,count_of_issues,description,deck,image,site_detail_url";
+    private static final String ISSUE_LIST_FIELDS = "id,issue_number,name,image,site_detail_url,person_credits,character_credits,team_credits,location_credits,story_arc_credits";
+    private static final String ISSUE_DETAIL_FIELDS = "id,issue_number,volume,name,person_credits,character_credits,team_credits,story_arc_credits,location_credits,image,description,deck,store_date,cover_date,site_detail_url";
+    private static final String SEARCH_FIELDS = "id,name,issue_number,volume,description,deck,image,site_detail_url,resource_type,start_year,publisher,count_of_issues";
+    private static final Pattern ISSUE_NUMBER_PATTERN = Pattern.compile("^#?\\d+(?:\\.\\d+)?$");
+    private static final Pattern ID_FORMAT_PATTERN = Pattern.compile("^\\d+-\\d+$");
+    private static final Pattern VOLUME_SUFFIX_PATTERN = Pattern.compile("\\s*\\(\\d{4}\\)|\\s*Vol\\.?\\s*\\d+|\\s*Volume\\s*\\d+", Pattern.CASE_INSENSITIVE);
+    private static final long MIN_REQUEST_INTERVAL_MS = 2000;
 
     private static final String RESOURCE_TYPE_ISSUE = "4000";
     private static final String RESOURCE_TYPE_VOLUME = "4050";
@@ -74,12 +74,11 @@ private static final long MIN_REQUEST_INTERVAL_MS = 2000;
 
     private final ObjectMapper objectMapper;
     private final AppSettingService appSettingService;
-private final HttpClient httpClient;
-private final RateLimitService rateLimitService;
+    private final HttpClient httpClient;
+    private final RateLimitService rateLimitService;
 
     private final Map<String, CachedVolumes> volumeCache = new ConcurrentHashMap<>();
     private final AtomicLong apiCallCounter = new AtomicLong(0);
-    private final Map<String, CachedVolumes> volumeCache = new ConcurrentHashMap<>();
 
     private static class CachedVolumes {
         final List<Comic> volumes;
