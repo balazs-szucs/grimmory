@@ -49,13 +49,13 @@ reviews:
     - Logging: use @Slf4j from Lombok and log descriptive messages with appropriate levels (info, warn, error, debug).
     - Exception Handling: use the ApiError enum (org.booklore.exception.ApiError) to create and throw exceptions via createException().
 
-    ## Spring 4 rules
-    - Spring 4 uses the new programmatic bean registration model; prefer functional bean definitions where appropriate.
+    ## Spring Boot 4 / Spring Framework 7 rules
+    - Spring Framework 7 uses the new programmatic bean registration model; prefer functional bean definitions where appropriate.
     - Flag any Spring 3.x deprecated API usage.
     - Prefer constructor injection over field injection (@Autowired on fields is discouraged). Use Lombok's @AllArgsConstructor for clean DI.
     - Prefer @RestController + @RequestMapping with typed ResponseEntity<T> over legacy patterns.
     - Flag missing @Transactional boundaries on service methods performing multiple writes.
-    - Prefer Spring's RestClient (Spring 6.1+ / Spring 4) over deprecated RestTemplate for new code.
+    - Prefer Spring's RestClient over deprecated RestTemplate for new code.
     - Flag usage of WebClient in blocking contexts without explicit Mono.block() acknowledgment.
     - Prefer ProblemDetail (RFC 9457) for error responses.
 
@@ -149,7 +149,7 @@ reviews:
 
     - path: "**/service/**/*.java"
       instructions: |
-        Spring 4 service layer review:
+        Spring Framework 7 service layer review:
         - Flag missing @Transactional on methods that perform multiple writes.
         - Prefer constructor injection over @Autowired field injection. Use @AllArgsConstructor.
         - Use ApiError enum for throwing exceptions.
@@ -160,7 +160,7 @@ reviews:
 
     - path: "**/controller/**/*.java"
       instructions: |
-        Spring 4 REST controller review:
+        Spring Framework 7 REST controller review:
         - Prefer @RestController + @RequestMapping with ResponseEntity<T>.
         - Flag missing input validation (@Valid / @Validated on request body/params).
         - Prefer ProblemDetail (RFC 9457) for error responses.
@@ -197,7 +197,7 @@ reviews:
 
     - path: "**/config/**/*.java"
       instructions: |
-        Spring 4 configuration review:
+        Spring Framework 7 configuration review:
         - Flag hardcoded values that should be @Value or @ConfigurationProperties.
         - Flag ObjectMapper bean missing essential modules (JavaTimeModule, etc.).
         - Flag RestTemplate bean for new code; prefer RestClient.
@@ -267,7 +267,7 @@ reviews:
         - Pin action versions to SHA hashes, not floating tags.
         - Flag secrets referenced as env vars in run: steps; prefer secrets context.
         - Flag missing permissions: blocks (principle of least privilege).
-        - Ensure Java 25 with --enable-preview is set in java-version and java-flags.
+        - Ensure Java 25 is configured in the workflow, and verify `--enable-preview` is passed where the JVM is actually launched (for example via Gradle/Maven args, `JAVA_TOOL_OPTIONS`, or the explicit `java` command).
 
   auto_review:
     enabled: true
