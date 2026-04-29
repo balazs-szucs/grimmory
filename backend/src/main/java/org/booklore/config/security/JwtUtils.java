@@ -117,6 +117,7 @@ public class JwtUtils {
         try {
             signedJWT = SignedJWT.parse(token);
         } catch (Exception e) {
+            log.error("Malformed token", e);
             throw ApiError.JWT_INVALID.createException("Malformed token");
         }
 
