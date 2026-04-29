@@ -70,7 +70,7 @@
               @else {
                 <div class="thumbnail no-cover-text">{{ t('noCoverImage') }}</div>
               }
-              <input type="hidden" id="thumbnailUrl-{{bookdropFileId}}" formControlName="thumbnailUrl"/>
+              <input type="hidden" formControlName="thumbnailUrl"/>
             </div>
             <p-button
               size="small"
@@ -140,7 +140,7 @@
               alt="Book Thumbnail"
               class="thumbnail editor-thumbnail-img"
             />
-            <input type="hidden" id="thumbnailUrl-{{bookdropFileId}}" formControlName="thumbnailUrl"/>
+            <input type="hidden" formControlName="thumbnailUrl"/>
           </div>
         </div>
         <div class="metacontent editor-metacontent">
@@ -244,7 +244,15 @@
             <span class="author-chip" [class.main-author]="$index === 0" cdkDrag>
               @if ($index === 0) { <span class="main-author-badge">m</span> }
               {{ author }}
-              <i class="pi pi-times author-chip-remove" role="button" tabindex="0" (click)="removeAuthor($index)" (keydown.enter)="removeAuthor($index)"></i>
+              <button
+                type="button"
+                class="author-chip-remove-btn"
+                (click)="removeAuthor($index)"
+                (keydown.enter)="removeAuthor($index)"
+                [attr.aria-label]="t('removeAuthor')"
+              >
+                <i class="pi pi-times author-chip-remove"></i>
+              </button>
             </span>
           }
           <p-autoComplete class="author-add-input" [(ngModel)]="authorInputValue" [ngModelOptions]="{ standalone: true }"

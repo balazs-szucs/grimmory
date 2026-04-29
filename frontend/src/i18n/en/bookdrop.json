@@ -37,7 +37,8 @@
     "refetchNoResultsDetail": "Could not find any matching metadata for the provided information.",
     "refetchFailedSummary": "Refetch Failed",
     "refetchFailedDetail": "An error occurred while searching for metadata online.",
-    "addAuthorPlaceholder": "Add author..."
+    "addAuthorPlaceholder": "Add author...",
+    "removeAuthor": "Remove author"
   },
   "fileReview": {
     "title": "Review Bookdrop Files",
