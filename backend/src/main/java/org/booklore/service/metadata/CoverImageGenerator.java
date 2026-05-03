@@ -808,9 +808,30 @@ public class CoverImageGenerator {
         return 45 * SCALE;
     }
 
+    private byte[] encodeJpeg(BufferedImage img) {
+        ImageWriter writer = null;
+        ImageOutputStream ios = null;
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            writer = ImageIO.getImageWritersByFormatName("jpg").next();
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.95f);
+
+            ios = ImageIO.createImageOutputStream(baos);
+            writer.setOutput(ios);
+            writer.write(null, new IIOImage(img, null, null), param);
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("JPEG encoding failed", e);
+        } finally {
+            if (writer != null) writer.dispose();
+            if (ios != null) try { ios.close(); } catch (IOException ignored) {}
+        }
+    }
     private void cleanup(Graphics2D g, BufferedImage... images) {
-        if (g != null) try { g.dispose(); } catch (Exception ignored) {}
+        if (g != null) try { g.dispose(); } catch (Exception _) {}
         for (BufferedImage img : images)
-            if (img != null) try { img.flush(); } catch (Exception ignored) {}
+            if (img != null) try { img.flush(); } catch (Exception _) {}
     }
 }

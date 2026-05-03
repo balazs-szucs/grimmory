@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -216,8 +217,8 @@ class AbstractFileProcessorTest {
         }
 
         @Override
-        public java.util.List<org.booklore.model.enums.BookFileType> getSupportedTypes() {
-            return java.util.List.of();
+        public List<BookFileType> getSupportedTypes() {
+            return List.of();
         }
 
         Path exposedGetBookFolderForCoverFallback(LibraryFile libraryFile) {

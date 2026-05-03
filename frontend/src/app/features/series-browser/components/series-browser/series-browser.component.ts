@@ -1,24 +1,22 @@
-import {Component, DestroyRef, HostListener, computed, inject, OnInit, signal, ViewChild} from '@angular/core';
-import {computeGridColumns} from '../../../../shared/util/viewport.util';
-import {NgStyle} from '@angular/common';
+import {Component, DestroyRef, ElementRef, HostListener, computed, inject, OnInit, signal, viewChild} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {ProgressSpinner} from 'primeng/progressspinner';
 import {InputText} from 'primeng/inputtext';
 import {Select} from 'primeng/select';
-import {Slider} from 'primeng/slider';
 import {Popover} from 'primeng/popover';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
-import {CdkVirtualScrollViewport, CdkVirtualForOf} from '@angular/cdk/scrolling';
-import {CdkAutoSizeVirtualScroll} from '@angular/cdk-experimental/scrolling';
 import {SeriesDataService} from '../../service/series-data.service';
 import {SeriesSummary} from '../../model/series.model';
 import {SeriesCardComponent} from '../series-card/series-card.component';
-import {chunk} from '../../../../shared/util/array.util';
 import {BookService} from '../../../book/service/book.service';
 import {ReadStatus} from '../../../book/model/book.model';
 import {PageTitleService} from '../../../../shared/service/page-title.service';
-import {SeriesScalePreferenceService} from '../../service/series-scale-preference.service';
-import {Router} from '@angular/router';
+import {ActivatedRoute, Router} from '@angular/router';
+import {createVirtualGrid, scaleForGridColumns} from '../../../../shared/util/virtual-grid.util';
+import {RouteScrollPositionService} from '../../../../shared/service/route-scroll-position.service';
+import {GridDensityButtonsComponent} from '../../../../shared/components/grid-density-buttons/grid-density-buttons.component';
+import {LocalStorageService} from '../../../../shared/service/local-storage.service';
+import {ScalePreference} from '../../../../shared/util/scale-preference.util';
 
 interface FilterOption {
   label: string;
@@ -36,18 +34,14 @@ interface SortOption {
   templateUrl: './series-browser.component.html',
   styleUrls: ['./series-browser.component.scss'],
   imports: [
-    NgStyle,
     FormsModule,
     ProgressSpinner,
     InputText,
     Select,
-    Slider,
     Popover,
     TranslocoDirective,
+    GridDensityButtonsComponent,
     SeriesCardComponent,
-    CdkVirtualScrollViewport,
-    CdkVirtualForOf,
-    CdkAutoSizeVirtualScroll,
   ]
 })
 export class SeriesBrowserComponent implements OnInit {
@@ -57,33 +51,19 @@ export class SeriesBrowserComponent implements OnInit {
   private static readonly MOBILE_BASE_WIDTH = 180;
   private static readonly MOBILE_BASE_HEIGHT = 250;
   private static readonly GRID_GAP = 20;
+  private static readonly SCALE_STORAGE_KEY = 'seriesScalePreference';
+  private static readonly MIN_SCALE = 0.7;
+  private static readonly MAX_SCALE = 1.3;
 
   private seriesDataService = inject(SeriesDataService);
   private bookService = inject(BookService);
   private pageTitle = inject(PageTitleService);
   private t = inject(TranslocoService);
   private router = inject(Router);
+  private activatedRoute = inject(ActivatedRoute);
   private destroyRef = inject(DestroyRef);
-  protected seriesScaleService = inject(SeriesScalePreferenceService);
-
-  virtualScroller: CdkVirtualScrollViewport | undefined;
-
-  @ViewChild(CdkVirtualScrollViewport)
-  set scrollViewport(vp: CdkVirtualScrollViewport | undefined) {
-    this.virtualScroller = vp;
-    this.viewportResizeObserver?.disconnect();
-    if (vp) {
-      const el = vp.elementRef.nativeElement as HTMLElement;
-      this.viewportWidth.set(el.clientWidth);
-      this.viewportResizeObserver = new ResizeObserver(entries => {
-        this.viewportWidth.set(entries[0]?.contentRect.width ?? el.clientWidth);
-      });
-      this.viewportResizeObserver.observe(el);
-    }
-  }
-
-  private readonly viewportWidth = signal(0);
-  private viewportResizeObserver: ResizeObserver | undefined;
+  private scrollService = inject(RouteScrollPositionService);
+  private localStorageService = inject(LocalStorageService);
 
   readonly isBooksLoading = this.bookService.isBooksLoading;
   private readonly searchTerm = signal('');
@@ -104,44 +84,46 @@ export class SeriesBrowserComponent implements OnInit {
     return this.applySort(result, this.sortBy());
   });
 
-  screenWidth = window.innerWidth;
+  private readonly scrollElement = viewChild<ElementRef<HTMLElement>>('scrollElement');
+  private readonly initialScrollOffset = () => this.scrollService.getPosition(this.scrollService.keyFor(this.activatedRoute)) ?? 0;
+  private readonly scalePreference = new ScalePreference(this.localStorageService, {
+    storageKey: SeriesBrowserComponent.SCALE_STORAGE_KEY,
+    minScale: SeriesBrowserComponent.MIN_SCALE,
+    maxScale: SeriesBrowserComponent.MAX_SCALE,
+  });
+  private readonly scaleFactor = this.scalePreference.scaleFactor;
+  readonly screenWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1024);
   filterOptions: FilterOption[] = [];
   sortOptions: SortOption[] = [];
 
   @HostListener('window:resize')
   onResize(): void {
-    this.screenWidth = window.innerWidth;
+    this.screenWidth.set(window.innerWidth);
   }
 
-  get isMobile(): boolean {
-    return this.screenWidth <= 767;
-  }
+  readonly isMobile = computed(() => this.screenWidth() <= 767);
 
-  get cardWidth(): number {
-    const base = this.isMobile
-      ? SeriesBrowserComponent.MOBILE_BASE_WIDTH
-      : SeriesBrowserComponent.BASE_WIDTH;
-    return Math.round(base * this.seriesScaleService.scaleFactor());
-  }
-
-  get cardHeight(): number {
-    const base = this.isMobile
+  private readonly baseCardWidth = computed(() => this.isMobile()
+    ? SeriesBrowserComponent.MOBILE_BASE_WIDTH
+    : SeriesBrowserComponent.BASE_WIDTH
+  );
+  private readonly cardAspectRatio = computed(() => {
+    const baseHeight = this.isMobile()
       ? SeriesBrowserComponent.MOBILE_BASE_HEIGHT
       : SeriesBrowserComponent.BASE_HEIGHT;
-    return Math.round(base * this.seriesScaleService.scaleFactor());
-  }
-
-  get gridColumnMinWidth(): string {
-    return `${this.cardWidth}px`;
-  }
-
-  readonly gridColumns = computed(() => {
-    return computeGridColumns(this.viewportWidth(), this.cardWidth || 230, SeriesBrowserComponent.GRID_GAP);
+    return baseHeight / this.baseCardWidth();
   });
-
-  readonly seriesRows = computed(() => {
-    return chunk(this.filteredSeries(), this.gridColumns());
+  private readonly minCardWidth = computed(() => Math.round(this.baseCardWidth() * this.scaleFactor()));
+  readonly virtualGrid = createVirtualGrid({
+    items: this.filteredSeries,
+    scrollElement: this.scrollElement,
+    minItemWidth: this.minCardWidth,
+    gap: SeriesBrowserComponent.GRID_GAP,
+    initialOffset: this.initialScrollOffset,
+    fillItemWidth: true,
+    estimateItemHeight: itemWidth => Math.round(itemWidth * this.cardAspectRatio()),
   });
+  readonly currentCardScale = computed(() => this.virtualGrid.itemWidth() / this.baseCardWidth());
 
   get searchValue(): string {
     return this.searchTerm();
@@ -157,7 +139,11 @@ export class SeriesBrowserComponent implements OnInit {
 
   ngOnInit(): void {
     this.pageTitle.setPageTitle(this.t.translate('seriesBrowser.pageTitle'));
-    this.destroyRef.onDestroy(() => this.viewportResizeObserver?.disconnect());
+    this.scrollService.trackRoute({
+      scrollElement: this.scrollElement,
+      route: this.activatedRoute,
+      destroyRef: this.destroyRef,
+    });
 
     this.filterOptions = [
       {label: this.t.translate('seriesBrowser.filters.all'), value: 'all'},
@@ -177,8 +163,6 @@ export class SeriesBrowserComponent implements OnInit {
     ];
   }
 
-
-
   onSearchChange(value: string): void {
     this.searchTerm.set(value);
   }
@@ -189,6 +173,28 @@ export class SeriesBrowserComponent implements OnInit {
 
   onSortChange(value: string): void {
     this.sortBy.set(value);
+  }
+
+  adjustDesktopGridDensity(direction: 'smaller' | 'larger'): void {
+    const currentColumns = this.virtualGrid.gridColumns();
+    const columns = Math.max(1, direction === 'smaller'
+      ? currentColumns + 1
+      : currentColumns - 1);
+    const viewportWidth = this.virtualGrid.viewportWidth() || this.screenWidth();
+    this.virtualGrid.updatePreservingScrollPosition(() => {
+      this.setScale(scaleForGridColumns(
+        viewportWidth,
+        SeriesBrowserComponent.GRID_GAP,
+        columns,
+        this.baseCardWidth(),
+        SeriesBrowserComponent.MIN_SCALE,
+        SeriesBrowserComponent.MAX_SCALE
+      ));
+    });
+  }
+
+  private setScale(scale: number): void {
+    this.scalePreference.setScale(scale);
   }
 
   navigateToSeries(series: SeriesSummary): void {

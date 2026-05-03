@@ -268,6 +268,6 @@ public class AudiobookProcessor extends AbstractFileProcessor implements BookFil
                         .endTimeMs(ch.getEndTimeMs())
                         .durationMs(ch.getDurationMs())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
     }
 }
