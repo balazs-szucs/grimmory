@@ -27,6 +27,7 @@ import org.booklore.service.audit.AuditService;
 import org.booklore.service.monitoring.LibraryWatchService;
 import org.booklore.task.options.RescanLibraryContext;
 import org.booklore.util.FileService;
+import org.booklore.util.MimeDetector;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.context.event.EventListener;
@@ -332,18 +333,33 @@ public class LibraryService {
     }
 
     private boolean isProcessableFile(Path file, Set<BookFileType> allowedFormats) {
-        String fileName = file.getFileName().toString().toLowerCase();
+        String mime = MimeDetector.detectSafe(file);
+        String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        int dot = fileName.lastIndexOf('.');
+        String extension = dot >= 0 && dot < fileName.length() - 1 ? fileName.substring(dot + 1) : "";
+
         for (BookFileType fileType : BookFileType.values()) {
             if (allowedFormats != null && !allowedFormats.contains(fileType)) {
                 continue;
             }
-            for (String ext : fileType.getExtensions()) {
-                if (fileName.endsWith("." + ext)) {
-                    return true;
-                }
-            }
+            if (matchesBookTypeMime(fileType, mime, extension)) return true;
         }
         return false;
+    }
+
+    private boolean matchesBookTypeMime(BookFileType fileType, String mime, String extension) {
+        if (mime == null || mime.isBlank() || "application/octet-stream".equals(mime)) return false;
+        return switch (fileType) {
+            case PDF -> "application/pdf".equals(mime);
+            case EPUB -> "application/epub+zip".equals(mime);
+            case CBX -> (mime.contains("zip") || mime.contains("rar") || mime.contains("7z"))
+                    && Set.of("cbz", "cbr", "cb7").contains(extension);
+            case FB2 -> ("application/x-fictionbook+xml".equals(mime) || "application/xml".equals(mime) || "text/xml".equals(mime))
+                    && "fb2".equals(extension);
+            case MOBI -> mime.contains("mobipocket") || mime.contains("x-mobipocket");
+            case AZW3 -> mime.contains("kindle") || mime.contains("x-kindle");
+            case AUDIOBOOK -> MimeDetector.isAudio(mime);
+        };
     }
 
     private void scheduleBackgroundScanAfterCommit(long libraryId) {
