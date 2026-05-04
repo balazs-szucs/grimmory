@@ -179,6 +179,8 @@ class LibraryFileHelperTest {
         Files.write(tempDir.resolve("book.lit"), new byte[]{1});
         Files.write(tempDir.resolve("book.lrf"), new byte[]{1});
         Files.write(tempDir.resolve("book.txt"), new byte[]{1});
+        Files.write(tempDir.resolve("book.zip"), new byte[]{1});
+        Files.write(tempDir.resolve("sidecar.xml"), new byte[]{1});
         Files.write(tempDir.resolve("cover.jpg"), new byte[]{1});
         Files.write(tempDir.resolve("real.epub"), new byte[]{1});
 
