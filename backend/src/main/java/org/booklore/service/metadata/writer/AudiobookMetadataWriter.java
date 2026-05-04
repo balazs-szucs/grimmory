@@ -31,6 +31,7 @@ import java.util.logging.Logger;
 @Component
 @RequiredArgsConstructor
 public class AudiobookMetadataWriter implements MetadataWriter {
+    private static final int MAX_COVER_BYTES = 10 * 1024 * 1024;
 
     static {
         Logger.getLogger("org.jaudiotagger").setLevel(Level.WARNING);
@@ -249,11 +250,30 @@ public class AudiobookMetadataWriter implements MetadataWriter {
         }
 
         try {
-            byte[] coverData = multipartFile.getBytes();
+            byte[] coverData;
+            try (InputStream inputStream = multipartFile.getInputStream()) {
+                coverData = readLimitedBytes(inputStream, MAX_COVER_BYTES);
+            }
             replaceCoverImageFromBytes(bookEntity, coverData);
         } catch (IOException e) {
             log.warn("Failed to read uploaded cover image: {}", e.getMessage(), e);
         }
+    }
+
+    @Override
+    public void replaceCoverImageFromPath(BookEntity bookEntity, Path path) {
+        if (path == null) {
+            log.warn("Cover update from path failed: path is null.");
+            return;
+        }
+
+        byte[] coverData = loadImage(path.toString());
+        if (coverData == null) {
+            log.warn("Failed to load image from path: {}", path);
+            return;
+        }
+
+        replaceCoverImageFromBytes(bookEntity, coverData);
     }
 
     @Override
@@ -330,11 +350,26 @@ public class AudiobookMetadataWriter implements MetadataWriter {
         try (InputStream stream = pathOrUrl.startsWith("http")
                 ? URI.create(pathOrUrl).toURL().openStream()
                 : new FileInputStream(pathOrUrl)) {
-            return stream.readAllBytes();
+            return readLimitedBytes(stream, MAX_COVER_BYTES);
         } catch (IOException e) {
             log.warn("Failed to load image from {}: {}", pathOrUrl, e.getMessage());
             return null;
         }
+    }
+
+    private byte[] readLimitedBytes(InputStream stream, int maxBytes) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = stream.read(buffer)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Cover image exceeds maximum size of " + maxBytes + " bytes");
+            }
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
     }
 
     private String detectMimeType(byte[] data) {

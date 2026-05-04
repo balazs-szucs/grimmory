@@ -5,15 +5,14 @@ import org.apache.commons.io.FilenameUtils;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.ComicMetadata;
 import org.booklore.service.ArchiveService;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Component;
 import org.booklore.util.SecureXmlUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
-import javax.imageio.ImageIO;
-import java.awt.*;
-import java.awt.image.BufferedImage;
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.*;
@@ -43,9 +42,11 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     private static final Pattern ISBN_CLEANER_PATTERN = Pattern.compile("[- ]");
 
     private final ArchiveService archiveService;
+    private final VipsImageService vipsImageService;
 
-    public CbxMetadataExtractor(ArchiveService archiveService) {
+    public CbxMetadataExtractor(ArchiveService archiveService, VipsImageService vipsImageService) {
         this.archiveService = archiveService;
+        this.vipsImageService = vipsImageService;
     }
 
     @Override
@@ -56,9 +57,9 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     public BookMetadata extractMetadata(Path path) {
         String baseName = FilenameUtils.getBaseName(path.toString());
 
-        try (InputStream is = findComicInfoEntryInputStream(path)) {
-            if (is != null) {
-                Document document = buildSecureDocument(is);
+        try {
+            Document document = readComicInfoDocument(path);
+            if (document != null) {
                 return mapDocumentToMetadata(document, baseName);
             } else {
                 log.warn("No metadata existed in CBR");
@@ -482,26 +483,35 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     }
 
     public byte[] extractCover(Path path) {
+        Path coverFile = extractCoverToTempFile(path);
+        if (coverFile == null) {
+            return null;
+        }
+        try {
+            return Files.readAllBytes(coverFile);
+        } catch (IOException e) {
+            log.warn("Failed to read extracted cover file for {}: {}", path.getFileName(), e.getMessage());
+            return null;
+        } finally {
+            deleteTempFileQuietly(coverFile);
+        }
+    }
+
+    public Path extractCoverToTempFile(Path path) {
         return Stream.<Supplier<Stream<String>>>of(
                         () -> extractCoverEntryNameFromComicInfo(path),
                         () -> extractCoverEntryNameFallback(path)
                 )
                 .flatMap(Supplier::get)
-                .map(coverEntry -> readArchiveEntryBytes(path, coverEntry))
-                .filter(Objects::nonNull)
+                .map(coverEntry -> extractArchiveEntryToTempFile(path, coverEntry))
                 .filter(this::canDecode)
+                .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
     }
 
-    private boolean canDecode(byte[] bytes) {
-        if (bytes == null || bytes.length == 0) return false;
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes)) {
-            BufferedImage img = ImageIO.read(bais);
-            return img != null;
-        } catch (IOException e) {
-            return false;
-        }
+    private boolean canDecode(Path imagePath) {
+        return imagePath != null && vipsImageService.canDecode(imagePath);
     }
 
     private Stream<String> extractCoverEntryNameFromComicInfo(Path cbxPath) {
@@ -509,12 +519,9 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
 
         List<String> entryNames = getComicImageEntryNames(cbxPath).toList();
 
-        try (InputStream is = findComicInfoEntryInputStream(cbxPath)) {
-            if (is == null) {
-                return Stream.empty();
-            }
-
-            Document document = buildSecureDocument(is);
+        try {
+            Document document = readComicInfoDocument(cbxPath);
+            if (document == null) return Stream.empty();
 
             NodeList pages = document.getElementsByTagName("Page");
             for (int i = 0; i < pages.getLength(); i++) {
@@ -608,21 +615,24 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
         }
     }
 
-    private InputStream findComicInfoEntryInputStream(Path cbxPath) {
+    private Document readComicInfoDocument(Path cbxPath) {
         String comicInfoEntry = findComicInfoEntry(cbxPath);
 
         if (comicInfoEntry == null) {
-            // If we can't find a comic info entry, give up.
             return null;
         }
-
-        byte[] xmlBytes = readArchiveEntryBytes(cbxPath, comicInfoEntry);
-
-        if (xmlBytes == null) {
+        try {
+            byte[] comicInfoBytes = archiveService.getEntryBytes(cbxPath, comicInfoEntry);
+            if (comicInfoBytes == null || comicInfoBytes.length == 0) {
+                return null;
+            }
+            try (InputStream inputStream = new ByteArrayInputStream(comicInfoBytes)) {
+                return buildSecureDocument(inputStream);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse ComicInfo.xml from archive {}: {}", cbxPath.getFileName(), e.getMessage());
             return null;
         }
-
-        return new ByteArrayInputStream(xmlBytes);
     }
 
     private byte[] readArchiveEntryBytes(Path cbxPath, String entryName) {
@@ -633,6 +643,30 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
         }
 
         return null;
+    }
+
+    private Path extractArchiveEntryToTempFile(Path cbxPath, String entryName) {
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile("cbx-cover-", ".img");
+            archiveService.extractEntryToPath(cbxPath, entryName, tempFile);
+            return tempFile;
+        } catch (Exception e) {
+            log.warn("Failed to extract archive {} entry {} to a temp file", cbxPath.getFileName(), entryName, e);
+            deleteTempFileQuietly(tempFile);
+            return null;
+        }
+    }
+
+    private void deleteTempFileQuietly(Path tempFile) {
+        if (tempFile == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(tempFile);
+        } catch (IOException e) {
+            log.warn("Failed to delete temporary cover file {}: {}", tempFile, e.getMessage());
+        }
     }
 
     private String baseName(String path) {

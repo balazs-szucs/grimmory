@@ -22,8 +22,6 @@ import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.time.Instant;
 import java.util.List;
@@ -139,16 +137,7 @@ public class AudiobookProcessor extends AbstractFileProcessor implements BookFil
 
         log.debug("Found cover data ({} bytes) in audiobook file '{}'", coverData.length, audioFile.getName());
 
-        boolean saved;
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(coverData)) {
-            BufferedImage originalImage = FileService.readImage(bais);
-            if (originalImage == null) {
-                log.warn("Failed to decode cover image for audiobook '{}'", audioFile.getName());
-                return false;
-            }
-            saved = fileService.saveAudiobookCoverImages(originalImage, bookEntity.getId());
-            originalImage.flush();
-        }
+        boolean saved = fileService.saveAudiobookCoverImages(coverData, bookEntity.getId());
 
         return saved;
     }

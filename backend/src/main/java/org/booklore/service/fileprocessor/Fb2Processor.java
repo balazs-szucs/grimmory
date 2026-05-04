@@ -19,7 +19,6 @@ import org.booklore.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.List;
 import java.util.Set;
@@ -139,13 +138,12 @@ public class Fb2Processor extends AbstractFileProcessor implements BookFileProce
         }
     }
 
-    private boolean saveCoverImage(byte[] coverData, long bookId) throws Exception {
-        BufferedImage originalImage = FileService.readImage(coverData);
-        if (originalImage == null) {
-            log.warn("Failed to decode cover image for FB2");
+    private boolean saveCoverImage(byte[] coverData, long bookId) {
+        try {
+            return fileService.saveCoverImages(coverData, bookId);
+        } catch (Exception e) {
+            log.warn("Failed to decode/save cover image for FB2: {}", e.getMessage());
             return false;
         }
-
-        return fileService.saveCoverImages(originalImage, bookId);
     }
 }

@@ -15,6 +15,7 @@ import org.mockito.quality.Strictness;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.Map;
@@ -24,6 +25,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,7 +37,11 @@ class CbxMetadataExtractorTest {
 
     @BeforeEach
     void setUp() {
-        extractor = new CbxMetadataExtractor(archiveService);
+        org.booklore.util.VipsImageService mockVips = org.mockito.Mockito.mock(org.booklore.util.VipsImageService.class);
+        org.mockito.Mockito.when(mockVips.canDecode(org.mockito.ArgumentMatchers.any(byte[].class))).thenReturn(true);
+        org.mockito.Mockito.when(mockVips.canDecode(org.mockito.ArgumentMatchers.any(Path.class))).thenReturn(true);
+        org.mockito.Mockito.when(mockVips.canDecode(org.mockito.ArgumentMatchers.any(java.io.InputStream.class))).thenReturn(true);
+        extractor = new CbxMetadataExtractor(archiveService, mockVips);
     }
 
     private byte[] createMinimalJpeg(int rgb) throws IOException {
@@ -67,7 +74,25 @@ class CbxMetadataExtractorTest {
         when(archiveService.streamEntryNames(path)).then((i) -> keys.stream());
 
         for (String key : keys) {
-            when(archiveService.getEntryBytes(path, key)).thenReturn(contents.get(key));
+            byte[] data = contents.get(key);
+            when(archiveService.getEntryBytes(path, key)).thenReturn(data);
+            when(archiveService.extractEntryToPath(eq(path), eq(key), any(Path.class)))
+                    .thenAnswer(invocation -> {
+                        Path outputPath = invocation.getArgument(2);
+                        Files.write(outputPath, data);
+                        return (long) data.length;
+                    });
+            try {
+                when(archiveService.withEntryInputStream(eq(path), eq(key), any()))
+                        .thenAnswer(invocation -> {
+                            ArchiveService.EntryInputStreamHandler<?> handler = invocation.getArgument(2);
+                            try (InputStream is = new ByteArrayInputStream(data)) {
+                                return handler.handle(is);
+                            }
+                        });
+            } catch (Exception e) {
+                // ignore
+            }
         }
 
         return path;
@@ -77,6 +102,12 @@ class CbxMetadataExtractorTest {
         Path path = Path.of("test.cbz");
         when(archiveService.streamEntryNames(path)).thenThrow(IOException.class);
         when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenThrow(IOException.class);
+        when(archiveService.extractEntryToPath(eq(path), any(), any(Path.class))).thenThrow(IOException.class);
+        try {
+            when(archiveService.withEntryInputStream(eq(path), any(), any())).thenThrow(IOException.class);
+        } catch (Exception e) {
+            // ignore
+        }
         return path;
     }
 
@@ -84,14 +115,32 @@ class CbxMetadataExtractorTest {
         Path path = Path.of("test.cbz");
         when(archiveService.streamEntryNames(path)).then((i) -> Stream.empty());
         when(archiveService.getEntryBytes(eq(path), any())).thenThrow(IOException.class);
+        try {
+            when(archiveService.withEntryInputStream(eq(path), any(), any())).thenThrow(IOException.class);
+        } catch (Exception e) {
+            // ignore
+        }
         return path;
     }
 
     private Path mockComicInfo(String innerXml) throws IOException {
         Path path = Path.of("test.cbz");
         String xml = wrapInComicInfo(innerXml);
-        when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(xml.getBytes());
+        byte[] xmlBytes = xml.getBytes();
+        when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(xmlBytes);
         when(archiveService.streamEntryNames(path)).then((i) -> Stream.of("ComicInfo.xml"));
+
+        try {
+            when(archiveService.withEntryInputStream(eq(path), eq("ComicInfo.xml"), any()))
+                    .thenAnswer(invocation -> {
+                        ArchiveService.EntryInputStreamHandler<?> handler = invocation.getArgument(2);
+                        try (InputStream is = new ByteArrayInputStream(xmlBytes)) {
+                            return handler.handle(is);
+                        }
+                    });
+        } catch (Exception e) {
+            // ignore
+        }
 
         return path;
     }
@@ -106,6 +155,7 @@ class CbxMetadataExtractorTest {
             BookMetadata metadata = extractor.extractMetadata(cbz);
 
             assertThat(metadata.getTitle()).isEqualTo("Batman: Year One");
+            verify(archiveService, never()).withEntryInputStream(eq(cbz), eq("ComicInfo.xml"), any());
         }
 
         @Test
@@ -917,6 +967,41 @@ class CbxMetadataExtractorTest {
             byte[] actual = extractor.extractCover(cbz);
 
             assertThat(actual).isEqualTo(expected);
+        }
+
+        @Test
+        void extractsCoverWithoutStreamingImageEntryIntoVips() throws IOException {
+            byte[] expected = createMinimalJpeg(1);
+            Path cbz = mockArchiveContents(Map.of(
+                    "ComicInfo.xml", wrapInComicInfo("<Title>Test</Title>").getBytes(),
+                    "cover.jpg", expected
+            ));
+
+            byte[] actual = extractor.extractCover(cbz);
+
+            assertThat(actual).isEqualTo(expected);
+            verify(archiveService, never()).withEntryInputStream(eq(cbz), eq("cover.jpg"), any());
+        }
+
+        @Test
+        void extractsCoverToTempFileWithoutBufferingCoverBytes() throws IOException {
+            byte[] expected = createMinimalJpeg(1);
+            Path cbz = mockArchiveContents(Map.of(
+                    "ComicInfo.xml", wrapInComicInfo("<Title>Test</Title>").getBytes(),
+                    "cover.jpg", expected
+            ));
+
+            Path coverFile = extractor.extractCoverToTempFile(cbz);
+
+            try {
+                assertThat(coverFile).isNotNull();
+                assertThat(Files.readAllBytes(coverFile)).isEqualTo(expected);
+                verify(archiveService, never()).getEntryBytes(eq(cbz), eq("cover.jpg"));
+            } finally {
+                if (coverFile != null) {
+                    Files.deleteIfExists(coverFile);
+                }
+            }
         }
 
         @Test

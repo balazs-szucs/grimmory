@@ -2,30 +2,31 @@ package org.booklore.service.migration.migrations;
 
 import org.booklore.config.AppProperties;
 import org.booklore.service.migration.Migration;
-import org.booklore.util.FileService;
+import org.booklore.util.VipsImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 
 @Slf4j
-@Component
 @RequiredArgsConstructor
+@Component
 public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
 
     private final AppProperties appProperties;
+    private final VipsImageService vipsImageService;
 
     @Override
     public String getKey() {
+
         return "populateCoversAndResizeThumbnails";
     }
 
@@ -48,14 +49,12 @@ public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
                 try (var stream = Files.walk(thumbsDir)) {
                     stream.filter(Files::isRegularFile)
                             .forEach(path -> {
-                                BufferedImage originalImage = null;
-                                BufferedImage resized = null;
                                 try {
-                                    // Load original image
-                                    originalImage = ImageIO.read(path.toFile());
-                                    if (originalImage == null) {
-                                        log.warn("Skipping non-image file: {}", path);
-                                        return;
+                                    try (var inputStream = Files.newInputStream(path)) {
+                                        if (!vipsImageService.canDecode(inputStream)) {
+                                            log.warn("Skipping non-image file: {}", path);
+                                            return;
+                                        }
                                     }
 
                                     // Extract bookId from folder structure
@@ -65,26 +64,22 @@ public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
                                     Path bookDir = imagesDir.resolve(bookId);
                                     Files.createDirectories(bookDir);
 
-                                    // Copy original to cover.jpg
+                                    // Flatten + save as cover.jpg (file-to-file avoids in-memory image buffers)
                                     Path coverFile = bookDir.resolve("cover.jpg");
-                                    ImageIO.write(originalImage, "jpg", coverFile.toFile());
+                                    Path tempInputFile = bookDir.resolve("thumb-source.tmp");
+                                    Files.copy(path, tempInputFile, StandardCopyOption.REPLACE_EXISTING);
+                                    try {
+                                        vipsImageService.flattenResizeAndSave(tempInputFile, coverFile, 1000, 1500);
+                                        Path thumbnailFile = bookDir.resolve("thumbnail.jpg");
+                                        vipsImageService.flattenThumbnailAndSave(tempInputFile, thumbnailFile, 250, 350);
+                                    } finally {
+                                        Files.deleteIfExists(tempInputFile);
+                                    }
 
-                                    // Resize and save thumbnail.jpg
-                                    resized = FileService.resizeImage(originalImage, 250, 350);
-                                    Path thumbnailFile = bookDir.resolve("thumbnail.jpg");
-                                    ImageIO.write(resized, "jpg", thumbnailFile.toFile());
-
-                                    log.debug("Processed book {}: cover={} thumbnail={}", bookId, coverFile, thumbnailFile);
+                                    log.debug("Processed book {}: cover={} thumbnail={}", bookId, coverFile, bookDir.resolve("thumbnail.jpg"));
                                 } catch (IOException e) {
                                     log.error("Error processing file {}", path, e);
                                     throw new UncheckedIOException(e);
-                                } finally {
-                                    if (originalImage != null) {
-                                        originalImage.flush();
-                                    }
-                                    if (resized != null) {
-                                        resized.flush();
-                                    }
                                 }
                             });
                 }

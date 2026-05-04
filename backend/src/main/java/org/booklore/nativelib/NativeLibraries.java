@@ -20,7 +20,8 @@ public final class NativeLibraries {
     public enum Library {
         PDFIUM,
         LIBARCHIVE,
-        EPUB4J_NATIVE
+        EPUB4J_NATIVE,
+        LIBVIPS
     }
 
     private static final Map<Library, Probe> PROBES;
@@ -51,6 +52,15 @@ public final class NativeLibraries {
                     true,
                     NativeLibraries.class.getClassLoader()
             );
+            return true;
+        }));
+
+        probes.put(Library.LIBVIPS, new Probe("libvips", () -> {
+            app.photofox.vipsffm.Vips.run(arena -> {
+                app.photofox.vipsffm.VipsHelper.cache_set_max(0);
+                log.info("libvips {} initialised – operation cache disabled",
+                        app.photofox.vipsffm.VipsHelper.version_string());
+            });
             return true;
         }));
 
@@ -144,6 +154,10 @@ public final class NativeLibraries {
 
     public boolean isEpubNativeAvailable() {
         return isAvailable(Library.EPUB4J_NATIVE);
+    }
+
+    public boolean isVipsAvailable() {
+        return isAvailable(Library.LIBVIPS);
     }
 
     private record Probe(String name, CheckedBooleanSupplier fn) {}

@@ -1,24 +1,25 @@
 package org.booklore.service;
 
 import org.booklore.model.dto.BookMetadata;
-import org.booklore.model.dto.settings.AppSettings;
-import org.booklore.model.dto.settings.MetadataPersistenceSettings;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookMetadataEntity;
+import org.booklore.nativelib.NativeLibraries;
 import org.booklore.service.kobo.CbxConversionService;
 import org.booklore.service.metadata.extractor.CbxMetadataExtractor;
 import org.booklore.service.metadata.writer.CbxMetadataWriter;
 import org.booklore.service.reader.CbxReaderService;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.appsettings.AppSettingService;
-import org.booklore.service.reader.ChapterCacheService;
-import org.booklore.util.FileUtils;
+import org.booklore.util.VipsImageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.file.Files;
@@ -38,6 +39,9 @@ class Rar5IntegrationTest {
 
     private static final Path RAR5_CBR = Path.of("src/test/resources/cbx/test-rar5.cbr");
 
+    @Mock
+    private VipsImageService vipsImageService;
+
     // -- CbxMetadataExtractor: extractMetadata fallback --
 
     @Test
@@ -45,13 +49,43 @@ class Rar5IntegrationTest {
         Path cbrCopy = tempDir.resolve("test.cbr");
         Files.copy(RAR5_CBR, cbrCopy);
 
-        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService());
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService(), vipsImageService);
         BookMetadata metadata = extractor.extractMetadata(cbrCopy.toFile());
 
         assertThat(metadata.getTitle()).isEqualTo("Test RAR5 Comic");
         assertThat(metadata.getSeriesName()).isEqualTo("RAR5 Test Series");
         assertThat(metadata.getSeriesNumber()).isEqualTo(1.0f);
         assertThat(metadata.getAuthors()).contains("Test Author");
+    }
+
+    @Test
+    void metadataExtractor_extractsCoverFromRar5(@TempDir Path tempDir) throws Exception {
+        Path cbrCopy = tempDir.resolve("test.cbr");
+        Files.copy(RAR5_CBR, cbrCopy);
+        org.mockito.Mockito.when(vipsImageService.canDecode(org.mockito.ArgumentMatchers.any(byte[].class)))
+                .thenReturn(true);
+
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService(), vipsImageService);
+        byte[] coverBytes = extractor.extractCover(cbrCopy.toFile());
+
+        assertThat(coverBytes).isNotNull();
+        assertThat(coverBytes.length).isGreaterThan(0);
+        assertThat(ImageIO.read(new ByteArrayInputStream(coverBytes))).isNotNull();
+    }
+
+    @Test
+    void metadataExtractor_extractsCoverFromRar5_withRealVipsWhenAvailable(@TempDir Path tempDir) throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(NativeLibraries.get().isVipsAvailable());
+
+        Path cbrCopy = tempDir.resolve("test.cbr");
+        Files.copy(RAR5_CBR, cbrCopy);
+
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService(), new VipsImageService());
+        byte[] coverBytes = extractor.extractCover(cbrCopy.toFile());
+
+        assertThat(coverBytes).isNotNull();
+        assertThat(coverBytes.length).isGreaterThan(0);
+        assertThat(ImageIO.read(new ByteArrayInputStream(coverBytes))).isNotNull();
     }
 
     // -- CbxReaderService: getImageEntriesFromRar + streamEntryFromRar fallback --
@@ -65,13 +99,13 @@ class Rar5IntegrationTest {
         book.setId(99L);
         BookRepository mockRepo = org.mockito.Mockito.mock(BookRepository.class);
         org.mockito.Mockito.when(mockRepo.findByIdForStreaming(99L)).thenReturn(java.util.Optional.of(book));
-        ChapterCacheService mockCache = org.mockito.Mockito.mock(ChapterCacheService.class);
+        org.booklore.service.reader.ChapterCacheService mockCache = org.mockito.Mockito.mock(org.booklore.service.reader.ChapterCacheService.class);
 
-        try (var fileUtilsStatic = org.mockito.Mockito.mockStatic(FileUtils.class)) {
-            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
+        try (var fileUtilsStatic = org.mockito.Mockito.mockStatic(org.booklore.util.FileUtils.class)) {
+            fileUtilsStatic.when(() -> org.booklore.util.FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache);
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, vipsImageService);
             List<Integer> pages = readerService.getAvailablePages(99L);
 
             assertThat(pages).hasSize(3);
@@ -88,15 +122,15 @@ class Rar5IntegrationTest {
         book.setId(99L);
         BookRepository mockRepo = org.mockito.Mockito.mock(BookRepository.class);
         org.mockito.Mockito.when(mockRepo.findByIdForStreaming(99L)).thenReturn(java.util.Optional.of(book));
-        ChapterCacheService mockCache = org.mockito.Mockito.mock(ChapterCacheService.class);
+        org.booklore.service.reader.ChapterCacheService mockCache = org.mockito.Mockito.mock(org.booklore.service.reader.ChapterCacheService.class);
 
         try (
-            var fileUtilsStatic = org.mockito.Mockito.mockStatic(FileUtils.class)
+            var fileUtilsStatic = org.mockito.Mockito.mockStatic(org.booklore.util.FileUtils.class)
         ) {
-            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
+            fileUtilsStatic.when(() -> org.booklore.util.FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache);
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, vipsImageService);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             readerService.streamPageImage(99L, 1, out);
 
@@ -120,7 +154,7 @@ class Rar5IntegrationTest {
         meta.setTitle("Test RAR5 Comic");
         book.setMetadata(meta);
 
-        CbxConversionService conversionService = new CbxConversionService(new ArchiveService());
+        CbxConversionService conversionService = new CbxConversionService(new ArchiveService(), vipsImageService);
         File epub = conversionService.convertCbxToEpub(cbrCopy.toFile(), tempDir.toFile(), book, 85);
 
         assertThat(epub).exists();
@@ -146,10 +180,10 @@ class Rar5IntegrationTest {
         Files.copy(RAR5_CBR, cbrCopy);
 
         AppSettingService mockSettings = org.mockito.Mockito.mock(AppSettingService.class);
-        var appSettings = new AppSettings();
-        var persistenceSettings = new MetadataPersistenceSettings();
-        var saveToFile = new MetadataPersistenceSettings.SaveToOriginalFile();
-        var cbxSettings = new MetadataPersistenceSettings.FormatSettings();
+        var appSettings = new org.booklore.model.dto.settings.AppSettings();
+        var persistenceSettings = new org.booklore.model.dto.settings.MetadataPersistenceSettings();
+        var saveToFile = new org.booklore.model.dto.settings.MetadataPersistenceSettings.SaveToOriginalFile();
+        var cbxSettings = new org.booklore.model.dto.settings.MetadataPersistenceSettings.FormatSettings();
         cbxSettings.setEnabled(true);
         cbxSettings.setMaxFileSizeInMb(500);
         saveToFile.setCbx(cbxSettings);

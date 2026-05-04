@@ -22,9 +22,8 @@ import org.booklore.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -81,18 +80,18 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         Path bookPath = FileUtils.getBookFullPath(bookEntity, bookFile);
 
         try {
-            Optional<BufferedImage> imageOptional = extractImagesFromArchive(bookPath);
-            if (imageOptional.isPresent()) {
-                BufferedImage image = imageOptional.get();
-                try {
-                    boolean saved = fileService.saveCoverImages(image, bookEntity.getId());
-                    if (saved) {
-                        return true;
-                    } else {
-                        log.warn("Could not save image extracted from CBZ as cover for '{}'", bookFile.getFileName());
-                    }
+            Path coverFile = extractCoverFileFromArchive(bookPath);
+            if (coverFile != null) {
+                boolean saved;
+                try (var coverStream = Files.newInputStream(coverFile)) {
+                    saved = fileService.saveCoverImages(coverStream, bookEntity.getId());
                 } finally {
-                    image.flush(); // Release resources after processing
+                    deleteTempFile(coverFile);
+                }
+                if (saved) {
+                    return true;
+                } else {
+                    log.warn("Could not save image extracted from CBZ as cover for '{}'", bookFile.getFileName());
                 }
             } else {
                 log.warn("Could not find cover image in '{}' archive", bookFile.getFileName());
@@ -108,20 +107,24 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         return List.of(BookFileType.CBX);
     }
 
-    private Optional<BufferedImage> extractImagesFromArchive(Path path) {
-        try{
-            byte[] coverBytes = cbxMetadataExtractor.extractCover(path);
-
-            if (coverBytes == null) {
-                return Optional.empty();
-            }
-
-            return Optional.ofNullable(FileService.readImage(new ByteArrayInputStream(coverBytes)));
+    private Path extractCoverFileFromArchive(Path path) {
+        try {
+            return cbxMetadataExtractor.extractCoverToTempFile(path);
         } catch (Exception e) {
             log.warn("Error reading archive cover {}: {}", path.getFileName(), e.getMessage());
         }
+        return null;
+    }
 
-        return Optional.empty();
+    private void deleteTempFile(Path tempFile) {
+        if (tempFile == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(tempFile);
+        } catch (Exception e) {
+            log.warn("Failed to delete temporary CBX cover file {}: {}", tempFile, e.getMessage());
+        }
     }
 
     private void extractAndSetMetadata(BookEntity bookEntity) {

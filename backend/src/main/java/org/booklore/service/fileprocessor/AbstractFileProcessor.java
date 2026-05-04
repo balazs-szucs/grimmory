@@ -15,13 +15,13 @@ import org.booklore.service.metadata.MetadataMatchService;
 import org.booklore.service.metadata.sidecar.SidecarMetadataWriter;
 import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.nio.file.Files;
+
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -93,37 +93,34 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
         return null;
     }
 
-    protected boolean generateCoverFromFolderImage(BookEntity bookEntity, Path bookFolder) {
+    protected boolean useFolderCoverImage(BookEntity bookEntity, Path bookFolder) {
         Optional<Path> coverImage = FileUtils.findCoverImageInFolder(bookFolder);
         if (coverImage.isEmpty()) return false;
-        try {
-            BufferedImage image = ImageIO.read(coverImage.get().toFile());
-            if (image == null) return false;
-            try {
-                return fileService.saveCoverImages(image, bookEntity.getId());
-            } finally {
-                image.flush();
-            }
+        try (var inputStream = Files.newInputStream(coverImage.get())) {
+            return fileService.saveCoverImages(inputStream, bookEntity.getId());
         } catch (Exception e) {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;
         }
     }
 
-    protected boolean generateAudiobookCoverFromFolderImage(BookEntity bookEntity, Path bookFolder) {
+    protected boolean useFolderAudiobookCoverImage(BookEntity bookEntity, Path bookFolder) {
         Optional<Path> coverImage = FileUtils.findCoverImageInFolder(bookFolder);
         if (coverImage.isEmpty()) return false;
-        try {
-            BufferedImage image = FileService.readImage(Files.readAllBytes(coverImage.get()));
-            if (image == null) return false;
-            try {
-                return fileService.saveAudiobookCoverImages(image, bookEntity.getId());
-            } finally {
-                image.flush();
-            }
+        try (var inputStream = Files.newInputStream(coverImage.get())) {
+            return fileService.saveAudiobookCoverImages(inputStream, bookEntity.getId());
         } catch (Exception e) {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;
         }
     }
+
+    protected boolean generateCoverFromFolderImage(BookEntity bookEntity, Path bookFolder) {
+        return useFolderCoverImage(bookEntity, bookFolder);
+    }
+
+    protected boolean generateAudiobookCoverFromFolderImage(BookEntity bookEntity, Path bookFolder) {
+        return useFolderAudiobookCoverImage(bookEntity, bookFolder);
+    }
+
 }
