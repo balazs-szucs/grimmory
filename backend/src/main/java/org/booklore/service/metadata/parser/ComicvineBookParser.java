@@ -283,7 +283,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             if (volume.getCountOfIssues() != null && volume.getCountOfIssues() >= requestedIssue) {
                 score += 20;
             }
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException _) {}
 
         Set<String> majorPublishers = Set.of("Marvel", "DC Comics", "Image Comics", "Dark Horse Comics", "IDW Publishing", "Dynamite Entertainment", "BOOM! Studios", "Valiant Entertainment");
         if (volume.getPublisher() != null && volume.getPublisher().getName() != null) {
@@ -298,7 +298,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
                 if (year >= 2000) score += 5;
                 if (year >= 2010) score += 5;
                 if (year >= 2020) score += 5;
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException _) {}
         }
 
         return score;
@@ -502,7 +502,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         if (response != null && response.getResults() != null) {
             return response.getResults().stream()
                     .map(comic -> convertToBookMetadata(comic, null))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         return Collections.emptyList();
     }
@@ -512,9 +512,33 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
     }
 
     private <T> T sendRequestWithRetry(URI uri, Class<T> responseType, int retriesLeft) {
-        return rateLimitService.execute("Comicvine", MIN_REQUEST_INTERVAL_MS, () -> {
-            long callNumber = apiCallCounter.incrementAndGet();
-            String endpoint = extractEndpointFromUri(uri);
+        if (rateLimited.get()) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime < rateLimitResetTime.get()) {
+                log.warn("ComicVine API is currently rate limited. Skipping request. Rate limit resets at: {}",
+                        Instant.ofEpochMilli(rateLimitResetTime.get()));
+                return null;
+            } else {
+                rateLimited.compareAndSet(true, false);
+                log.info("ComicVine rate limit period expired, resuming normal requests");
+            }
+        }
+
+        long now = System.currentTimeMillis();
+        long timeSinceLastRequest = now - lastRequestTime.get();
+        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+            long sleepTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+            log.debug("Rate limiting: sleeping {}ms before next request", sleepTime);
+            try {
+                Thread.sleep(sleepTime);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        lastRequestTime.set(System.currentTimeMillis());
+        
+        long callNumber = apiCallCounter.incrementAndGet();
+        String endpoint = extractEndpointFromUri(uri);
 
             try {
                 log.debug("ComicVine API call #{} to {}", callNumber, endpoint);
@@ -528,31 +552,36 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
                 log.debug("ComicVine API call #{} completed: status={}, size={}bytes",
                         callNumber, response.statusCode(), response.body() != null ? response.body().length() : 0);
 
-                if (response.statusCode() == 200) {
-                    return objectMapper.readValue(response.body(), responseType);
-                } else if (response.statusCode() == 420 || response.statusCode() == 429) {
-                    handleRateLimit(response);
-                    return null;
-                } else if (response.statusCode() >= 500 && retriesLeft > 0) {
-                    log.warn("ComicVine API returned status {}. Retrying... ({} retries left)",
-                             response.statusCode(), retriesLeft);
-                    return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
-                } else {
-                    log.error("Comicvine API returned status code {}. Body: {}", response.statusCode(), response.body());
-                }
-            } catch (IOException e) {
-                if (retriesLeft > 0) {
-                    log.warn("IOException during ComicVine request. Retrying... ({} retries left)", retriesLeft, e);
-                    return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
-                } else {
-                    log.error("Error fetching data from Comicvine API after retries", e);
-                }
-            } catch (InterruptedException e) {
-                log.error("Request interrupted", e);
-                Thread.currentThread().interrupt();
+            if (response.statusCode() == 200) {
+                return objectMapper.readValue(response.body(), responseType);
+            } else if (response.statusCode() == 420 || response.statusCode() == 429) {
+                handleRateLimit(response);
+                return null;
+            } else if (response.statusCode() >= 500 && retriesLeft > 0) {
+                log.warn("ComicVine API returned status {}. Retrying... ({} retries left)", 
+                         response.statusCode(), retriesLeft);
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ignored) {}
+                return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
+            } else {
+                log.error("Comicvine API returned status code {}. Body: {}", response.statusCode(), response.body());
             }
-            return null;
-        }).join();
+        } catch (IOException e) {
+            if (retriesLeft > 0) {
+                log.warn("IOException during ComicVine request. Retrying... ({} retries left)", retriesLeft, e);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {}
+                return sendRequestWithRetry(uri, responseType, retriesLeft - 1);
+            } else {
+                log.error("Error fetching data from Comicvine API after retries", e);
+            }
+        } catch (InterruptedException e) {
+            log.error("Request interrupted", e);
+            Thread.currentThread().interrupt();
+        }
+        return null;
     }
 
     private void handleRateLimit(HttpResponse<String> response) {
@@ -865,7 +894,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
                     year = y;
                     yearString = yearMatcher.group(0);
                 }
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException _) {}
         }
 
         String cleaned = term;

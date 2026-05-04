@@ -874,7 +874,7 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
         for (String pattern : DATE_PATTERNS) {
             try {
                 return LocalDate.parse(trimmedDate, DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH));
-            } catch (DateTimeParseException ignored) {
+            } catch (DateTimeParseException _) {
             }
         }
 
@@ -882,7 +882,7 @@ public class AmazonBookParser implements BookParser, DetailedMetadataProvider {
             for (String pattern : DATE_PATTERNS) {
                 try {
                     return LocalDate.parse(trimmedDate, DateTimeFormatter.ofPattern(pattern, localeInfo.locale()));
-                } catch (DateTimeParseException ignored) {
+                } catch (DateTimeParseException _) {
                 }
             }
         }
