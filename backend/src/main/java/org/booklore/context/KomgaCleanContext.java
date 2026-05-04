@@ -1,24 +1,20 @@
 package org.booklore.context;
 
 /**
- * ThreadLocal context to track whether the Komga API "clean" mode is enabled.
- * When clean mode is enabled:
- * - Fields ending with "Lock" are excluded from JSON serialization
- * - Null values are excluded from JSON serialization
- * - Metadata fields (language, summary, etc.) are allowed to be null
+ * Context to track whether the Komga API "clean" mode is enabled.
+ * Uses ScopedValue for efficient, immutable context sharing across threads.
  */
 public class KomgaCleanContext {
-    private static final ThreadLocal<Boolean> cleanModeEnabled = ThreadLocal.withInitial(() -> false);
+    public static final ScopedValue<Boolean> CLEAN_MODE = ScopedValue.newInstance();
 
-    public static void setCleanMode(boolean enabled) {
-        cleanModeEnabled.set(enabled);
-    }
+    private KomgaCleanContext() {}
 
+    /**
+     * Checks if the clean mode is enabled in the current scope.
+     *
+     * @return true if clean mode is enabled, false otherwise
+     */
     public static boolean isCleanMode() {
-        return cleanModeEnabled.get();
-    }
-
-    public static void clear() {
-        cleanModeEnabled.remove();
+        return CLEAN_MODE.isBound() && CLEAN_MODE.get();
     }
 }

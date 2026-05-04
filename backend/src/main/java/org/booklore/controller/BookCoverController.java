@@ -24,6 +24,7 @@ import java.io.IOException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.booklore.util.PacedConsumer;
@@ -165,36 +166,42 @@ public class BookCoverController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Cover fetch request") @RequestBody CoverFetchRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L); // 3 minutes timeout
-        AtomicBoolean clientGone = new AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<Thread> backgroundThread = new java.util.concurrent.atomic.AtomicReference<>();
 
-        emitter.onCompletion(() -> clientGone.set(true));
-        emitter.onTimeout(() -> clientGone.set(true));
-        emitter.onError(e -> clientGone.set(true));
+        emitter.onCompletion(() -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
+        emitter.onTimeout(() -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
+        emitter.onError(e -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
 
         taskExecutor.execute(() -> {
+            backgroundThread.set(Thread.currentThread());
             try (PacedConsumer<CoverImage> pacedConsumer = new PacedConsumer<>(image -> {
-                if (clientGone.get()) return;
                 synchronized (emitter) {
                     try {
                         emitter.send(SseEmitter.event()
                                 .data(image)
                                 .build());
                     } catch (IOException e) {
-                        clientGone.set(true);
                         log.warn("Client disconnected during cover image SSE stream", e);
+                        Thread.currentThread().interrupt();
                     }
                 }
             }, 30, taskScheduler)) {
-                duckDuckGoCoverService.getCovers(request, clientGone::get, pacedConsumer);
+                ScopedValue.where(DuckDuckGoCoverService.COVER_CONSUMER, (Consumer<CoverImage>) pacedConsumer)
+                        .run(() -> duckDuckGoCoverService.getCovers(request));
             } catch (Exception e) {
-                if (!clientGone.get()) {
-                    log.error("Failed to fetch cover images", e);
-                    emitter.completeWithError(e);
-                }
+                log.error("Failed to fetch cover images", e);
+                emitter.completeWithError(e);
             } finally {
-                if (!clientGone.get()) {
-                    emitter.complete();
-                }
+                emitter.complete();
             }
         });
 

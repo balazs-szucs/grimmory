@@ -2,7 +2,6 @@ package org.booklore.config;
 
 import org.booklore.context.KomgaCleanContext;
 import org.booklore.model.dto.komga.KomgaSeriesMetadataDto;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -23,11 +22,6 @@ class KomgaCleanModeDemo {
     void setup() {
         JacksonConfig config = new JacksonConfig();
         objectMapper = config.komgaCleanObjectMapper();
-    }
-
-    @AfterEach
-    void cleanup() {
-        KomgaCleanContext.clear();
     }
 
     @Test
@@ -58,15 +52,17 @@ class KomgaCleanModeDemo {
                 .build();
 
         // Test without clean mode
-        KomgaCleanContext.setCleanMode(false);
-        String normalJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(metadata);
+        String normalJson = ScopedValue.where(KomgaCleanContext.CLEAN_MODE, false).call(() -> 
+            objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(metadata)
+        );
         System.out.println("=== WITHOUT CLEAN MODE ===");
         System.out.println(normalJson);
         System.out.println("JSON size: " + normalJson.length() + " bytes\n");
 
         // Test with clean mode
-        KomgaCleanContext.setCleanMode(true);
-        String cleanJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(metadata);
+        String cleanJson = ScopedValue.where(KomgaCleanContext.CLEAN_MODE, true).call(() -> 
+            objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(metadata)
+        );
         System.out.println("=== WITH CLEAN MODE (clean=true) ===");
         System.out.println(cleanJson);
         System.out.println("JSON size: " + cleanJson.length() + " bytes\n");

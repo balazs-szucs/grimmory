@@ -13,8 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -30,7 +28,7 @@ public class LibraryWatchService implements SmartLifecycle {
 
     private final ConcurrentHashMap<Path, WatchEntry> watches = new ConcurrentHashMap<>();
     private final Map<Long, Boolean> libraryWatchStatus = new ConcurrentHashMap<>();
-    private final Lock watchLock = new ReentrantLock();
+    private final Object watchLock = new Object();
     private volatile boolean running;
 
     private record WatchEntry(WatchKey key, long libraryId) {}
@@ -202,33 +200,29 @@ public class LibraryWatchService implements SmartLifecycle {
             log.warn("Cannot register path that is not a directory: {}", path);
             return false;
         }
-        watchLock.lock();
-        try {
-            if (!watches.containsKey(path)) {
-                WatchKey key = path.register(watchService,
-                        StandardWatchEventKinds.ENTRY_CREATE,
-                        StandardWatchEventKinds.ENTRY_DELETE);
-                watches.put(path, new WatchEntry(key, libraryId));
-                return true;
+        synchronized (watchLock) {
+            try {
+                if (!watches.containsKey(path)) {
+                    WatchKey key = path.register(watchService,
+                            StandardWatchEventKinds.ENTRY_CREATE,
+                            StandardWatchEventKinds.ENTRY_DELETE);
+                    watches.put(path, new WatchEntry(key, libraryId));
+                    return true;
+                }
+            } catch (IOException e) {
+                log.error("Error registering path: {}", path, e);
             }
-        } catch (IOException e) {
-            log.error("Error registering path: {}", path, e);
-        } finally {
-            watchLock.unlock();
         }
         return false;
     }
 
     public void unregisterPath(Path path) {
-        watchLock.lock();
-        try {
+        synchronized (watchLock) {
             WatchEntry entry = watches.remove(path);
             if (entry != null) {
                 entry.key().cancel();
                 log.debug("Unregistered path: {}", path);
             }
-        } finally {
-            watchLock.unlock();
         }
     }
 

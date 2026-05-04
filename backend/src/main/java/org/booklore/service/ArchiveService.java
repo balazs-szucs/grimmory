@@ -17,7 +17,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -25,14 +24,14 @@ import java.util.stream.Stream;
 @Service
 public class ArchiveService {
     private static final int LOCK_STRIPE_COUNT = 256;
-    private final ReentrantLock[] lockStripes = IntStream.range(0, LOCK_STRIPE_COUNT)
-            .mapToObj(_ -> new ReentrantLock())
-            .toArray(ReentrantLock[]::new);
+    private final Object[] lockStripes = IntStream.range(0, LOCK_STRIPE_COUNT)
+            .mapToObj(_ -> new Object())
+            .toArray(Object[]::new);
 
     // Route through the JVM-wide serialized native loader.
     private final boolean available = NativeLibraries.get().isLibArchiveAvailable();
 
-    private ReentrantLock getFileLock(Path path) {
+    private Object getFileLock(Path path) {
         int hash = path.toAbsolutePath().normalize().toString().hashCode();
         return lockStripes[Math.floorMod(hash, LOCK_STRIPE_COUNT)];
     }
@@ -59,15 +58,13 @@ public class ArchiveService {
 
     public Stream<Entry> streamEntries(Path path) throws IOException {
         requireAvailable();
-        ReentrantLock lock = getFileLock(path);
-        lock.lock();
-        try {
-            List<ArchiveEntry> entries = Archive.getEntries(path);
-            return entries.stream().map(this::getEntryFromArchiveEntry);
-        } catch (LibArchiveException e) {
-            throw new IOException("Failed to read archive", e);
-        } finally {
-            lock.unlock();
+        synchronized (getFileLock(path)) {
+            try {
+                List<ArchiveEntry> entries = Archive.getEntries(path);
+                return entries.stream().map(this::getEntryFromArchiveEntry);
+            } catch (LibArchiveException e) {
+                throw new IOException("Failed to read archive", e);
+            }
         }
     }
 
@@ -77,15 +74,13 @@ public class ArchiveService {
 
     public Stream<String> streamEntryNames(Path path) throws IOException {
         requireAvailable();
-        ReentrantLock lock = getFileLock(path);
-        lock.lock();
-        try {
-            List<ArchiveEntry> entries = Archive.getEntries(path);
-            return entries.stream().map(ArchiveEntry::getName);
-        } catch (LibArchiveException e) {
-            throw new IOException("Failed to read archive", e);
-        } finally {
-            lock.unlock();
+        synchronized (getFileLock(path)) {
+            try {
+                List<ArchiveEntry> entries = Archive.getEntries(path);
+                return entries.stream().map(ArchiveEntry::getName);
+            } catch (LibArchiveException e) {
+                throw new IOException("Failed to read archive", e);
+            }
         }
     }
 
@@ -94,22 +89,20 @@ public class ArchiveService {
         // We cannot directly use the NightCompress `InputStream` as it is limited
         // in its implementation and will cause fatal errors.  Instead, we can use
         // the `transferTo` on an output stream to copy data around.
-        ReentrantLock lock = getFileLock(path);
-        lock.lock();
-        try (InputStream inputStream = Archive.getInputStream(path, entryName)) {
-            if (inputStream != null) {
-                try {
-                    return inputStream.transferTo(outputStream);
-                } finally {
-                    // NightCompress fails with a SIGSEGV if you do not read the
-                    // entirety of the input stream from the zip.
-                    inputStream.transferTo(OutputStream.nullOutputStream());
+        synchronized (getFileLock(path)) {
+            try (InputStream inputStream = Archive.getInputStream(path, entryName)) {
+                if (inputStream != null) {
+                    try {
+                        return inputStream.transferTo(outputStream);
+                    } finally {
+                        // NightCompress fails with a SIGSEGV if you do not read the
+                        // entirety of the input stream from the zip.
+                        inputStream.transferTo(OutputStream.nullOutputStream());
+                    }
                 }
+            } catch (Exception e) {
+                throw new IOException("Failed to extract from archive: " + e.getMessage(), e);
             }
-        } catch (Exception e) {
-            throw new IOException("Failed to extract from archive: " + e.getMessage(), e);
-        } finally {
-            lock.unlock();
         }
 
         throw new IOException("Entry not found in archive");
@@ -190,26 +183,24 @@ public class ArchiveService {
 
     public long extractEntryToPath(Path path, String entryName, Path outputPath) throws IOException {
         requireAvailable();
-        ReentrantLock lock = getFileLock(path);
-        lock.lock();
+        synchronized (getFileLock(path)) {
 
-        boolean hasCreatedFile = false;
-        try (OutputStream outputStream = Files.newOutputStream(outputPath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-            hasCreatedFile = true;
+            boolean hasCreatedFile = false;
+            try (OutputStream outputStream = Files.newOutputStream(outputPath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                hasCreatedFile = true;
 
-            return transferEntryTo(path, entryName, outputStream);
-        } catch (Exception e) {
-            if (hasCreatedFile) {
-                try {
-                    Files.deleteIfExists(outputPath);
-                } catch (Exception ce) {
-                    e.addSuppressed(ce);
+                return transferEntryTo(path, entryName, outputStream);
+            } catch (Exception e) {
+                if (hasCreatedFile) {
+                    try {
+                        Files.deleteIfExists(outputPath);
+                    } catch (Exception ce) {
+                        e.addSuppressed(ce);
+                    }
                 }
-            }
 
-            throw new IOException("Failed to extract from archive: " + e.getMessage(), e);
-        } finally {
-            lock.unlock();
+                throw new IOException("Failed to extract from archive: " + e.getMessage(), e);
+            }
         }
     }
 }

@@ -42,9 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.StructuredTaskScope;
-import java.util.concurrent.StructuredTaskScope.Joiner;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -54,8 +52,6 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AuthorMetadataService {
 
-    public static final ScopedValue<Consumer<AuthorSummary>> SUMMARY_CONSUMER = ScopedValue.newInstance();
-
     private final AuthorRepository authorRepository;
     private final Map<AuthorMetadataSource, AuthorParser> authorParserMap;
     private final AuditService auditService;
@@ -64,8 +60,6 @@ public class AuthorMetadataService {
     private final AuthenticationService authenticationService;
     private final AppSettingService appSettingService;
     private final PlatformTransactionManager transactionManager;
-
-    private static final int MAX_CONCURRENT_AUTHOR_MATCHES = 5;
 
     public List<AuthorSummary> getAllAuthors() {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
@@ -164,50 +158,39 @@ public class AuthorMetadataService {
 
     private final AsyncTaskExecutor taskExecutor;
 
-    public void autoMatchAuthors(List<Long> authorIds) {
+    public void autoMatchAuthors(List<Long> authorIds, Consumer<AuthorSummary> consumer) {
+        autoMatchAuthors(authorIds, () -> false, consumer);
+    }
+
+    public void autoMatchAuthors(List<Long> authorIds, BooleanSupplier isCancelled, Consumer<AuthorSummary> consumer) {
         if (authorIds == null || authorIds.isEmpty()) return;
 
-        Semaphore semaphore = new Semaphore(MAX_CONCURRENT_AUTHOR_MATCHES);
-
-        try (var scope = StructuredTaskScope.open(Joiner.allSuccessfulOrThrow())) {
+        try (var scope = StructuredTaskScope.open()) {
             for (Long authorId : authorIds) {
                 scope.fork(() -> {
-                    semaphore.acquire();
+                    if (isCancelled.getAsBoolean()) return null;
                     try {
                         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
                         AuthorDetails details = transactionTemplate.execute(status -> quickMatchAuthor(authorId, "us"));
-                        if (details != null && SUMMARY_CONSUMER.isBound()) {
+                        if (details != null) {
                             AuthorSummary summary = AuthorSummary.builder()
                                     .id(details.getId())
                                     .name(details.getName())
                                     .asin(details.getAsin())
                                     .hasPhoto(Files.exists(Paths.get(fileService.getAuthorThumbnailFile(authorId))))
                                     .build();
-                            SUMMARY_CONSUMER.get().accept(summary);
+                            consumer.accept(summary);
                         }
                     } catch (Exception e) {
                         log.error("Failed to auto-match author with ID: {}", authorId, e);
-                    } finally {
-                        semaphore.release();
                     }
                     return null;
                 });
             }
             scope.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("Author auto-match interrupted");
         } catch (Exception e) {
             log.error("Failed to complete structured task scope for author auto-matching", e);
         }
-    }
-
-    public void autoMatchAuthors(List<Long> authorIds, Consumer<AuthorSummary> consumer) {
-        ScopedValue.where(SUMMARY_CONSUMER, consumer).run(() -> autoMatchAuthors(authorIds));
-    }
-
-    public void autoMatchAuthors(List<Long> authorIds, BooleanSupplier isCancelled, Consumer<AuthorSummary> consumer) {
-        autoMatchAuthors(authorIds, consumer);
     }
 
     @Transactional
@@ -326,24 +309,18 @@ public class AuthorMetadataService {
         return toAuthorDetails(author);
     }
 
-    public static final ScopedValue<Consumer<CoverImage>> PHOTO_CONSUMER = ScopedValue.newInstance();
-
-    public void searchAuthorPhotos(String name) {
-        String searchTerm = name + " author photo portrait";
-        AtomicInteger count = new AtomicInteger(0);
-        duckDuckGoCoverService.searchImages(searchTerm, () -> Thread.currentThread().isInterrupted(), image -> {
-            if (count.getAndIncrement() < 50 && PHOTO_CONSUMER.isBound()) {
-                PHOTO_CONSUMER.get().accept(image);
-            }
-        });
-    }
-
     public void searchAuthorPhotos(String name, Consumer<CoverImage> consumer) {
-        ScopedValue.where(PHOTO_CONSUMER, consumer).run(() -> searchAuthorPhotos(name));
+        searchAuthorPhotos(name, () -> false, consumer);
     }
 
     public void searchAuthorPhotos(String name, BooleanSupplier isCancelled, Consumer<CoverImage> consumer) {
-        searchAuthorPhotos(name, consumer);
+        String searchTerm = name + " author photo portrait";
+        AtomicInteger count = new AtomicInteger(0);
+        duckDuckGoCoverService.searchImages(searchTerm, isCancelled, image -> {
+            if (count.getAndIncrement() < 50) {
+                consumer.accept(image);
+            }
+        });
     }
 
     @Transactional

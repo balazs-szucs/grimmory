@@ -140,36 +140,41 @@ public class AuthorController {
     @PostMapping(value = "/auto-match", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter autoMatchAuthors(@RequestBody List<Long> authorIds) {
         SseEmitter emitter = new SseEmitter(300_000L); // 5 minutes timeout
-        java.util.concurrent.atomic.AtomicBoolean clientGone = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<Thread> backgroundThread = new java.util.concurrent.atomic.AtomicReference<>();
 
-        emitter.onCompletion(() -> clientGone.set(true));
-        emitter.onTimeout(() -> clientGone.set(true));
-        emitter.onError(e -> clientGone.set(true));
+        emitter.onCompletion(() -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
+        emitter.onTimeout(() -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
+        emitter.onError(e -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
 
         taskExecutor.execute(() -> {
-            try (org.booklore.util.PacedConsumer<AuthorSummary> pacedConsumer = new org.booklore.util.PacedConsumer<>(summary -> {
-                if (clientGone.get()) return;
+            backgroundThread.set(Thread.currentThread());
+            try (PacedConsumer<AuthorSummary> pacedConsumer = new PacedConsumer<>(summary -> {
                 synchronized (emitter) {
                     try {
                         emitter.send(SseEmitter.event()
                                 .data(summary)
                                 .build());
                     } catch (IOException e) {
-                        clientGone.set(true);
                         log.warn("Client disconnected during author auto-match SSE stream", e);
+                        Thread.currentThread().interrupt();
                     }
                 }
             }, 50, taskScheduler)) {
-                authorMetadataService.autoMatchAuthors(authorIds, clientGone::get, pacedConsumer);
+                authorMetadataService.autoMatchAuthors(authorIds, pacedConsumer);
             } catch (Exception e) {
-                if (!clientGone.get()) {
-                    log.error("Author auto-match failed", e);
-                    emitter.completeWithError(e);
-                }
+                log.error("Author auto-match failed", e);
+                emitter.completeWithError(e);
             } finally {
-                if (!clientGone.get()) {
-                    emitter.complete();
-                }
+                emitter.complete();
             }
         });
 
@@ -193,36 +198,41 @@ public class AuthorController {
             @Parameter(description = "ID of the author") @PathVariable long authorId,
             @Parameter(description = "Author name to search") @RequestParam("q") String query) {
         SseEmitter emitter = new SseEmitter(180_000L); // 3 minutes timeout
-        java.util.concurrent.atomic.AtomicBoolean clientGone = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<Thread> backgroundThread = new java.util.concurrent.atomic.AtomicReference<>();
 
-        emitter.onCompletion(() -> clientGone.set(true));
-        emitter.onTimeout(() -> clientGone.set(true));
-        emitter.onError(e -> clientGone.set(true));
+        emitter.onCompletion(() -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
+        emitter.onTimeout(() -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
+        emitter.onError(e -> {
+            Thread thread = backgroundThread.get();
+            if (thread != null) thread.interrupt();
+        });
 
         taskExecutor.execute(() -> {
-            try (org.booklore.util.PacedConsumer<CoverImage> pacedConsumer = new org.booklore.util.PacedConsumer<>(image -> {
-                if (clientGone.get()) return;
+            backgroundThread.set(Thread.currentThread());
+            try (PacedConsumer<CoverImage> pacedConsumer = new PacedConsumer<>(image -> {
                 synchronized (emitter) {
                     try {
                         emitter.send(SseEmitter.event()
                                 .data(image)
                                 .build());
                     } catch (IOException e) {
-                        clientGone.set(true);
                         log.warn("Client disconnected during author photo search SSE stream", e);
+                        Thread.currentThread().interrupt();
                     }
                 }
             }, 30, taskScheduler)) {
-                authorMetadataService.searchAuthorPhotos(query, clientGone::get, pacedConsumer);
+                authorMetadataService.searchAuthorPhotos(query, pacedConsumer);
             } catch (Exception e) {
-                if (!clientGone.get()) {
-                    log.error("Author photo search failed", e);
-                    emitter.completeWithError(e);
-                }
+                log.error("Author photo search failed", e);
+                emitter.completeWithError(e);
             } finally {
-                if (!clientGone.get()) {
-                    emitter.complete();
-                }
+                emitter.complete();
             }
         });
 

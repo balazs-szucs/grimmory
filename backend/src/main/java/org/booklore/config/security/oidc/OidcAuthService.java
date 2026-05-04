@@ -26,10 +26,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.text.ParseException;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -52,7 +50,7 @@ public class OidcAuthService {
     private final OidcGroupMappingService oidcGroupMappingService;
     private final AuditService auditService;
 
-    private static final ConcurrentMap<String, ReentrantLock> userLocks = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, Object> userLocks = new ConcurrentHashMap<>();
 
     @Transactional
     public ResponseEntity<Map<String, String>> exchangeCodeForTokens(
@@ -211,9 +209,8 @@ public class OidcAuthService {
                         throw ApiError.OIDC_USER_NOT_PROVISIONED.createException(userClaims.username());
                     }
 
-                    ReentrantLock lock = userLocks.computeIfAbsent(userClaims.username(), _ -> new ReentrantLock());
-                    lock.lock();
-                    try {
+                    Object lock = userLocks.computeIfAbsent(userClaims.username(), _ -> new Object());
+                    synchronized (lock) {
                         return userRepository.findByOidcIssuerAndOidcSubject(issuerUri, userClaims.subject())
                                 .or(() -> userRepository.findByUsername(userClaims.username()))
                                 .orElseGet(() -> {
@@ -232,8 +229,6 @@ public class OidcAuthService {
                                             "OIDC auto-provisioned user: " + newUser.getUsername());
                                     return newUser;
                                 });
-                    } finally {
-                        lock.unlock();
                     }
                 });
     }

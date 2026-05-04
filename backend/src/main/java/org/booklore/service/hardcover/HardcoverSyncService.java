@@ -37,8 +37,8 @@ public class HardcoverSyncService {
     private final HardcoverSyncSettingsService hardcoverSyncSettingsService;
     private final BookRepository bookRepository;
 
-    // Thread-local to hold the current API token for GraphQL requests
-    private final ThreadLocal<String> currentApiToken = new ThreadLocal<>();
+    // ScopedValue to hold the current API token for GraphQL requests
+    public static final ScopedValue<String> CURRENT_API_TOKEN = ScopedValue.newInstance();
 
     @Autowired
     public HardcoverSyncService(HardcoverSyncSettingsService hardcoverSyncSettingsService, BookRepository bookRepository) {
@@ -70,10 +70,8 @@ public class HardcoverSyncService {
                 return;
             }
 
-            // Set the user's API token for this sync operation
-            try {
-                currentApiToken.set(userSettings.getHardcoverApiKey());
-
+            // Set the user's API token for this sync operation using ScopedValue
+            ScopedValue.where(CURRENT_API_TOKEN, userSettings.getHardcoverApiKey()).run(() -> {
                 if (progressPercent == null) {
                     log.debug("Hardcover sync skipped: no progress to sync");
                     return;
@@ -122,7 +120,13 @@ public class HardcoverSyncService {
                 Integer hardcoverBookIdInt = extractInteger(hardcoverBook.bookId);
                 
                 // Check if user already has the book in their library and get existing reading progress
-                UserBookWithReads userBook = getUserBookAndReads(hardcoverBookIdInt);
+                UserBookWithReads userBook;
+                try {
+                    userBook = getUserBookAndReads(hardcoverBookIdInt);
+                } catch (Exception e) {
+                    log.warn("Failed to get user book and reads: {}", e.getMessage());
+                    return;
+                }
                 
                 // If user doesn't have the book in their library, insert it with the matching edition.
                 if (userBook == null) {
@@ -190,10 +194,7 @@ public class HardcoverSyncService {
                     log.info("Synced progress to Hardcover: userId={}, book={}, hardcoverBookId={}, hardcoverEditionId={}, progress={}% ({}pages)", 
                         userId, bookId, hardcoverBook.bookId, hardcoverBook.editionId, Math.round(progressPercent), progressPages);
                 }
-            } finally {
-                // Clean up thread-local
-                currentApiToken.remove();
-            }
+            });
 
         } catch (Exception e) {
             log.error("Failed to sync progress to Hardcover for book {} (user {}): {}", 
@@ -215,7 +216,7 @@ public class HardcoverSyncService {
     }
 
     private String getApiToken() {
-        return currentApiToken.get();
+        return CURRENT_API_TOKEN.get();
     }
 
     /**

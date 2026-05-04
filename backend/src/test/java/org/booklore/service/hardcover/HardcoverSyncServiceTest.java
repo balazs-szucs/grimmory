@@ -590,7 +590,8 @@ class HardcoverSyncServiceTest {
         Method method = HardcoverSyncService.class
                 .getDeclaredMethod("resolveHardcoverBook", String.class, String.class, String.class);
         method.setAccessible(true);
-        return method.invoke(service, bookId, isbn13, isbn10);
+        return ScopedValue.where(HardcoverSyncService.CURRENT_API_TOKEN, "test-api-key")
+                .call(() -> method.invoke(service, bookId, isbn13, isbn10));
     }
 
     // === Helper methods to create mock responses ===

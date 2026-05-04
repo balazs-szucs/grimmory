@@ -14,8 +14,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.StructuredTaskScope.Joiner;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Service for managing the on-disk extraction cache for reader chapters.
@@ -29,17 +30,16 @@ public class ChapterCacheService {
 
     private final AppProperties appProperties;
     private final ArchiveService archiveService;
-    private final ConcurrentHashMap<String, ReentrantLock> cacheLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Object> cacheLocks = new ConcurrentHashMap<>();
 
     /**
      * Ensures all pages of a CBX archive are extracted to the disk cache.
-     * Extracts pages sequentially to avoid concurrent native libarchive access
-     * which can cause SIGSEGV / out-of-memory crashes in the native heap.
+     * Extracts pages in parallel using StructuredTaskScope.
+     * Concurrent native libarchive access is now safely handled via synchronized blocks in ArchiveService.
      */
     public void prepareCbxCache(String cacheKey, Path cbxPath, List<String> entries) throws IOException {
-        ReentrantLock lock = cacheLocks.computeIfAbsent(cacheKey, _ -> new ReentrantLock());
-        lock.lock();
-        try {
+        Object lock = cacheLocks.computeIfAbsent(cacheKey, _ -> new Object());
+        synchronized (lock) {
             Path cacheDir = getCacheDir(cacheKey);
             if (!Files.exists(cacheDir)) {
                 Files.createDirectories(cacheDir);
@@ -49,20 +49,30 @@ public class ChapterCacheService {
             if (isCacheStale(cacheDir, cbxPath, entries.size())) {
                 log.info("Populating disk cache for {}: {} pages", cacheKey, entries.size());
 
-                for (int i = 0; i < entries.size(); i++) {
-                    Path target = cacheDir.resolve("page_" + (i + 1) + ".jpg");
-                    if (!Files.exists(target) || Files.size(target) == 0) {
-                        String entryName = entries.get(i);
-                        writeAtomically(target, out ->
-                                archiveService.transferEntryTo(cbxPath, entryName, out));
+                try (var scope = StructuredTaskScope.open(Joiner.awaitAllSuccessfulOrThrow())) {
+                    for (int i = 0; i < entries.size(); i++) {
+                        final int index = i;
+                        final String entryName = entries.get(i);
+                        scope.fork(() -> {
+                            Path target = cacheDir.resolve("page_" + (index + 1) + ".jpg");
+                            if (!Files.exists(target) || Files.size(target) == 0) {
+                                writeAtomically(target, out ->
+                                        archiveService.transferEntryTo(cbxPath, entryName, out));
+                            }
+                            return null;
+                        });
                     }
+                    scope.join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Cache preparation interrupted", e);
+                } catch (Exception e) {
+                    throw new IOException("Failed to populate cache", e);
                 }
 
                 // Mark cache as fresh by setting its mtime to match the archive
                 Files.setLastModifiedTime(cacheDir, Files.getLastModifiedTime(cbxPath));
             }
-        } finally {
-            lock.unlock();
         }
     }
 

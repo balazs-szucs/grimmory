@@ -7,14 +7,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.concurrent.locks.ReentrantLock;
+import java.lang.StableValue;
 
 @Service
 public class JwtSecretService {
 
     private final JwtSecretRepository jwtSecretRepository;
-    private volatile String cachedSecret;
-    private final ReentrantLock lock = new ReentrantLock();
+    private final StableValue<String> cachedSecret = StableValue.of();
 
     public JwtSecretService(JwtSecretRepository jwtSecretRepository) {
         this.jwtSecretRepository = jwtSecretRepository;
@@ -22,18 +21,10 @@ public class JwtSecretService {
 
     @Transactional
     public String getSecret() {
-        if (cachedSecret == null) {
-            lock.lock();
-            try {
-                if (cachedSecret == null) {
-                    cachedSecret = jwtSecretRepository.findLatestSecret()
-                            .orElseGet(this::generateAndStoreNewSecret);
-                }
-            } finally {
-                lock.unlock();
-            }
-        }
-        return cachedSecret;
+        return cachedSecret.orElseSet(() -> 
+            jwtSecretRepository.findLatestSecret()
+                .orElseGet(this::generateAndStoreNewSecret)
+        );
     }
 
     private String generateAndStoreNewSecret() {

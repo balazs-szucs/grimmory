@@ -29,6 +29,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.booklore.util.PacedConsumer;
+
 @RestController
 @RequestMapping("/api/v1/books")
 @AllArgsConstructor
@@ -58,7 +60,7 @@ public class MetadataController {
         emitter.onError(e -> clientGone.set(true));
 
         taskExecutor.execute(() -> {
-            try (org.booklore.util.PacedConsumer<BookMetadata> pacedConsumer = new org.booklore.util.PacedConsumer<>(metadata -> {
+            try (PacedConsumer<BookMetadata> pacedConsumer = new PacedConsumer<>(metadata -> {
                 if (clientGone.get()) return;
                 synchronized (emitter) {
                     try {

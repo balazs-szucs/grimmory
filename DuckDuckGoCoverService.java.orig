@@ -34,25 +34,7 @@ import java.util.concurrent.CompletableFuture;
 @AllArgsConstructor
 public class DuckDuckGoCoverService implements BookCoverProvider {
 
-    public static final ScopedValue<Consumer<CoverImage>> COVER_CONSUMER = ScopedValue.newInstance();
-
     private final ObjectMapper mapper;
-
-    public void getCovers(CoverFetchRequest request) {
-        getCovers(request, () -> Thread.currentThread().isInterrupted(), image -> {
-            if (COVER_CONSUMER.isBound()) {
-                COVER_CONSUMER.get().accept(image);
-            }
-        });
-    }
-
-    public void searchImages(String searchTerm) {
-        searchImages(searchTerm, () -> Thread.currentThread().isInterrupted(), image -> {
-            if (COVER_CONSUMER.isBound()) {
-                COVER_CONSUMER.get().accept(image);
-            }
-        });
-    }
 
     private static final String SEARCH_BASE_URL = "https://duckduckgo.com/?q=";
     private static final String JSON_BASE_URL = "https://duckduckgo.com/i.js?o=json&q=";

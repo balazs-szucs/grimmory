@@ -2,7 +2,6 @@ package org.booklore.config;
 
 import org.booklore.context.KomgaCleanContext;
 import org.booklore.model.dto.komga.KomgaBookMetadataDto;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -24,124 +23,138 @@ class KomgaCleanFilterTest {
         objectMapper = config.komgaCleanObjectMapper();
     }
 
-    @AfterEach
-    void cleanup() {
-        KomgaCleanContext.clear();
-    }
-
     @Test
     void shouldExcludeLockFieldsInCleanMode() throws Exception {
         // Given: Clean mode is enabled
-        KomgaCleanContext.setCleanMode(true);
+        ScopedValue.where(KomgaCleanContext.CLEAN_MODE, true).run(() -> {
+            try {
+                KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
+                        .title("Test Book")
+                        .titleLock(true)
+                        .summary("Test Summary")
+                        .summaryLock(false)
+                        .build();
 
-        KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
-                .title("Test Book")
-                .titleLock(true)
-                .summary("Test Summary")
-                .summaryLock(false)
-                .build();
+                // When: Serializing to JSON
+                String json = objectMapper.writeValueAsString(metadata);
+                Map<String, Object> result = objectMapper.readValue(json, Map.class);
 
-        // When: Serializing to JSON
-        String json = objectMapper.writeValueAsString(metadata);
-        Map<String, Object> result = objectMapper.readValue(json, Map.class);
-
-        // Then: Lock fields should be excluded
-        assertThat(result).containsKey("title");
-        assertThat(result).containsKey("summary");
-        assertThat(result).doesNotContainKey("titleLock");
-        assertThat(result).doesNotContainKey("summaryLock");
+                // Then: Lock fields should be excluded
+                assertThat(result).containsKey("title");
+                assertThat(result).containsKey("summary");
+                assertThat(result).doesNotContainKey("titleLock");
+                assertThat(result).doesNotContainKey("summaryLock");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test
     void shouldExcludeNullValuesInCleanMode() throws Exception {
         // Given: Clean mode is enabled
-        KomgaCleanContext.setCleanMode(true);
+        ScopedValue.where(KomgaCleanContext.CLEAN_MODE, true).run(() -> {
+            try {
+                KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
+                        .title("Test Book")
+                        .summary(null)  // Null value
+                        .number("1")
+                        .releaseDate(null)  // Null value
+                        .build();
 
-        KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
-                .title("Test Book")
-                .summary(null)  // Null value
-                .number("1")
-                .releaseDate(null)  // Null value
-                .build();
+                // When: Serializing to JSON
+                String json = objectMapper.writeValueAsString(metadata);
+                Map<String, Object> result = objectMapper.readValue(json, Map.class);
 
-        // When: Serializing to JSON
-        String json = objectMapper.writeValueAsString(metadata);
-        Map<String, Object> result = objectMapper.readValue(json, Map.class);
-
-        // Then: Null values should be excluded
-        assertThat(result).containsKey("title");
-        assertThat(result).containsKey("number");
-        assertThat(result).doesNotContainKey("summary");
-        assertThat(result).doesNotContainKey("releaseDate");
+                // Then: Null values should be excluded
+                assertThat(result).containsKey("title");
+                assertThat(result).containsKey("number");
+                assertThat(result).doesNotContainKey("summary");
+                assertThat(result).doesNotContainKey("releaseDate");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test
     void shouldExcludeEmptyArraysInCleanMode() throws Exception {
         // Given: Clean mode is enabled
-        KomgaCleanContext.setCleanMode(true);
+        ScopedValue.where(KomgaCleanContext.CLEAN_MODE, true).run(() -> {
+            try {
+                KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
+                        .title("Test Book")
+                        .authors(new ArrayList<>())  // Empty list
+                        .tags(new ArrayList<>())     // Empty list
+                        .build();
 
-        KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
-                .title("Test Book")
-                .authors(new ArrayList<>())  // Empty list
-                .tags(new ArrayList<>())     // Empty list
-                .build();
+                // When: Serializing to JSON
+                String json = objectMapper.writeValueAsString(metadata);
+                Map<String, Object> result = objectMapper.readValue(json, Map.class);
 
-        // When: Serializing to JSON
-        String json = objectMapper.writeValueAsString(metadata);
-        Map<String, Object> result = objectMapper.readValue(json, Map.class);
-
-        // Then: Empty arrays should be excluded
-        assertThat(result).containsKey("title");
-        assertThat(result).doesNotContainKey("authors");
-        assertThat(result).doesNotContainKey("tags");
+                // Then: Empty arrays should be excluded
+                assertThat(result).containsKey("title");
+                assertThat(result).doesNotContainKey("authors");
+                assertThat(result).doesNotContainKey("tags");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test
     void shouldIncludeNonEmptyArraysInCleanMode() throws Exception {
         // Given: Clean mode is enabled
-        KomgaCleanContext.setCleanMode(true);
+        ScopedValue.where(KomgaCleanContext.CLEAN_MODE, true).run(() -> {
+            try {
+                List<String> tags = new ArrayList<>();
+                tags.add("fiction");
+                tags.add("adventure");
 
-        List<String> tags = new ArrayList<>();
-        tags.add("fiction");
-        tags.add("adventure");
+                KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
+                        .title("Test Book")
+                        .tags(tags)  // Non-empty list
+                        .build();
 
-        KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
-                .title("Test Book")
-                .tags(tags)  // Non-empty list
-                .build();
+                // When: Serializing to JSON
+                String json = objectMapper.writeValueAsString(metadata);
+                Map<String, Object> result = objectMapper.readValue(json, Map.class);
 
-        // When: Serializing to JSON
-        String json = objectMapper.writeValueAsString(metadata);
-        Map<String, Object> result = objectMapper.readValue(json, Map.class);
-
-        // Then: Non-empty arrays should be included
-        assertThat(result).containsKey("title");
-        assertThat(result).containsKey("tags");
-        assertThat((List<?>) result.get("tags")).hasSize(2);
+                // Then: Non-empty arrays should be included
+                assertThat(result).containsKey("title");
+                assertThat(result).containsKey("tags");
+                assertThat((List<?>) result.get("tags")).hasSize(2);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test
     void shouldIncludeAllFieldsWhenCleanModeDisabled() throws Exception {
-        // Given: Clean mode is disabled (default)
-        KomgaCleanContext.setCleanMode(false);
+        // Given: Clean mode is disabled
+        ScopedValue.where(KomgaCleanContext.CLEAN_MODE, false).run(() -> {
+            try {
+                KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
+                        .title("Test Book")
+                        .titleLock(true)
+                        .summary(null)  // Null value
+                        .summaryLock(false)
+                        .authors(new ArrayList<>())  // Empty list
+                        .build();
 
-        KomgaBookMetadataDto metadata = KomgaBookMetadataDto.builder()
-                .title("Test Book")
-                .titleLock(true)
-                .summary(null)  // Null value
-                .summaryLock(false)
-                .authors(new ArrayList<>())  // Empty list
-                .build();
+                // When: Serializing to JSON
+                String json = objectMapper.writeValueAsString(metadata);
+                Map<String, Object> result = objectMapper.readValue(json, Map.class);
 
-        // When: Serializing to JSON
-        String json = objectMapper.writeValueAsString(metadata);
-        Map<String, Object> result = objectMapper.readValue(json, Map.class);
-
-        // Then: Lock fields and empty arrays should be included
-        assertThat(result).containsKey("title");
-        assertThat(result).containsKey("titleLock");
-        assertThat(result).containsKey("summaryLock");
-        assertThat(result).containsKey("authors");
-        // Note: null values are excluded by @JsonInclude(JsonInclude.Include.NON_NULL) regardless
+                // Then: Lock fields and empty arrays should be included
+                assertThat(result).containsKey("title");
+                assertThat(result).containsKey("titleLock");
+                assertThat(result).containsKey("summaryLock");
+                assertThat(result).containsKey("authors");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 }

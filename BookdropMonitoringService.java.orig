@@ -13,6 +13,8 @@ import java.nio.file.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -32,7 +34,7 @@ public class BookdropMonitoringService implements SmartLifecycle {
     private WatchKey watchKey;
     private volatile boolean paused;
     private volatile boolean disabled;
-    private final Object monitorLock = new Object();
+    private final Lock monitorLock = new ReentrantLock();
 
     public BookdropMonitoringService(
             AppProperties appProperties,
@@ -119,7 +121,8 @@ public class BookdropMonitoringService implements SmartLifecycle {
 
     public void pauseMonitoring() {
         if (disabled) return;
-        synchronized (monitorLock) {
+        monitorLock.lock();
+        try {
             if (!paused) {
                 if (watchKey != null) {
                     watchKey.cancel();
@@ -130,12 +133,15 @@ public class BookdropMonitoringService implements SmartLifecycle {
             } else {
                 log.info("Bookdrop monitoring already paused.");
             }
+        } finally {
+            monitorLock.unlock();
         }
     }
 
     public void resumeMonitoring() {
         if (disabled) return;
-        synchronized (monitorLock) {
+        monitorLock.lock();
+        try {
             if (paused) {
                 try {
                     watchKey = bookdrop.register(watchService,
@@ -149,6 +155,8 @@ public class BookdropMonitoringService implements SmartLifecycle {
             } else {
                 log.info("Bookdrop monitoring is not paused, cannot resume.");
             }
+        } finally {
+            monitorLock.unlock();
         }
     }
 

@@ -50,12 +50,15 @@ import org.springframework.scheduling.TaskScheduler;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.StructuredTaskScope.Joiner;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
 @AllArgsConstructor
 public class BookMetadataService {
+
+    public static final ScopedValue<Consumer<BookMetadata>> METADATA_CONSUMER = ScopedValue.newInstance();
 
     private final BookRepository bookRepository;
     private final BookMapper bookMapper;
@@ -102,11 +105,7 @@ public class BookMetadataService {
         return bookMapper.toBook(bookEntity);
     }
 
-    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request, Consumer<BookMetadata> consumer) {
-        getProspectiveMetadataListForBookId(bookId, request, () -> false, consumer);
-    }
-
-    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request) {
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
         transactionTemplate.setReadOnly(true);
         Book book = transactionTemplate.execute(status -> getFullBookDto(bookId));
@@ -114,15 +113,16 @@ public class BookMetadataService {
         List<MetadataProvider> providers = request.getProviders();
         if (providers == null || providers.isEmpty()) return;
 
-        try (var scope = StructuredTaskScope.open()) {
+        try (var scope = StructuredTaskScope.open(Joiner.allSuccessfulOrThrow())) {
             for (MetadataProvider provider : providers) {
                 scope.fork(() -> {
-                    if (isCancelled.getAsBoolean()) return null;
                     try {
                         BookParser parser = getParser(provider);
-                        parser.fetchMetadata(book, request, isCancelled, metadata -> {
-                            if (isCancelled.getAsBoolean()) return;
-                            consumer.accept(metadata);
+                        parser.fetchMetadata(book, request, () -> Thread.currentThread().isInterrupted(), metadata -> {
+                            if (Thread.currentThread().isInterrupted()) return;
+                            if (METADATA_CONSUMER.isBound()) {
+                                METADATA_CONSUMER.get().accept(metadata);
+                            }
                         });
                     } catch (Exception e) {
                         log.error("Error fetching metadata from provider: {}", provider, e);
@@ -131,9 +131,20 @@ public class BookMetadataService {
                 });
             }
             scope.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Metadata fetching interrupted");
         } catch (Exception e) {
             log.error("Failed to complete structured task scope for metadata fetching", e);
         }
+    }
+
+    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request, Consumer<BookMetadata> consumer) {
+        ScopedValue.where(METADATA_CONSUMER, consumer).run(() -> getProspectiveMetadataListForBookId(bookId, request));
+    }
+
+    public void getProspectiveMetadataListForBookId(long bookId, FetchMetadataRequest request, BooleanSupplier isCancelled, Consumer<BookMetadata> consumer) {
+        getProspectiveMetadataListForBookId(bookId, request, consumer);
     }
 
     public List<BookMetadata> fetchMetadataListFromAProvider(MetadataProvider provider, Book book, FetchMetadataRequest request) {

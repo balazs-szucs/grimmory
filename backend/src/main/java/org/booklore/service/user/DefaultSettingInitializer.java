@@ -13,8 +13,6 @@ import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.time.Duration;
 
 import com.github.benmanes.caffeine.cache.Cache;
@@ -32,16 +30,15 @@ public class DefaultSettingInitializer {
             .maximumSize(1000)
             .expireAfterWrite(Duration.ofHours(24))
             .build();
-    private static final ConcurrentHashMap<Long, Lock> userLocks = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Long, Object> userLocks = new ConcurrentHashMap<>();
 
     @Transactional
     public void ensureDefaultSettings(BookLoreUser bookLoreUser) {
         if (initializedUsers.getIfPresent(bookLoreUser.getId()) != null) {
             return;
         }
-        Lock lock = userLocks.computeIfAbsent(bookLoreUser.getId(), _ -> new ReentrantLock());
-        lock.lock();
-        try {
+        Object lock = userLocks.computeIfAbsent(bookLoreUser.getId(), _ -> new Object());
+        synchronized (lock) {
             if (initializedUsers.getIfPresent(bookLoreUser.getId()) != null) return;
             BookLoreUserEntity user = userRepository.findByIdWithSettings(bookLoreUser.getId()).orElseThrow(() -> new UsernameNotFoundException("User not found"));
             for (UserSettingKey key : settingsProvider.getAllKeys()) {
@@ -50,10 +47,8 @@ public class DefaultSettingInitializer {
             patchPerBookSetting(user);
             userRepository.save(user);
             initializedUsers.put(bookLoreUser.getId(), Boolean.TRUE);
-        } finally {
-            lock.unlock();
-            userLocks.remove(bookLoreUser.getId());
         }
+        userLocks.remove(bookLoreUser.getId());
     }
 
     private void addSettingIfMissing(BookLoreUserEntity user, UserSettingKey key, Object value) {
