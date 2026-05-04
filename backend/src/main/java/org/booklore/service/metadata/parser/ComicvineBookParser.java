@@ -512,30 +512,14 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
     }
 
     private <T> T sendRequestWithRetry(URI uri, Class<T> responseType, int retriesLeft) {
-        if (rateLimited.get()) {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime < rateLimitResetTime.get()) {
-                log.warn("ComicVine API is currently rate limited. Skipping request. Rate limit resets at: {}",
-                        Instant.ofEpochMilli(rateLimitResetTime.get()));
-                return null;
-            } else {
-                rateLimited.compareAndSet(true, false);
-                log.info("ComicVine rate limit period expired, resuming normal requests");
-            }
+        long backoffUntil = rateLimitService.getBackoffUntil("Comicvine");
+        if (backoffUntil > 0) {
+            log.warn("ComicVine API is currently rate limited. Skipping request. Rate limit resets at: {}",
+                    Instant.ofEpochMilli(backoffUntil));
+            return null;
         }
 
-        long now = System.currentTimeMillis();
-        long timeSinceLastRequest = now - lastRequestTime.get();
-        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-            long sleepTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
-            log.debug("Rate limiting: sleeping {}ms before next request", sleepTime);
-            try {
-                Thread.sleep(sleepTime);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        lastRequestTime.set(System.currentTimeMillis());
+        rateLimitService.waitFor("Comicvine", MIN_REQUEST_INTERVAL_MS);
         
         long callNumber = apiCallCounter.incrementAndGet();
         String endpoint = extractEndpointFromUri(uri);

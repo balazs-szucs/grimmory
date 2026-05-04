@@ -7,6 +7,7 @@ import org.booklore.model.dto.request.FetchMetadataRequest;
 import org.booklore.model.dto.settings.AppSettings;
 import org.booklore.model.dto.settings.MetadataProviderSettings;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.metadata.RateLimitService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,9 @@ public class ComicvineBookParserTest {
 
     @Mock
     private AppSettingService mockAppSettingService;
+
+    @Mock
+    private RateLimitService rateLimitService;
 
     @InjectMocks
     private ComicvineBookParser comicvineBookParser;

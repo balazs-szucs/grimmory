@@ -61,6 +61,46 @@ public class RateLimitService {
     }
 
     /**
+     * Checks if the given source is currently backed off.
+     */
+    public boolean isBackoffActive(String source) {
+        AtomicLong lastTime = lastExecutionTimes.get(source);
+        return lastTime != null && System.currentTimeMillis() < lastTime.get();
+    }
+
+    /**
+     * Returns the time until which the given source is backed off, or 0 if not backed off.
+     */
+    public long getBackoffUntil(String source) {
+        AtomicLong lastTime = lastExecutionTimes.get(source);
+        if (lastTime == null) return 0;
+        long until = lastTime.get();
+        return until > System.currentTimeMillis() ? until : 0;
+    }
+
+    /**
+     * Blocks until the minimum interval from the last execution for the same source has passed.
+     * Also respects any backoff set via setBackoffUntil.
+     */
+    public void waitFor(String source, long minIntervalMs) {
+        AtomicLong lastTime = lastExecutionTimes.computeIfAbsent(source, k -> new AtomicLong(0));
+        long now = System.currentTimeMillis();
+        long waitTime;
+        synchronized (lastTime) {
+            long nextTime = Math.max(now, lastTime.get() + minIntervalMs);
+            waitTime = nextTime - now;
+            lastTime.set(nextTime);
+        }
+        if (waitTime > 0) {
+            try {
+                Thread.sleep(waitTime);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
      * Overload for void tasks.
      */
     public CompletableFuture<Void> execute(String source, long minIntervalMs, Runnable task) {
