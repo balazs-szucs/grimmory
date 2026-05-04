@@ -353,9 +353,9 @@ public class LibraryService {
             case PDF -> "application/pdf".equals(mime);
             case EPUB -> "application/epub+zip".equals(mime);
             case CBX -> (mime.contains("zip") || mime.contains("rar") || mime.contains("7z"))
-                    && Set.of("cbz", "cbr", "cb7").contains(extension);
+                    && fileType.getExtensions().contains(extension);
             case FB2 -> ("application/x-fictionbook+xml".equals(mime) || "application/xml".equals(mime) || "text/xml".equals(mime))
-                    && "fb2".equals(extension);
+                    && fileType.getExtensions().contains(extension);
             case MOBI -> mime.contains("mobipocket") || mime.contains("x-mobipocket");
             case AZW3 -> mime.contains("kindle") || mime.contains("x-kindle");
             case AUDIOBOOK -> MimeDetector.isAudio(mime);
