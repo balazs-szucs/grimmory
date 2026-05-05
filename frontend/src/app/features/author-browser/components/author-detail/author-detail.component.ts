@@ -59,6 +59,7 @@ export class AuthorDetailComponent implements OnInit, AfterViewChecked {
 
   readonly descriptionContentRef = viewChild<ElementRef<HTMLElement>>('descriptionContent');
   private readonly scrollElement = viewChild<ElementRef<HTMLElement>>('scrollElement');
+  protected readonly isFirstRender = signal(true);
 
   loading = signal(true);
   tab = 'books';
@@ -113,6 +114,7 @@ export class AuthorDetailComponent implements OnInit, AfterViewChecked {
   }
 
   ngAfterViewChecked(): void {
+    this.isFirstRender.set(false);
     const descriptionContent = this.descriptionContentRef();
     this.updateDescriptionOverflow(descriptionContent?.nativeElement);
   }

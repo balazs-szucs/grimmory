@@ -41,7 +41,7 @@
             <div class="dashboard-scroller-infinite" infiniteScroll [infiniteScrollDistance]="2" [infiniteScrollThrottle]="50" [horizontal]="true">
               @for (bookInSeriesItem of otherBooksInSeries(); track bookInSeriesItem.id; let i = $index) {
                 <div class="dashboard-scroller-card">
-                  <app-book-card-lite-component [book]="bookInSeriesItem" [showSeriesNumber]="true" [priorityImage]="i === 0"></app-book-card-lite-component>
+                  <app-book-card-lite-component [book]="bookInSeriesItem" [showSeriesNumber]="true" [priorityImage]="isFirstRender() && i === 0"></app-book-card-lite-component>
                 </div>
               }
             </div>
@@ -56,7 +56,7 @@
             <div class="dashboard-scroller-infinite" infiniteScroll [infiniteScrollDistance]="2" [infiniteScrollThrottle]="50" [horizontal]="true">
               @for (recBook of recommendedBooks(); track recBook.book.id; let i = $index) {
                 <div class="dashboard-scroller-card">
-                  <app-book-card-lite-component [book]="recBook.book" [priorityImage]="i === 0"></app-book-card-lite-component>
+                  <app-book-card-lite-component [book]="recBook.book" [priorityImage]="isFirstRender() && i === 0"></app-book-card-lite-component>
                 </div>
               }
             </div>

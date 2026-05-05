@@ -370,7 +370,7 @@ describe('MetadataViewerComponent', () => {
     fixture.detectChanges();
 
     expect(component.bookInSeries.map(book => book.id)).toEqual([4, 8]);
-    expect(component.recommendedBooksFiltered.map(book => book.book.id)).toEqual([17]);
+    expect(component.recommendedBooksFiltered().map(book => book.book.id)).toEqual([17]);
 
     const readItems = component.readMenuItems();
     expect(readItems.map(item => item.separator ? 'separator' : item.label)).toEqual([

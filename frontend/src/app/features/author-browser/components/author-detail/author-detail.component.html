@@ -120,8 +120,8 @@
                                 [index]="virtualItem.index"
                                 [book]="book"
                                 [isSeriesCollapsed]="false"
-                                [priorityImage]="virtualItem.index === 0"
-                            [overlayPreferenceService]="bookCardOverlayPreferenceService">
+                                [priorityImage]="isFirstRender() && virtualItem.index === 0"
+                                [overlayPreferenceService]="bookCardOverlayPreferenceService">
                               </app-book-card>
                             </div>
                           </div>

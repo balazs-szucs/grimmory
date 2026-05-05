@@ -11,6 +11,8 @@
               [alt]="book.metadata?.title ? ('Cover of ' + book.metadata?.title) : ''"
               width="250"
               appendTo="body"
+              loading="eager"
+              fetchpriority="high"
               [preview]="true">
             </p-image>
           } @else {

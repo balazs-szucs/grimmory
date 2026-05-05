@@ -26,7 +26,7 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {Tooltip} from "primeng/tooltip";
 import {Divider} from "primeng/divider";
 import {TagComponent} from "../../../../shared/components/tag/tag.component";
-import {AfterViewChecked, Component, computed, effect, ElementRef, inject, ViewChild} from '@angular/core';
+import {AfterViewChecked, Component, computed, effect, ElementRef, inject, signal, ViewChild} from '@angular/core';
 import {BookCardOverlayPreferenceService} from '../book-browser/book-card-overlay-preference.service';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {CoverPlaceholderComponent} from '../../../../shared/components/cover-generator/cover-generator.component';
@@ -120,6 +120,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   protected appSettings = this.appSettingsService.appSettings;
   protected currentUser = this.userService.currentUser;
   protected isBooksLoading = this.bookService.isBooksLoading;
+  protected readonly isFirstRender = signal(true);
 
   // Selection state
   selectedBooks = new Set<number>();
@@ -412,6 +413,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   ngAfterViewChecked(): void {
+    this.isFirstRender.set(false);
     if (!this.isExpanded && this.descriptionContentRef) {
       const el = this.descriptionContentRef.nativeElement;
       this.isOverflowing = el.scrollHeight > el.clientHeight;

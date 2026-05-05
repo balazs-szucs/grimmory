@@ -1,4 +1,4 @@
-import {Component, computed, EventEmitter, inject, input, Output} from '@angular/core';
+import {AfterViewInit, Component, computed, EventEmitter, inject, input, Output, signal} from '@angular/core';
 import {UpperCasePipe} from '@angular/common';
 import {Book, BookRecommendation, BookType, FileInfo} from '../../../../../book/model/book.model';
 import {Tab, TabList, TabPanel, TabPanels, Tabs} from 'primeng/tabs';
@@ -80,10 +80,11 @@ export interface DetachBookFileEvent {
   templateUrl: './metadata-tabs.component.html',
   styleUrl: './metadata-tabs.component.scss'
 })
-export class MetadataTabsComponent {
+export class MetadataTabsComponent implements AfterViewInit {
   readonly book = input<Book | null>(null);
   readonly bookInSeries = input<Book[]>([]);
   readonly recommendedBooks = input<BookRecommendation[]>([]);
+  protected readonly isFirstRender = signal(true);
 
   readonly otherBooksInSeries = computed(() =>
     this.bookInSeries().filter(bookInSeriesItem => bookInSeriesItem.id !== this.book()?.id)
@@ -107,6 +108,10 @@ export class MetadataTabsComponent {
 
   get defaultTabValue(): string {
     return this.bookInSeries().length > 1 ? 'series' : 'similar';
+  }
+
+  ngAfterViewInit(): void {
+    this.isFirstRender.set(false);
   }
 
   read(bookId: number, reader?: 'epub-streaming', bookType?: BookType): void {

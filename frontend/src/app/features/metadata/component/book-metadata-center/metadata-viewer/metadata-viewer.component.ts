@@ -53,20 +53,15 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   readonly recommendedBooks = input<BookRecommendation[]>([]);
 
   private bookInSeriesSignal = signal<Book[]>([]);
-  private originalRecommendedBooks = signal<BookRecommendation[]>([]);
 
-  readonly filteredRecommendedBooks = computed(() => {
-    const original = this.originalRecommendedBooks();
+  readonly recommendedBooksFiltered = computed(() => {
+    const original = this.recommendedBooks();
     const seriesIds = new Set(this.bookInSeriesSignal().map(b => b.id));
     return original.filter(rec => !seriesIds.has(rec.book.id));
   });
 
   get bookInSeries(): Book[] {
     return this.bookInSeriesSignal();
-  }
-
-  get recommendedBooksFiltered(): BookRecommendation[] {
-    return this.filteredRecommendedBooks();
   }
 
   constructor() {
@@ -81,10 +76,6 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
         this.loadBooksInSeriesAndFilterRecommended(value.metadata!.bookId);
         this.selectedReadStatus = value.readStatus ?? ReadStatus.UNREAD;
       });
-    });
-
-    effect(() => {
-      this.originalRecommendedBooks.set([...this.recommendedBooks()]);
     });
   }
 

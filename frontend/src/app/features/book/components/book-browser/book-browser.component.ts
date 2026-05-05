@@ -167,6 +167,7 @@ export class BookBrowserComponent implements AfterViewInit {
   readonly currentFilterLabel = signal<string | null>(null);
   readonly rawFilterParamFromUrl = signal<string | null>(null);
   readonly gridMobileColumnCount = signal(DEFAULT_MOBILE_GRID_COLUMNS);
+  protected readonly isFirstRender = signal(true);
   private readonly seriesCollapsed = this.seriesCollapseFilter.seriesCollapsed;
   readonly selectedBooks = this.bookSelectionService.selectedBooks;
   readonly selectedCount = this.bookSelectionService.selectedCount;
@@ -504,6 +505,7 @@ export class BookBrowserComponent implements AfterViewInit {
   readonly sortCriteriaCount = computed(() => this.bookSorter.selectedSortCriteria.length);
 
   ngAfterViewInit(): void {
+    this.isFirstRender.set(false);
     const bookFilterComponent = this.bookFilterComponent();
     if (bookFilterComponent) {
       bookFilterComponent.setFilters(this.parsedFilters);
