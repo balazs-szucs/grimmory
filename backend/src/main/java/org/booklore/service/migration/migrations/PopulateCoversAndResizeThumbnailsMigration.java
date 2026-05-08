@@ -3,12 +3,11 @@ package org.booklore.service.migration.migrations;
 import org.booklore.config.AppProperties;
 import org.booklore.service.migration.Migration;
 import org.booklore.util.FileService;
+import org.booklore.util.VipsImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -23,6 +22,7 @@ import java.util.Comparator;
 public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
 
     private final AppProperties appProperties;
+    private final VipsImageService vipsImageService;
 
     @Override
     public String getKey() {
@@ -48,43 +48,26 @@ public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
                 try (var stream = Files.walk(thumbsDir)) {
                     stream.filter(Files::isRegularFile)
                             .forEach(path -> {
-                                BufferedImage originalImage = null;
-                                BufferedImage resized = null;
                                 try {
-                                    // Load original image
-                                    originalImage = ImageIO.read(path.toFile());
-                                    if (originalImage == null) {
+                                    if (!vipsImageService.canDecode(path)) {
                                         log.warn("Skipping non-image file: {}", path);
                                         return;
                                     }
 
-                                    // Extract bookId from folder structure
-                                    Path relative = thumbsDir.relativize(path);       // e.g., "11/f.jpg"
-                                    String bookId = relative.getParent().toString();  // "11"
-
+                                    String bookId = thumbsDir.relativize(path).getParent().toString();
                                     Path bookDir = imagesDir.resolve(bookId);
                                     Files.createDirectories(bookDir);
 
-                                    // Copy original to cover.jpg
                                     Path coverFile = bookDir.resolve("cover.jpg");
-                                    ImageIO.write(originalImage, "jpg", coverFile.toFile());
+                                    vipsImageService.flattenResizeAndSave(path, coverFile, 1000, 1500);
 
-                                    // Resize and save thumbnail.jpg
-                                    resized = FileService.resizeImage(originalImage, 250, 350);
                                     Path thumbnailFile = bookDir.resolve("thumbnail.jpg");
-                                    ImageIO.write(resized, "jpg", thumbnailFile.toFile());
+                                    vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, 250, 350);
 
                                     log.debug("Processed book {}: cover={} thumbnail={}", bookId, coverFile, thumbnailFile);
                                 } catch (IOException e) {
                                     log.error("Error processing file {}", path, e);
                                     throw new UncheckedIOException(e);
-                                } finally {
-                                    if (originalImage != null) {
-                                        originalImage.flush();
-                                    }
-                                    if (resized != null) {
-                                        resized.flush();
-                                    }
                                 }
                             });
                 }

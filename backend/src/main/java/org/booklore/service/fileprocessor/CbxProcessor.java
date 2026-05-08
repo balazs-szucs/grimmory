@@ -22,7 +22,6 @@ import org.booklore.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.Path;
@@ -81,18 +80,14 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         Path bookPath = FileUtils.getBookFullPath(bookEntity, bookFile);
 
         try {
-            Optional<BufferedImage> imageOptional = extractImagesFromArchive(bookPath);
+            Optional<byte[]> imageOptional = extractCoverBytesFromArchive(bookPath);
             if (imageOptional.isPresent()) {
-                BufferedImage image = imageOptional.get();
-                try {
-                    boolean saved = fileService.saveCoverImages(image, bookEntity.getId());
-                    if (saved) {
-                        return true;
-                    } else {
-                        log.warn("Could not save image extracted from CBZ as cover for '{}'", bookFile.getFileName());
-                    }
-                } finally {
-                    image.flush(); // Release resources after processing
+                byte[] imageBytes = imageOptional.get();
+                boolean saved = fileService.saveCoverImages(imageBytes, bookEntity.getId());
+                if (saved) {
+                    return true;
+                } else {
+                    log.warn("Could not save image extracted from CBZ as cover for '{}'", bookFile.getFileName());
                 }
             } else {
                 log.warn("Could not find cover image in '{}' archive", bookFile.getFileName());
@@ -108,15 +103,10 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         return List.of(BookFileType.CBX);
     }
 
-    private Optional<BufferedImage> extractImagesFromArchive(Path path) {
+    private Optional<byte[]> extractCoverBytesFromArchive(Path path) {
         try{
             byte[] coverBytes = cbxMetadataExtractor.extractCover(path);
-
-            if (coverBytes == null) {
-                return Optional.empty();
-            }
-
-            return Optional.ofNullable(FileService.readImage(new ByteArrayInputStream(coverBytes)));
+            return Optional.ofNullable(coverBytes);
         } catch (Exception e) {
             log.warn("Error reading archive cover {}: {}", path.getFileName(), e.getMessage());
         }

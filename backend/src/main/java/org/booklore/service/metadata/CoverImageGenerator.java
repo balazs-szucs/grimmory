@@ -1,13 +1,9 @@
 package org.booklore.service.metadata;
 
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
@@ -20,6 +16,12 @@ import java.util.regex.Pattern;
 @Slf4j
 @Service
 public class CoverImageGenerator {
+
+    private final VipsImageService vipsImageService;
+
+    public CoverImageGenerator(VipsImageService vipsImageService) {
+        this.vipsImageService = vipsImageService;
+    }
 
     private static final int WIDTH = 1200;
     private static final int HEIGHT = 1600;
@@ -847,24 +849,10 @@ public class CoverImageGenerator {
     }
 
     private byte[] encodeJpeg(BufferedImage img) {
-        ImageWriter writer = null;
-        ImageOutputStream ios = null;
-
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            writer = ImageIO.getImageWritersByFormatName("jpg").next();
-            ImageWriteParam param = writer.getDefaultWriteParam();
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(0.95f);
-
-            ios = ImageIO.createImageOutputStream(baos);
-            writer.setOutput(ios);
-            writer.write(null, new IIOImage(img, null, null), param);
-            return baos.toByteArray();
+        try {
+            return vipsImageService.bufferedImageToJpeg(img, 95);
         } catch (IOException e) {
             throw new RuntimeException("JPEG encoding failed", e);
-        } finally {
-            if (writer != null) writer.dispose();
-            if (ios != null) try { ios.close(); } catch (IOException _) {}
         }
     }
 

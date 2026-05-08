@@ -39,7 +39,7 @@ val openApiLogFile = openApiOutputDir.map { it.file("export-openapi.log") }
 val openApiExportScript = layout.projectDirectory.file("scripts/export-openapi.sh")
 
 repositories {
-    if (useLocalLibs) mavenLocal()
+    mavenLocal()
     mavenCentral()
     maven(url = "https://jitpack.io")
 }
@@ -122,15 +122,10 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok:1.18.46")
 
     // --- Book & Image Processing ---
-    val pdfium4jVersion = if (useLocalLibs) "+" else "0.16.0"
+    val pdfium4jVersion = "1.0.0"
     implementation("org.grimmory:pdfium4j:$pdfium4jVersion")
     runtimeOnly("org.grimmory:pdfium4j:$pdfium4jVersion:${pdfiumNativesClassifier()}")
 
-    // --- TwelveMonkeys ImageIO ---
-    implementation("com.twelvemonkeys.imageio:imageio-jpeg:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-tiff:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-webp:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-bmp:3.13.1")
 
     // epub4j-grimmory fork publishes as org.grimmory:epub4j-core
     val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.2.0"
@@ -161,6 +156,9 @@ dependencies {
 
     // --- MIME Detection ---
     implementation("org.apache.tika:tika-core:3.3.0")
+
+    // --- libvips (vips-ffm) ---
+    implementation("app.photofox.vips-ffm:vips-ffm-core:1.9.8")
 
     // --- XML Support (JAXB) ---
     implementation("jakarta.xml.bind:jakarta.xml.bind-api:4.0.5")

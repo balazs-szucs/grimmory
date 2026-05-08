@@ -21,7 +21,6 @@ import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -33,6 +32,7 @@ import static org.booklore.util.FileService.truncate;
 public class PdfProcessor extends AbstractFileProcessor implements BookFileProcessor {
 
     private final PdfMetadataExtractor pdfMetadataExtractor;
+    private final org.booklore.util.VipsImageService vipsImageService;
 
     public PdfProcessor(BookRepository bookRepository,
                         BookAdditionalFileRepository bookAdditionalFileRepository,
@@ -41,9 +41,11 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
                         FileService fileService,
                         MetadataMatchService metadataMatchService,
                         SidecarMetadataWriter sidecarMetadataWriter,
-                        PdfMetadataExtractor pdfMetadataExtractor) {
+                        PdfMetadataExtractor pdfMetadataExtractor,
+                        org.booklore.util.VipsImageService vipsImageService) {
         super(bookRepository, bookAdditionalFileRepository, bookCreatorService, bookMapper, fileService, metadataMatchService, sidecarMetadataWriter);
         this.pdfMetadataExtractor = pdfMetadataExtractor;
+        this.vipsImageService = vipsImageService;
     }
 
     @Override
@@ -205,18 +207,13 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
     }
 
     private boolean generateCoverImageAndSave(Long bookId, PdfDocument doc) throws IOException {
-        BufferedImage coverImage = null;
         try (PdfPage page = doc.page(0)) {
-            coverImage = page.render(150).toBufferedImage();
-            return fileService.saveCoverImages(coverImage, bookId);
+            byte[] coverData = vipsImageService.renderPageToJpeg(page, 150, 85);
+            return fileService.saveCoverImages(coverData, bookId);
         } catch (OutOfMemoryError e) {
             log.error("Out of memory (heap space exhausted) while generating cover for bookId {}. Skipping cover generation.", bookId);
             System.gc(); // Hint to JVM to reclaim memory
             return false;
-        } finally {
-            if (coverImage != null) {
-                coverImage.flush(); // Release native resources
-            }
         }
     }
 }
