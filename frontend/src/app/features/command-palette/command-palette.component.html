@@ -21,6 +21,14 @@
               (ngModelChange)="onQueryChange($event)"
               (keydown)="onKeydown($event)"
             />
+            <button
+              type="button"
+              class="command-palette-close-button"
+              [attr.aria-label]="'close' | transloco"
+              (click)="svc.hide()"
+            >
+              <i class="pi pi-times" aria-hidden="true"></i>
+            </button>
           </div>
         </form>
 
@@ -51,7 +59,7 @@
                   >
                     @if (item.kind === 'book' && item.bookMeta; as bookMeta) {
                       <ng-container *transloco="let tb; prefix: 'book.searcher'">
-                        <div class="command-palette-book-cover">
+                        <div class="command-palette-book-cover" [class.square-cover]="bookMeta.isAudiobook">
                           @if (bookMeta.thumbnailUrl) {
                             <img [src]="bookMeta.thumbnailUrl" alt="" />
                           } @else {

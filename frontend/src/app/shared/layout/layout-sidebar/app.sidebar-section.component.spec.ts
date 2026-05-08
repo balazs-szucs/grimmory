@@ -2,15 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { AppMenuSectionComponent } from './app.menu-section.component';
+import { AppSidebarSectionComponent } from './app.sidebar-section.component';
 import { LayoutService } from '../layout.service';
 
-describe('AppMenuSectionComponent', () => {
-  let fixture: ComponentFixture<AppMenuSectionComponent>;
-  let component: AppMenuSectionComponent;
+describe('AppSidebarSectionComponent', () => {
+  let fixture: ComponentFixture<AppSidebarSectionComponent>;
+  let component: AppSidebarSectionComponent;
 
   const layoutService = {
     sidebarCollapsed: signal(false),
+    isDesktop: signal(true),
     sidebarExpandedState: signal<Readonly<Record<string, boolean>>>({}),
     isSidebarExpanded: vi.fn((key: string, defaultExpanded: boolean) => {
       const value = layoutService.sidebarExpandedState()[key];
@@ -27,16 +28,18 @@ describe('AppMenuSectionComponent', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      imports: [AppMenuSectionComponent],
+      imports: [AppSidebarSectionComponent],
       providers: [{ provide: LayoutService, useValue: layoutService }],
     });
 
-    TestBed.overrideComponent(AppMenuSectionComponent, { set: { template: '' } });
+    TestBed.overrideComponent(AppSidebarSectionComponent, { set: { template: '' } });
 
-    fixture = TestBed.createComponent(AppMenuSectionComponent);
+    fixture = TestBed.createComponent(AppSidebarSectionComponent);
     component = fixture.componentInstance;
 
     layoutService.sidebarExpandedState.set({});
+    layoutService.sidebarCollapsed.set(false);
+    layoutService.isDesktop.set(true);
     layoutService.isSidebarExpanded.mockClear();
     layoutService.setSidebarExpanded.mockClear();
   });

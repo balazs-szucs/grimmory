@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.Set;
 import java.util.stream.Stream;
+import java.net.UnknownHostException;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -577,7 +578,7 @@ public class FileService {
                 System.arraycopy(addr, 12, ipv4Bytes, 0, 4);
                 InetAddress ipv4Addr = InetAddress.getByAddress(ipv4Bytes);
                 return isInternalAddress(ipv4Addr);
-            } catch (java.net.UnknownHostException e) {
+            } catch (UnknownHostException e) {
                 return false;
             }
         }

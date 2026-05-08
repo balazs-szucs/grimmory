@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { DestroyRef, effect, inject, Injectable, signal, WritableSignal } from '@angular/core';
+import { computed, DestroyRef, effect, inject, Injectable, signal, WritableSignal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
@@ -20,6 +20,7 @@ export const SIDEBAR_MAX_WIDTH = 400;
 export const SIDEBAR_DEFAULT_WIDTH = 225;
 const SIDEBAR_EXPANDED_STATE_KEY = 'sidebarExpandedState';
 const SIDEBAR_TRANSITION_MS = 220;
+export const MOBILE_SHELL_ACTIVE_PROPERTY = '--mobile-shell-active';
 
 function readBooleanRecord(storage: LocalStorageService, key: string): Record<string, boolean> {
   const stored = storage.get<unknown>(key);
@@ -51,6 +52,7 @@ export class LayoutService {
   readonly sidebarCollapsed = signal(this.localStorage.get<boolean>('sidebarCollapsed') ?? false);
   readonly sidebarWidth = signal(this.clampSidebarWidth(this.localStorage.get<number>('sidebarWidth') ?? SIDEBAR_DEFAULT_WIDTH));
   readonly isDesktop = signal(this.computeIsDesktop());
+  readonly desktopSidebarCollapsed = computed(() => this.isDesktop() && this.sidebarCollapsed());
   readonly sidebarExpandedState = signal<Readonly<Record<string, boolean>>>(
     readBooleanRecord(this.localStorage, SIDEBAR_EXPANDED_STATE_KEY)
   );
@@ -147,11 +149,21 @@ export class LayoutService {
   }
 
   private computeIsDesktop(): boolean {
-    return (this.document.defaultView?.innerWidth ?? 992) > 991;
+    const view = this.document.defaultView;
+    if (!view) return true;
+
+    return view
+      .getComputedStyle(this.document.documentElement)
+      .getPropertyValue(MOBILE_SHELL_ACTIVE_PROPERTY)
+      .trim() !== '1';
   }
 
   private readonly onResize = (): void => {
-    this.isDesktop.set(this.computeIsDesktop());
+    const isDesktop = this.computeIsDesktop();
+    this.isDesktop.set(isDesktop);
+    if (isDesktop) {
+      this.closeMobileSidebar();
+    }
   };
 
   private setSidebarCollapsed(collapsed: boolean): void {

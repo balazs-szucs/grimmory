@@ -21,6 +21,11 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.function.DoubleConsumer;
+import java.util.function.IntConsumer;
+import java.util.regex.Matcher;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 @Slf4j
 @Component
@@ -304,31 +309,31 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
             if (url.isBlank()) continue;
             url = url.trim();
 
-            java.util.regex.Matcher grMatcher = GOODREADS_URL_PATTERN.matcher(url);
+            Matcher grMatcher = GOODREADS_URL_PATTERN.matcher(url);
             if (grMatcher.find()) {
                 builder.goodreadsId(grMatcher.group(1));
                 continue;
             }
 
-            java.util.regex.Matcher azMatcher = AMAZON_URL_PATTERN.matcher(url);
+            Matcher azMatcher = AMAZON_URL_PATTERN.matcher(url);
             if (azMatcher.find()) {
                 builder.asin(azMatcher.group(1));
                 continue;
             }
 
-            java.util.regex.Matcher cvMatcher = COMICVINE_URL_PATTERN.matcher(url);
+            Matcher cvMatcher = COMICVINE_URL_PATTERN.matcher(url);
             if (cvMatcher.find()) {
                 builder.comicvineId(cvMatcher.group(1));
                 continue;
             }
 
-            java.util.regex.Matcher cvSiteMatcher = COMICVINE_SITE_URL_PATTERN.matcher(url);
+            Matcher cvSiteMatcher = COMICVINE_SITE_URL_PATTERN.matcher(url);
             if (cvSiteMatcher.find()) {
                 builder.comicvineId(cvSiteMatcher.group(1));
                 continue;
             }
 
-            java.util.regex.Matcher hcMatcher = HARDCOVER_URL_PATTERN.matcher(url);
+            Matcher hcMatcher = HARDCOVER_URL_PATTERN.matcher(url);
             if (hcMatcher.find()) {
                 builder.hardcoverId(hcMatcher.group(1));
                 continue;
@@ -337,7 +342,7 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     }
 
     private void parseNotes(String notes, BookMetadata.BookMetadataBuilder builder) {
-        java.util.regex.Matcher matcher = BOOKLORE_NOTE_PATTERN.matcher(notes);
+        Matcher matcher = BOOKLORE_NOTE_PATTERN.matcher(notes);
         while (matcher.find()) {
             String key = matcher.group(1).trim();
             String value = matcher.group(2).trim();
@@ -374,7 +379,7 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
         }
     }
 
-    private void safeParseDouble(String value, java.util.function.DoubleConsumer consumer) {
+    private void safeParseDouble(String value, DoubleConsumer consumer) {
         try {
             consumer.accept(Double.parseDouble(value));
         } catch (NumberFormatException e) {
@@ -382,7 +387,7 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
         }
     }
 
-    private void safeParseInt(String value, java.util.function.IntConsumer consumer) {
+    private void safeParseInt(String value, IntConsumer consumer) {
         try {
             consumer.accept(Integer.parseInt(value));
         } catch (NumberFormatException e) {
@@ -526,8 +531,8 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
             NodeList pages = document.getElementsByTagName("Page");
             for (int i = 0; i < pages.getLength(); i++) {
                 try {
-                    org.w3c.dom.Node node = pages.item(i);
-                    if (!(node instanceof org.w3c.dom.Element page)) {
+                    Node node = pages.item(i);
+                    if (!(node instanceof Element page)) {
                         continue;
                     }
 
