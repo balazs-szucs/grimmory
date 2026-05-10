@@ -41,7 +41,7 @@ export function flushSignalAndQueryEffects(): void {
 }
 
 /**
- * Robustly flushes all pending microtasks.
+ * flushes all pending microtasks.
  */
 export async function flushPromises(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0));
