@@ -41,6 +41,13 @@ export function flushSignalAndQueryEffects(): void {
 }
 
 /**
+ * Robustly flushes all pending microtasks.
+ */
+export async function flushPromises(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+/**
  * Asynchronously flushes Angular effects and query state across multiple rounds.
  * Use this for tests involving async operations like HTTP requests or timers.
  * For synchronous signal/effect flushing, use `flushSignalAndQueryEffects()` instead.
@@ -52,8 +59,7 @@ export async function flushQueryAsync(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     TestBed.flushEffects();
     appRef.tick();
-    await Promise.resolve();
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await flushPromises();
   }
   TestBed.flushEffects();
   appRef.tick();

@@ -33,6 +33,8 @@ import {SortService} from '../../service/sort.service';
 import {TranslocoService} from '@jsverse/transloco';
 import {LayoutService} from '../../../../shared/layout/layout.service';
 import {type VirtualGridMetrics} from '../../../../shared/util/virtual-grid.util';
+import {BookFilterWorkerService} from './filters/book-filter-worker.service';
+import {flushPromises} from '../../../../core/testing/query-testing';
 
 function makeBook(id: number, libraryId: number, title: string, addedOn: string): Book {
   return {
@@ -321,6 +323,12 @@ function createHarness(options?: {
         },
       },
       {
+        provide: BookFilterWorkerService,
+        useValue: {
+          filterBooks: vi.fn((books: Book[]) => Promise.resolve(books)),
+        },
+      },
+      {
         provide: TranslocoService,
         useValue: {
           langChanges$: new Subject<string>().asObservable(),
@@ -384,10 +392,11 @@ describe('BookBrowserComponent', () => {
     expect(queryParamsService.updateViewMode).toHaveBeenCalledWith(VIEW_MODES.TABLE);
   });
 
-  it('updates books when sorting changes', () => {
+  it('updates books when sorting changes', async () => {
     const {component} = createHarness();
 
     TestBed.flushEffects();
+    await flushPromises();
 
     expect(component.books().map(book => book.id)).toEqual([2, 1]);
 
@@ -395,14 +404,16 @@ describe('BookBrowserComponent', () => {
       {label: 'Title', field: 'title', direction: SortDirection.ASCENDING},
     ]);
     TestBed.flushEffects();
+    await flushPromises();
 
     expect(component.books().map(book => book.id)).toEqual([1, 2]);
   });
 
-  it('updates books after a context change', () => {
+  it('updates books after a context change', async () => {
     const {component, paramMap$, routeSnapshot} = createHarness();
 
     TestBed.flushEffects();
+    await flushPromises();
 
     expect(component.books().map(book => book.id)).toEqual([2, 1]);
 
@@ -410,6 +421,7 @@ describe('BookBrowserComponent', () => {
     routeSnapshot.params = {libraryId: '2'};
     paramMap$.next(routeSnapshot.paramMap);
     TestBed.flushEffects();
+    await flushPromises();
 
     expect(component.books().map(book => book.id)).toEqual([3]);
   });
@@ -477,13 +489,14 @@ describe('BookBrowserComponent', () => {
     expect(component.virtualGrid.virtualizer.options().count).toBe(component.books().length + 1);
   });
 
-  it('uses the rendered book count once pagination is exhausted', () => {
+  it('uses the rendered book count once pagination is exhausted', async () => {
     const {component} = createHarness();
     const filter = TestBed.inject(SeriesCollapseFilter);
     vi.mocked(filter.collapseBooks).mockImplementation((items: Book[]) => items.slice(0, 1));
 
     vi.runOnlyPendingTimers();
     TestBed.flushEffects();
+    await flushPromises();
 
     expect(component.books()).toHaveLength(1);
     expect(component.virtualRowCount()).toBe(1);

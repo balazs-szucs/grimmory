@@ -1,4 +1,6 @@
 import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, viewChild} from '@angular/core';
+import {BookFilterWorkerService} from './filters/book-filter-worker.service';
+import {switchMap} from 'rxjs/operators';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
@@ -115,6 +117,7 @@ export class BookBrowserComponent implements AfterViewInit {
   private scrollService = inject(RouteScrollPositionService);
   private layoutService = inject(LayoutService);
   private readonly t = inject(TranslocoService);
+  private readonly filterWorkerService = inject(BookFilterWorkerService);
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
@@ -205,11 +208,18 @@ export class BookBrowserComponent implements AfterViewInit {
     const {entityId, entityType} = this.entityInfo();
     return this.entityService.getBooksByEntity(this.bookService.books(), entityId, entityType);
   });
-  private readonly searchedBooks = computed(() =>
-    filterBooksBySearchTerm(this.entityBooks(), this.debouncedSearchTerm())
-  );
-  private readonly filteredBooks = computed(() =>
-    filterBooksByFilters(this.searchedBooks(), this.selectedFilter(), this.selectedFilterMode())
+  private readonly filteredBooks = toSignal(
+    combineLatest([
+      toObservable(this.entityBooks),
+      toObservable(this.debouncedSearchTerm),
+      toObservable(this.selectedFilter),
+      toObservable(this.selectedFilterMode)
+    ]).pipe(
+      switchMap(([books, searchTerm, filter, mode]) =>
+        this.filterWorkerService.filterBooks(books, searchTerm, filter, mode)
+      )
+    ),
+    {initialValue: []}
   );
   private readonly forceExpandSeries = computed(() =>
     this.queryParamsService.shouldForceExpandSeries(this.queryParamMap())

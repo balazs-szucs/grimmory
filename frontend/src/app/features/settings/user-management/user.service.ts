@@ -8,6 +8,8 @@ import { AuthService } from '../../../shared/service/auth.service';
 import { DashboardConfig } from '../../dashboard/models/dashboard-config.model';
 import { injectQuery, queryOptions, QueryClient } from '@tanstack/angular-query-experimental';
 import { CURRENT_USER_QUERY_KEY } from './user-query-keys';
+import {BookFilterMode} from '../../book/model/filter.model';
+export type {BookFilterMode};
 
 export interface EntityViewPreferences {
   global: EntityViewPreference;
@@ -58,7 +60,6 @@ export interface PerBookSetting {
 }
 
 export type PageSpread = 'off' | 'even' | 'odd';
-export type BookFilterMode = 'and' | 'or' | 'single' | 'not';
 
 
 export enum CbxPageViewMode {

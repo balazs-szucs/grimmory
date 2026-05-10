@@ -1,6 +1,7 @@
 import {ageRatingRanges, fileSizeRanges, matchScoreRanges, pageCountRanges, ratingRanges} from '../book-filter/book-filter.config';
 import {Book, ReadStatus} from '../../../model/book.model';
-import {BookFilterMode} from '../../../../settings/user-management/user.service';
+import {BookFilterMode} from '../../../model/filter.model';
+import {InvertedIndex} from './inverted-index';
 
 export function isRatingInRange(rating: number | undefined | null, rangeId: string | number): boolean {
   if (rating == null) return false;
@@ -185,14 +186,75 @@ export function filterBooksByFilters(
   books: Book[],
   activeFilters: Record<string, unknown[]> | null,
   mode: BookFilterMode,
-  excludeFilterType?: string
+  excludeFilterType?: string,
+  index?: InvertedIndex
 ): Book[] {
   if (!activeFilters) return books;
 
   const filterEntries = Object.entries(activeFilters)
-    .filter(([type]) => type !== excludeFilterType);
+    .filter(([type]) => type !== excludeFilterType && Array.isArray(activeFilters[type]) && activeFilters[type].length > 0);
 
   if (filterEntries.length === 0) return books;
+
+  // Optimize using index if available and mode is 'and' or 'or'
+  if (index && (mode === 'and' || mode === 'or')) {
+    const indexedEntries = filterEntries.filter(([type]) => 
+      ['author', 'category', 'tag', 'series', 'library', 'publisher'].includes(type)
+    );
+    const nonIndexedEntries = filterEntries.filter(([type]) => 
+      !['author', 'category', 'tag', 'series', 'library', 'publisher'].includes(type)
+    );
+
+    // If all filters are indexed, we can potentially be even faster, 
+    // but for now let's just use the sets to speed up the loop.
+    const entrySets = indexedEntries.map(([type, values]) => {
+      const sets = values.map(v => index.getMatchingIds(type, v)).filter((s): s is Set<number> => !!s);
+      
+      if (mode === 'or') {
+        const union = new Set<number>();
+        sets.forEach(s => s.forEach(id => union.add(id)));
+        return union;
+      } else {
+        // 'and' mode: each value must match
+        if (sets.length < values.length) return new Set<number>(); // Some value had no matches
+        if (sets.length === 0) return new Set<number>();
+        
+        const intersection = new Set<number>(sets[0]);
+        for (let i = 1; i < sets.length; i++) {
+          for (const id of intersection) {
+            if (!sets[i].has(id)) {
+              intersection.delete(id);
+            }
+          }
+        }
+        return intersection;
+      }
+    });
+
+    return books.filter(book => {
+      if (mode === 'or') {
+        // Match any indexed entry
+        for (const set of entrySets) {
+          if (set.has(book.id)) return true;
+        }
+        // Match any non-indexed entry
+        for (const [filterType, filterValues] of nonIndexedEntries) {
+          if (doesBookMatchFilter(book, filterType, filterValues, mode)) return true;
+        }
+        return false;
+      } else {
+        // 'and' mode: must match ALL indexed entries
+        for (const set of entrySets) {
+          if (!set.has(book.id)) return false;
+        }
+        // Must match ALL non-indexed entries
+        for (const [filterType, filterValues] of nonIndexedEntries) {
+          if (!doesBookMatchFilter(book, filterType, filterValues, mode)) return false;
+        }
+        return true;
+      }
+    });
+  }
 
   return books.filter(book => matchesAllFilters(book, filterEntries, mode));
 }
