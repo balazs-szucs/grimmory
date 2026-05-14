@@ -8,6 +8,7 @@ import app.photofox.vipsffm.Vips;
 import app.photofox.vipsffm.VipsError;
 import app.photofox.vipsffm.VipsOption;
 import app.photofox.vipsffm.enums.VipsBandFormat;
+import app.photofox.vipsffm.enums.VipsInteresting;
 import app.photofox.vipsffm.enums.VipsInterpretation;
 import lombok.extern.slf4j.Slf4j;
 import org.grimmory.pdfium4j.PdfPage;
@@ -26,6 +27,12 @@ import java.nio.file.Path;
 @Service
 public class VipsImageService {
     private final boolean available;
+
+    /**
+     * PDFium flag: reverse byte order so the rasteriser writes RGBA instead of its native BGRA.
+     * Value matches FPDF_REVERSE_BYTE_ORDER = 0x10 in PDFium's fpdfview.h.
+     */
+    private static final int FPDF_REVERSE_BYTE_ORDER = 0x10;
 
     public VipsImageService() {
         boolean initialized = false;
@@ -92,8 +99,9 @@ public class VipsImageService {
         runWithArena(arena -> {
             // Best practice: use thumbnailBuffer for efficient shrink-on-load. thumbnail already handles autorotate.
             VBlob blob = VBlob.newFromBytes(arena, data);
-            VImage img = VImage.thumbnailBuffer(arena, blob, maxW, VipsOption.Int("height", maxH))
-                    .flatten();
+            VImage img = VImage.thumbnailBuffer(arena, blob, maxW, VipsOption.Int("height", maxH));
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+            img = flattenIfHasAlpha(img);
             img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
@@ -102,8 +110,9 @@ public class VipsImageService {
     public void flattenResizeAndSave(Path in, Path out, int maxW, int maxH) throws IOException {
         runWithArena(arena -> {
             // Best practice: use thumbnail for efficient shrink-on-load. thumbnail already handles autorotate.
-            VImage img = VImage.thumbnail(arena, in.toString(), maxW, VipsOption.Int("height", maxH))
-                    .flatten();
+            VImage img = VImage.thumbnail(arena, in.toString(), maxW, VipsOption.Int("height", maxH));
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+            img = flattenIfHasAlpha(img);
             img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
@@ -112,7 +121,8 @@ public class VipsImageService {
     public void cropResizeAndSave(Path in, Path out, int x, int y, int w, int h, int targetW, int targetH) throws IOException {
         validateCropBounds(in, x, y, w, h);
         runWithArena(arena -> {
-            VImage img = VImage.newFromFile(arena, in.toString()).autorot().extractArea(x, y, w, h);
+            VImage img = VImage.newFromFile(arena, in.toString()).autorot();
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB).extractArea(x, y, w, h);
             if (w != targetW || h != targetH) {
                 double scale = Math.min((double) targetW / w, (double) targetH / h);
                 scale = Math.min(scale, 1.0d);
@@ -128,7 +138,9 @@ public class VipsImageService {
     public void flattenCropResizeAndSave(Path in, Path out, int x, int y, int w, int h, int targetW, int targetH) throws IOException {
         validateCropBounds(in, x, y, w, h);
         runWithArena(arena -> {
-            VImage img = VImage.newFromFile(arena, in.toString()).autorot().flatten().extractArea(x, y, w, h);
+            VImage img = VImage.newFromFile(arena, in.toString()).autorot();
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+            img = flattenIfHasAlpha(img).extractArea(x, y, w, h);
             double scale = Math.min((double) targetW / w, (double) targetH / h);
             scale = Math.min(scale, 1.0d);
             if (scale < 1.0d) {
@@ -141,8 +153,21 @@ public class VipsImageService {
 
     public void flattenThumbnailAndSave(Path in, Path out, int w, int h) throws IOException {
         runWithArena(arena -> {
-            VImage.thumbnail(arena, in.toString(), w, VipsOption.Int("height", h), VipsOption.String("crop", "centre"))
-                    .flatten().jpegsave(out.toString(), VipsOption.Int("Q", 80), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+            VImage loaded = VImage.thumbnail(
+                    arena,
+                    in.toString(),
+                    w,
+                    VipsOption.Int("height", h),
+                    VipsOption.Enum("crop", VipsInteresting.INTERESTING_CENTRE)
+            );
+            VImage normalized = loaded.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+            normalized = flattenIfHasAlpha(normalized);
+            normalized.jpegsave(
+                    out.toString(),
+                    VipsOption.Int("Q", 80),
+                    VipsOption.Boolean("strip", true),
+                    VipsOption.Boolean("optimize_coding", true)
+            );
             return null;
         });
     }
@@ -151,8 +176,9 @@ public class VipsImageService {
         runWithArena(arena -> {
             // Best practice: use thumbnailSource for efficient shrink-on-load from stream. thumbnail already handles autorotate.
             VSource source = VSource.newFromInputStream(arena, is);
-            VImage img = VImage.thumbnailSource(arena, source, maxW, VipsOption.Int("height", maxH))
-                    .flatten();
+            VImage img = VImage.thumbnailSource(arena, source, maxW, VipsOption.Int("height", maxH));
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+            img = flattenIfHasAlpha(img);
             img.jpegsaveTarget(VTarget.newFromOutputStream(arena, os), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
@@ -161,6 +187,7 @@ public class VipsImageService {
     public void transcodeStreamToJpeg(InputStream is, OutputStream os, int quality) throws IOException {
         runWithArena(arena -> {
             VImage img = VImage.newFromSource(arena, VSource.newFromInputStream(arena, is)).autorot();
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
             img.jpegsaveTarget(VTarget.newFromOutputStream(arena, os), VipsOption.Int("Q", quality), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
@@ -178,7 +205,6 @@ public class VipsImageService {
         return runWithArena(arena -> {
             VImage vimg = bufferedImageToVips(arena, img);
             if (vimg.getWidth() != targetW || vimg.getHeight() != targetH) {
-                // Use thumbnailImage for high-quality downscaling of an in-memory image
                 vimg = vimg.thumbnailImage(targetW, VipsOption.Int("height", targetH));
             }
             return vimg.jpegsaveBuffer(VipsOption.Int("Q", q), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true)).getBytes();
@@ -202,6 +228,10 @@ public class VipsImageService {
                 .copy(VipsOption.Enum("interpretation", VipsInterpretation.INTERPRETATION_sRGB));
     }
 
+    private VImage flattenIfHasAlpha(VImage img) throws VipsError {
+        return img.hasAlpha() ? img.flatten() : img;
+    }
+
     private void validateCropBounds(Path in, int x, int y, int w, int h) throws IOException {
         if (x < 0 || y < 0 || w <= 0 || h <= 0) {
             throw new IOException("Invalid crop bounds: x=" + x + ", y=" + y + ", w=" + w + ", h=" + h);
@@ -217,7 +247,7 @@ public class VipsImageService {
 
     public byte[] renderPageToJpeg(PdfPage page, int dpi, int quality) throws IOException {
         return runWithArena(arena -> {
-            VImage vimg = renderPdfPageAsVipsImage(arena, page, dpi).flatten();
+            VImage vimg = flattenIfHasAlpha(renderPdfPageAsVipsImage(arena, page, dpi));
             return vimg.jpegsaveBuffer(
                     VipsOption.Int("Q", quality),
                     VipsOption.Boolean("strip", true),
@@ -228,7 +258,7 @@ public class VipsImageService {
 
     public void renderPageToJpeg(PdfPage page, int dpi, int quality, OutputStream outputStream) throws IOException {
         runWithArena(arena -> {
-            VImage vimg = renderPdfPageAsVipsImage(arena, page, dpi).flatten();
+            VImage vimg = flattenIfHasAlpha(renderPdfPageAsVipsImage(arena, page, dpi));
             vimg.jpegsaveTarget(
                     VTarget.newFromOutputStream(arena, outputStream),
                     VipsOption.Int("Q", quality),
@@ -245,11 +275,12 @@ public class VipsImageService {
         int h = size.heightPixels(dpi);
         int stride = w * 4;
         MemorySegment segment = arena.allocate((long) stride * h);
-        page.renderTo(segment, w, h, stride, 0, (int) 0xFFFFFFFF); // OPAQUE_WHITE
-
-        // PDFium rendered in RGBA format (with FPDF_REVERSE_BYTE_ORDER which is default in PDFium4j)
-        return VImage.newFromMemory(arena, segment, w, h, 4, VipsBandFormat.FORMAT_UCHAR.getRawValue())
-                .copy(VipsOption.Enum("interpretation", VipsInterpretation.INTERPRETATION_sRGB));
+        // FPDF_REVERSE_BYTE_ORDER (0x10) makes PDFium write RGBA instead of its native BGRA.
+        // No band reordering needed — just tell vips the 4-band buffer is sRGB+alpha.
+        page.renderTo(segment, w, h, stride, FPDF_REVERSE_BYTE_ORDER, (int) 0xFFFFFFFF);
+        VImage img = VImage.newFromMemory(arena, segment, w, h, 4, VipsBandFormat.FORMAT_UCHAR.getRawValue())
+            .copy(VipsOption.Enum("interpretation", VipsInterpretation.INTERPRETATION_sRGB));
+        return img;
     }
 
     public TrimBounds findContentBounds(byte[] data) throws IOException {
