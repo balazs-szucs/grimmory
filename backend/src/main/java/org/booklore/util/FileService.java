@@ -71,7 +71,6 @@ public class FileService {
     private static final int    MAX_ORIGINAL_WIDTH            = 1000;
     private static final int    MAX_ORIGINAL_HEIGHT           = 1500;
     private static final int    MAX_SQUARE_SIZE               = 1000;
-    private static final String IMAGE_FORMAT                  = "JPEG";
     // @formatter:on
 
     // ========================================
@@ -876,30 +875,13 @@ public class FileService {
     }
 
     public boolean saveAudiobookCoverImages(InputStream imageStream, long bookId) throws IOException {
-        String folderPath = getImagesFolder(bookId);
-        File folder = new File(folderPath);
-        if (!folder.exists() && !folder.mkdirs()) {
-            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        Path tempImage = Files.createTempFile("booklore-audiobook-cover-", ".img");
+        try (InputStream in = imageStream; var tempOut = Files.newOutputStream(tempImage)) {
+            transferWithLimit(in, tempOut, MAX_FILE_SIZE_BYTES);
+            return saveAudiobookCoverImages(tempImage, bookId);
+        } finally {
+            deleteTempFileQuietly(tempImage);
         }
-
-        Path coverFile = Path.of(folderPath, AUDIOBOOK_COVER_FILENAME);
-        Path thumbnailFile = Path.of(folderPath, AUDIOBOOK_THUMBNAIL_FILENAME);
-
-        // Stream decode+resize into cover file first, then do file-based crop/thumbnail work.
-        try (InputStream in = imageStream; var coverOut = Files.newOutputStream(coverFile)) {
-            vipsImageService.processStreamToJpeg(in, coverOut, MAX_SQUARE_SIZE, MAX_SQUARE_SIZE);
-        }
-
-        ImageDimensions dims = vipsImageService.readDimensionsFromFile(coverFile);
-        int size = Math.min(dims.width(), dims.height());
-        int cropX = (dims.width() - size) / 2;
-        int cropY = (dims.height() - size) / 2;
-        Path squareCoverFile = Path.of(folderPath, "audiobook-cover-square.jpg");
-        vipsImageService.cropResizeAndSave(coverFile, squareCoverFile, cropX, cropY, size, size, size, size);
-        Files.move(squareCoverFile, coverFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        vipsImageService.cropResizeAndSave(coverFile, thumbnailFile,
-                0, 0, size, size, SQUARE_THUMBNAIL_SIZE, SQUARE_THUMBNAIL_SIZE);
-        return true;
     }
 
     public boolean saveCoverImages(byte[] imageData, long bookId) throws IOException {
@@ -985,57 +967,6 @@ public class FileService {
         }
         vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, thumbWidth, thumbHeight);
         return true;
-    }
-
-
-    /**
-     * Compute crop region based on cover cropping settings, using vips findTrim for smart crop.
-     * Returns [left, top, width, height] or null if no cropping needed.
-     */
-    private int[] computeCoverCrop(byte[] imageData, ImageDimensions dims) throws IOException {
-        CoverCroppingSettings settings = appSettingService.getAppSettings().getCoverCroppingSettings();
-        if (settings == null) {
-            return null;
-        }
-
-        int width = dims.width();
-        int height = dims.height();
-        double heightToWidthRatio = (double) height / width;
-        double widthToHeightRatio = (double) width / height;
-        double threshold = settings.getAspectRatioThreshold();
-        boolean smartCrop = settings.isSmartCroppingEnabled();
-
-        boolean isExtremelyTall = settings.isVerticalCroppingEnabled() && heightToWidthRatio > threshold;
-        if (isExtremelyTall) {
-            int croppedHeight = (int) (width * TARGET_COVER_ASPECT_RATIO);
-            int startY = 0;
-            if (smartCrop) {
-                TrimBounds bounds = vipsImageService.findContentBounds(imageData);
-                int margin = (int) (croppedHeight * SMART_CROP_MARGIN_PERCENT);
-                startY = Math.max(0, bounds.top() - margin);
-                startY = Math.min(startY, height - croppedHeight);
-            }
-            log.debug("Cropping tall image: {}x{} (ratio {}) -> {}x{}, smartCrop={}",
-                    width, height, String.format("%.2f", heightToWidthRatio), width, croppedHeight, smartCrop);
-            return new int[]{0, startY, width, croppedHeight};
-        }
-
-        boolean isExtremelyWide = settings.isHorizontalCroppingEnabled() && widthToHeightRatio > threshold;
-        if (isExtremelyWide) {
-            int croppedWidth = (int) (height / TARGET_COVER_ASPECT_RATIO);
-            int startX = 0;
-            if (smartCrop) {
-                TrimBounds bounds = vipsImageService.findContentBounds(imageData);
-                int margin = (int) (croppedWidth * SMART_CROP_MARGIN_PERCENT);
-                startX = Math.max(0, bounds.left() - margin);
-                startX = Math.min(startX, width - croppedWidth);
-            }
-            log.debug("Cropping wide image: {}x{} (ratio {}) -> {}x{}, smartCrop={}",
-                    width, height, String.format("%.2f", widthToHeightRatio), croppedWidth, height, smartCrop);
-            return new int[]{startX, 0, croppedWidth, height};
-        }
-
-        return null;
     }
 
     private int[] computeCoverCrop(Path imagePath, ImageDimensions dims) throws IOException {

@@ -19,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -95,7 +94,7 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
         Optional<Path> coverImage = FileUtils.findCoverImageInFolder(bookFolder);
         if (coverImage.isEmpty()) return false;
         try {
-            return fileService.saveCoverImages(Files.readAllBytes(coverImage.get()), bookEntity.getId());
+            return fileService.saveCoverImages(coverImage.get(), bookEntity.getId());
         } catch (Exception e) {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;
@@ -106,7 +105,7 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
         Optional<Path> coverImage = FileUtils.findCoverImageInFolder(bookFolder);
         if (coverImage.isEmpty()) return false;
         try {
-            return fileService.saveAudiobookCoverImages(Files.readAllBytes(coverImage.get()), bookEntity.getId());
+            return fileService.saveAudiobookCoverImages(coverImage.get(), bookEntity.getId());
         } catch (Exception e) {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;

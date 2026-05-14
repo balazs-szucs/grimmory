@@ -99,12 +99,12 @@ class AbstractFileProcessorTest {
         var bookEntity = new BookEntity();
         bookEntity.setId(1L);
 
-        when(fileService.saveCoverImages(any(byte[].class), eq(1L))).thenReturn(true);
+        when(fileService.saveCoverImages(any(Path.class), eq(1L))).thenReturn(true);
 
         boolean result = processor.exposedGenerateCoverFromFolderImage(bookEntity, folder);
 
         assertThat(result).isTrue();
-        verify(fileService).saveCoverImages(any(byte[].class), eq(1L));
+        verify(fileService).saveCoverImages(any(Path.class), eq(1L));
     }
 
     @Test
@@ -130,7 +130,7 @@ class AbstractFileProcessorTest {
 
         processor.exposedGenerateCoverFromFolderImage(bookEntity, folder);
 
-        verify(fileService, never()).saveCoverImages(any(byte[].class), any(long.class));
+        verify(fileService, never()).saveCoverImages(any(Path.class), any(long.class));
     }
 
     // ========== generateAudiobookCoverFromFolderImage ==========
@@ -144,12 +144,12 @@ class AbstractFileProcessorTest {
         var bookEntity = new BookEntity();
         bookEntity.setId(2L);
 
-        when(fileService.saveAudiobookCoverImages(any(byte[].class), eq(2L))).thenReturn(true);
+        when(fileService.saveAudiobookCoverImages(any(Path.class), eq(2L))).thenReturn(true);
 
         boolean result = processor.exposedGenerateAudiobookCoverFromFolderImage(bookEntity, folder);
 
         assertThat(result).isTrue();
-        verify(fileService).saveAudiobookCoverImages(any(byte[].class), eq(2L));
+        verify(fileService).saveAudiobookCoverImages(any(Path.class), eq(2L));
     }
 
     @Test

@@ -23,13 +23,16 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.booklore.util.FileService.truncate;
 
 @Slf4j
 @Service
-public class PdfProcessor extends AbstractFileProcessor implements BookFileProcessor {
+public class PdfProcessor extends AbstractFileProcessor {
 
     private final PdfMetadataExtractor pdfMetadataExtractor;
     private final org.booklore.util.VipsImageService vipsImageService;
@@ -207,13 +210,17 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
     }
 
     private boolean generateCoverImageAndSave(Long bookId, PdfDocument doc) throws IOException {
-        try (PdfPage page = doc.page(0)) {
-            byte[] coverData = vipsImageService.renderPageToJpeg(page, 150, 85);
-            return fileService.saveCoverImages(coverData, bookId);
+        Path tempCover = Files.createTempFile("booklore-pdf-cover-", ".jpg");
+        try (PdfPage page = doc.page(0);
+             OutputStream out = Files.newOutputStream(tempCover)) {
+            vipsImageService.renderPageToJpeg(page, 150, 85, out);
+            return fileService.saveCoverImages(tempCover, bookId);
         } catch (OutOfMemoryError e) {
             log.error("Out of memory (heap space exhausted) while generating cover for bookId {}. Skipping cover generation.", bookId);
             System.gc(); // Hint to JVM to reclaim memory
             return false;
+        } finally {
+            Files.deleteIfExists(tempCover);
         }
     }
 }
