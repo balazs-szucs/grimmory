@@ -3,6 +3,7 @@ package org.booklore.config.security.oidc;
 import com.nimbusds.jwt.JWTClaimsSet;
 import org.booklore.config.security.service.AuthenticationService;
 import org.booklore.exception.APIException;
+import org.booklore.model.dto.AccessTokenDto;
 import org.booklore.model.dto.settings.AppSettings;
 import org.booklore.model.dto.settings.OidcAutoProvisionDetails;
 import org.booklore.model.dto.settings.OidcProviderDetails;
@@ -74,7 +75,7 @@ class OidcAuthServiceTest {
         var claims = new JWTClaimsSet.Builder().subject("sub-123").build();
         var userClaims = userClaims("jdoe", "sub-123");
         var user = existingOidcUser("jdoe", "sub-123");
-        var expectedResponse = ResponseEntity.ok(Map.of("token", "jwt"));
+        var expectedResponse = ResponseEntity.ok(AccessTokenDto.builder().accessToken("jwt").build());
 
         when(appSettingService.getAppSettings()).thenReturn(settings);
         when(oidcTokenClient.exchangeAuthorizationCode(CODE, CODE_VERIFIER, REDIRECT_URI, settings.getOidcProviderDetails()))
@@ -161,7 +162,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -185,7 +186,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn("8");
-        when(authenticationService.loginUser(user, 8 * 3_600_000L)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user, 8 * 3_600_000L)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -210,7 +211,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn("not-a-number");
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -234,7 +235,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -244,8 +245,21 @@ class OidcAuthServiceTest {
     // --- validateAppRedirectUri ---
 
     @Test
-    void validateAppRedirectUri_validMobileRedirect() {
-        oidcAuthService.validateAppRedirectUri("booklore://some-path");
+    void validateAppRedirectUri_allowsConfiguredMobileRedirect() {
+        var settings = enabledSettings();
+        settings.setOidcRedirectUris(List.of("grimmory://auth/return"));
+        when(appSettingService.getAppSettings()).thenReturn(settings);
+
+        oidcAuthService.validateAppRedirectUri("grimmory://auth/return");
+    }
+
+    @Test
+    void validateAppRedirectUri_allowsDerivedLegacyCallbackWhenDefaultGrimmoryCallbackIsConfigured() {
+        var settings = enabledSettings();
+        settings.setOidcRedirectUris(List.of("grimmory://oauth2-callback"));
+        when(appSettingService.getAppSettings()).thenReturn(settings);
+
+        oidcAuthService.validateAppRedirectUri("booklore://oauth2-callback");
     }
 
     @Test
@@ -257,6 +271,16 @@ class OidcAuthServiceTest {
     @Test
     void validateAppRedirectUri_nonMobileSchemeThrows() {
         assertThatThrownBy(() -> oidcAuthService.validateAppRedirectUri("https://example.com"))
+                .isInstanceOf(APIException.class);
+    }
+
+    @Test
+    void validateAppRedirectUri_unlistedCustomSchemeThrows() {
+        var settings = enabledSettings();
+        settings.setOidcRedirectUris(List.of("grimmory://oauth2-callback"));
+        when(appSettingService.getAppSettings()).thenReturn(settings);
+
+        assertThatThrownBy(() -> oidcAuthService.validateAppRedirectUri("evil://oauth2-callback"))
                 .isInstanceOf(APIException.class);
     }
 
@@ -280,7 +304,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -310,7 +334,7 @@ class OidcAuthServiceTest {
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.empty());
         when(userRepository.findByUsername("jdoe")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -366,7 +390,7 @@ class OidcAuthServiceTest {
         when(userProvisioningService.provisionOidcUser("newuser", "newuser@example.com", "New User", "sub-new", ISSUER_URI, null, provisionDetails))
                 .thenReturn(newUser);
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(newUser)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(newUser)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -421,7 +445,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -451,7 +475,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -481,7 +505,7 @@ class OidcAuthServiceTest {
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.empty());
         when(userRepository.findByUsername("jdoe")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, REDIRECT_URI, NONCE, mockRequest());
 
@@ -508,7 +532,7 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         var result = oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, "https://example.com/oauth2-callback", NONCE, mockRequest());
 
@@ -531,9 +555,67 @@ class OidcAuthServiceTest {
         when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
         when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
         when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
-        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(Map.of()));
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
 
         var result = oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, "booklore://oauth2-callback", NONCE, mockRequest());
+
+        assertThat(result.getStatusCode().value()).isEqualTo(200);
+    }
+
+    @Test
+    void validateRedirectUri_allowsDerivedBookloreCallbackWhenGrimmoryCallbackIsConfigured() {
+        var settings = enabledSettings();
+        settings.setOidcRedirectUris(List.of("grimmory://oauth2-callback"));
+        var tokenResponse = tokenResponse(null, "id-token");
+        var claims = new JWTClaimsSet.Builder().subject("sub-123").build();
+        var userClaims = userClaims("jdoe", "sub-123");
+        var user = existingOidcUser("jdoe", "sub-123");
+
+        when(appSettingService.getAppSettings()).thenReturn(settings);
+        when(oidcTokenClient.exchangeAuthorizationCode(eq(CODE), eq(CODE_VERIFIER), eq("booklore://oauth2-callback"), any()))
+                .thenReturn(tokenResponse);
+        when(oidcTokenValidator.validateIdToken("id-token", ISSUER_URI, CLIENT_ID, NONCE, null))
+                .thenReturn(claims);
+        when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
+        when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
+        when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
+
+        var result = oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, "booklore://oauth2-callback", NONCE, mockRequest());
+
+        assertThat(result.getStatusCode().value()).isEqualTo(200);
+    }
+
+    @Test
+    void validateRedirectUri_rejectsUnlistedCustomMobileRedirect() {
+        var settings = enabledSettings();
+        settings.setOidcRedirectUris(List.of("grimmory://oauth2-callback"));
+        when(appSettingService.getAppSettings()).thenReturn(settings);
+
+        assertThatThrownBy(() -> oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, "grimmory://some-other-path", NONCE, mockRequest()))
+                .isInstanceOf(APIException.class);
+    }
+
+    @Test
+    void validateRedirectUri_allowsAnyConfiguredWildcardMobileRedirect() {
+        var settings = enabledSettings();
+        settings.setOidcRedirectUris(List.of("*"));
+        var tokenResponse = tokenResponse(null, "id-token");
+        var claims = new JWTClaimsSet.Builder().subject("sub-123").build();
+        var userClaims = userClaims("jdoe", "sub-123");
+        var user = existingOidcUser("jdoe", "sub-123");
+
+        when(appSettingService.getAppSettings()).thenReturn(settings);
+        when(oidcTokenClient.exchangeAuthorizationCode(eq(CODE), eq(CODE_VERIFIER), eq("grimmory://some-other-path"), any()))
+                .thenReturn(tokenResponse);
+        when(oidcTokenValidator.validateIdToken("id-token", ISSUER_URI, CLIENT_ID, NONCE, null))
+                .thenReturn(claims);
+        when(oidcClaimExtractor.extractClaims(eq(claims), any(), eq(Map.of()))).thenReturn(userClaims);
+        when(userRepository.findByOidcIssuerAndOidcSubject(ISSUER_URI, "sub-123")).thenReturn(Optional.of(user));
+        when(appSettingService.getSettingValue("oidc_session_duration_hours")).thenReturn(null);
+        when(authenticationService.loginUser(user)).thenReturn(ResponseEntity.ok(AccessTokenDto.builder().build()));
+
+        var result = oidcAuthService.exchangeCodeForTokens(CODE, CODE_VERIFIER, "grimmory://some-other-path", NONCE, mockRequest());
 
         assertThat(result.getStatusCode().value()).isEqualTo(200);
     }

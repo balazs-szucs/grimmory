@@ -1,4 +1,4 @@
-import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, viewChild} from '@angular/core';
+import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
@@ -49,14 +49,16 @@ import {BookBrowserEntityService, EntityInfo} from './book-browser-entity.servic
 import {RouteScrollPositionService} from '../../../../shared/service/route-scroll-position.service';
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
 import {MultiSortPopoverComponent} from './sorting/multi-sort-popover/multi-sort-popover.component';
-import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
 import {SortService} from '../../service/sort.service';
-import {createVirtualGrid, scaleForGridColumns, type VirtualGridMetrics} from '../../../../shared/util/virtual-grid.util';
+import {createVirtualGrid, type VirtualGridMetrics} from '../../../../shared/util/virtual-grid.util';
 import {GridDensityButtonsComponent, type GridDensityDirection} from '../../../../shared/components/grid-density-buttons/grid-density-buttons.component';
 import {filterBooksBySearchTerm} from './filters/HeaderFilter';
 import {filterBooksByFilters} from './filters/sidebar-filter';
 import {LayoutService} from '../../../../shared/layout/layout.service';
+import {createGridDensity} from '../../../../shared/util/grid-density.util';
+import {DeferredRenderState} from './deferred-render-state';
 
 export enum EntityType {
   LIBRARY = 'Library',
@@ -81,7 +83,7 @@ const MOBILE_COLUMNS_STORAGE_KEY = 'mobileColumnsPreference';
   imports: [
     Button, BookCardComponent, Menu, InputText, FormsModule,
     BookTableComponent, BookFilterComponent, Tooltip, NgClass, Popover,
-    Checkbox, Divider, MultiSelect, TieredMenu, Badge, MultiSortPopoverComponent, TranslocoDirective, GridDensityButtonsComponent,
+    Checkbox, Divider, MultiSelect, TieredMenu, Badge, MultiSortPopoverComponent, TranslocoDirective, TranslocoPipe, GridDensityButtonsComponent,
   ],
   providers: [SeriesCollapseFilter],
 })
@@ -117,7 +119,6 @@ export class BookBrowserComponent implements AfterViewInit {
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    this.loadMobileColumnsPreference();
     this.setupRouteChangeHandlers();
     this.setupQueryParamSubscription();
     this.scrollService.trackRoute({
@@ -166,7 +167,6 @@ export class BookBrowserComponent implements AfterViewInit {
   readonly visibleSortOptions = signal<SortOption[]>([]);
   readonly currentFilterLabel = signal<string | null>(null);
   readonly rawFilterParamFromUrl = signal<string | null>(null);
-  readonly gridMobileColumnCount = signal(DEFAULT_MOBILE_GRID_COLUMNS);
   private readonly seriesCollapsed = this.seriesCollapseFilter.seriesCollapsed;
   readonly selectedBooks = this.bookSelectionService.selectedBooks;
   readonly selectedCount = this.bookSelectionService.selectedCount;
@@ -201,37 +201,57 @@ export class BookBrowserComponent implements AfterViewInit {
 
     return actions;
   });
-  // --- Layered pipeline: each computed only recomputes when its direct inputs change ---
-  private readonly entityBooks = computed(() => {
-    const {entityId, entityType} = this.entityInfo();
-    return this.entityService.getBooksByEntity(this.bookService.books(), entityId, entityType);
-  });
-  private readonly searchedBooks = computed(() =>
-    filterBooksBySearchTerm(this.entityBooks(), this.debouncedSearchTerm())
-  );
-  private readonly filteredBooks = computed(() =>
-    filterBooksByFilters(this.searchedBooks(), this.selectedFilter(), this.selectedFilterMode())
-  );
+  // Deferred pipeline: heavy filter/sort runs in a setTimeout so the page chrome
+  // and skeletons paint first, then real books replace them on the next task.
   private readonly forceExpandSeries = computed(() =>
     this.queryParamsService.shouldForceExpandSeries(this.queryParamMap())
   );
-  private readonly collapsedBooks = computed(() =>
-    this.seriesCollapseFilter.collapseBooks(
-      this.filteredBooks(), this.forceExpandSeries(), this.seriesCollapsed()
-    )
-  );
+  private readonly booksContextKey = computed(() => {
+    const {entityId, entityType} = this.entityInfo();
+    return Number.isNaN(entityId) ? entityType : `${entityType}:${entityId}`;
+  });
+  private lastBooksContextKey: string | null = null;
+  private readonly booksRenderState = new DeferredRenderState<Book[]>();
+  readonly books = computed(() => this.booksRenderState.value() ?? []);
+  readonly hasRenderedBooks = this.booksRenderState.hasValue;
+  readonly isBooksRefreshing = this.booksRenderState.isRefreshing;
 
-  readonly books = computed(() =>
-    this.sortService.applyMultiSort(this.collapsedBooks(), this.sortCriteria())
-  );
+  private readonly computeBooksEffect = effect((onCleanup) => {
+    const contextKey = this.booksContextKey();
+    const allBooks = this.bookService.books();
+    const {entityId, entityType} = this.entityInfo();
+    const searchTerm = this.debouncedSearchTerm();
+    const filters = this.selectedFilter();
+    const filterMode = this.selectedFilterMode();
+    const collapsedFlag = this.seriesCollapsed();
+    const forceExpand = this.forceExpandSeries();
+    const sortCriteria = this.sortCriteria();
+
+    const sameContext = contextKey === this.lastBooksContextKey;
+    const shouldRefresh = sameContext && untracked(() => this.hasRenderedBooks());
+    const requestId = this.booksRenderState.begin(shouldRefresh ? 'refresh' : 'reset');
+    this.lastBooksContextKey = contextKey;
+
+    const timeoutId = globalThis.setTimeout(() => {
+      const entityBooks = this.entityService.getBooksByEntity(allBooks, entityId, entityType);
+      const searched = filterBooksBySearchTerm(entityBooks, searchTerm);
+      const filtered = filterBooksByFilters(searched, filters, filterMode);
+      const collapsed = this.seriesCollapseFilter.collapseBooks(filtered, forceExpand, collapsedFlag);
+      const sorted = this.sortService.applyMultiSort(collapsed, sortCriteria);
+      this.booksRenderState.commit(requestId, sorted);
+    });
+
+    onCleanup(() => {
+      globalThis.clearTimeout(timeoutId);
+      this.booksRenderState.cancel(requestId);
+    });
+  });
 
   readonly isBooksLoading = this.bookService.isBooksLoading;
   readonly booksError = this.bookService.booksError;
 
   private readonly GRID_GAP = 21;
-  private readonly MOBILE_BREAKPOINT = 768;
   private readonly CARD_ASPECT_RATIO = 7 / 5;
-  private readonly MOBILE_GAP = 8;
   private readonly MOBILE_TITLE_BAR_HEIGHT = 32;
   private readonly DESKTOP_CARD_BASE_WIDTH = 135;
   private readonly DESKTOP_CARD_BASE_HEIGHT = 220;
@@ -240,18 +260,31 @@ export class BookBrowserComponent implements AfterViewInit {
   private readonly AUDIOBOOK_TITLE_BAR_HEIGHT = 31;
   private readonly scrollElement = viewChild<ElementRef<HTMLElement>>('scrollElement');
   private readonly initialScrollOffset = () => this.scrollService.getPosition(this.scrollService.keyFor(this.activatedRoute, 'grid')) ?? 0;
+  readonly isMobile = computed(() => !this.layoutService.isDesktop());
   private readonly desktopBaseCardWidth = computed(() =>
     this.isAudiobookOnlyLibrary()
       ? this.DESKTOP_CARD_BASE_WIDTH * 1.1
       : this.DESKTOP_CARD_BASE_WIDTH
   );
+  private readonly gridDensity = createGridDensity(this.localStorageService, {
+    useFixedColumns: this.isMobile,
+    screenWidth: this.screenWidth,
+    storageKey: MOBILE_COLUMNS_STORAGE_KEY,
+    defaultColumns: DEFAULT_MOBILE_GRID_COLUMNS,
+    minColumns: MIN_MOBILE_GRID_COLUMNS,
+    maxColumns: MAX_MOBILE_GRID_COLUMNS,
+    scale: this.coverScalePreferenceService.scaleFactor,
+    minScale: this.DESKTOP_MIN_SCALE,
+    maxScale: this.DESKTOP_MAX_SCALE,
+    gap: this.GRID_GAP,
+    baseWidth: this.desktopBaseCardWidth,
+    setScale: scale => this.coverScalePreferenceService.setScale(scale),
+  });
   private readonly minCardWidth = computed(() =>
     this.isMobile()
       ? 1
       : Math.round(this.desktopBaseCardWidth() * this.coverScalePreferenceService.scaleFactor())
   );
-  private readonly virtualGridGap = computed(() => this.isMobile() ? this.MOBILE_GAP : this.GRID_GAP);
-  private readonly virtualGridColumns = computed(() => this.isMobile() ? this.gridMobileColumnCount() : undefined);
   readonly virtualRowCount = computed(() => this.bookCountIncludingUnloadedPages(this.books().length));
   private readonly hasUnloadedBooks = computed(() => this.books().length < this.virtualRowCount());
   readonly loadedBookCount = computed(() => this.books().length);
@@ -259,8 +292,8 @@ export class BookBrowserComponent implements AfterViewInit {
     items: this.books,
     scrollElement: this.scrollElement,
     minItemWidth: this.minCardWidth,
-    gap: this.virtualGridGap,
-    columns: this.virtualGridColumns,
+    gap: this.gridDensity.gap,
+    columns: this.gridDensity.columns,
     count: this.virtualRowCount,
     minimumCount: metrics => this.minimumLoadingGridItemCount(metrics),
     initialOffset: this.initialScrollOffset,
@@ -414,13 +447,8 @@ export class BookBrowserComponent implements AfterViewInit {
     this.screenWidth.set(window.innerWidth);
   }
 
-  readonly isMobile = computed(() => this.screenWidth() < this.MOBILE_BREAKPOINT);
-  readonly gridDensitySmallerDisabled = computed(() =>
-    this.isMobile() && this.gridMobileColumnCount() >= MAX_MOBILE_GRID_COLUMNS
-  );
-  readonly gridDensityLargerDisabled = computed(() =>
-    this.isMobile() && this.gridMobileColumnCount() <= MIN_MOBILE_GRID_COLUMNS
-  );
+  readonly gridDensitySmallerDisabled = this.gridDensity.smallerDisabled;
+  readonly gridDensityLargerDisabled = this.gridDensity.largerDisabled;
 
   private cardSizeForWidth(width: number): { width: number; height: number } {
     const cardWidth = Math.round(width);
@@ -442,7 +470,7 @@ export class BookBrowserComponent implements AfterViewInit {
   }
 
   readonly showBooksLoadingPlaceholder = computed(() =>
-    !this.booksError() && this.isBooksLoading() && this.books().length === 0
+    !this.booksError() && (!this.hasRenderedBooks() || (this.isBooksLoading() && this.books().length === 0))
   );
 
   readonly showTableLoadingPlaceholder = computed(() =>
@@ -661,9 +689,13 @@ export class BookBrowserComponent implements AfterViewInit {
   }
 
   selectAllBooks(): void {
-    this.bookSelectionService.selectAll(
-      this.filteredBooks().map(b => b.id)
+    const {entityId, entityType} = this.entityInfo();
+    const entityBooks = this.entityService.getBooksByEntity(
+      this.bookService.books(), entityId, entityType
     );
+    const searched = filterBooksBySearchTerm(entityBooks, this.debouncedSearchTerm());
+    const filtered = filterBooksByFilters(searched, this.selectedFilter(), this.selectedFilterMode());
+    this.bookSelectionService.selectAll(filtered.map(b => b.id));
   }
 
   loadNextBooksPage(): void {
@@ -1051,58 +1083,6 @@ export class BookBrowserComponent implements AfterViewInit {
   }
 
   adjustGridDensity(direction: GridDensityDirection): void {
-    if (this.isMobile()) {
-      this.adjustMobileGridDensity(direction);
-      return;
-    }
-
-    this.adjustDesktopGridDensity(direction);
-  }
-
-  private adjustMobileGridDensity(direction: GridDensityDirection): void {
-    const currentColumns = this.gridMobileColumnCount();
-    const nextColumns = direction === 'smaller'
-      ? currentColumns + 1
-      : currentColumns - 1;
-
-    this.setMobileColumns(this.toMobileGridColumns(nextColumns));
-  }
-
-  private setMobileColumns(columns: number): void {
-    this.gridMobileColumnCount.set(columns);
-    this.localStorageService.set(MOBILE_COLUMNS_STORAGE_KEY, columns);
-  }
-
-  private adjustDesktopGridDensity(direction: GridDensityDirection): void {
-    const currentColumns = this.virtualGrid.gridColumns();
-    const columns = Math.max(1, direction === 'smaller'
-      ? currentColumns + 1
-      : currentColumns - 1);
-    const viewportWidth = this.virtualGrid.viewportWidth() || this.screenWidth();
-    this.virtualGrid.updatePreservingScrollPosition(() => {
-      this.coverScalePreferenceService.setScale(scaleForGridColumns(
-        viewportWidth,
-        this.GRID_GAP,
-        columns,
-        this.desktopBaseCardWidth(),
-        this.DESKTOP_MIN_SCALE,
-        this.DESKTOP_MAX_SCALE
-      ));
-    });
-  }
-
-  private loadMobileColumnsPreference(): void {
-    const saved = this.localStorageService.get<unknown>(MOBILE_COLUMNS_STORAGE_KEY);
-    if (saved !== null) {
-      this.setMobileColumns(this.toMobileGridColumns(saved));
-    }
-  }
-
-  private toMobileGridColumns(value: unknown): number {
-    const columns = Number(value);
-    if (!Number.isFinite(columns)) {
-      return DEFAULT_MOBILE_GRID_COLUMNS;
-    }
-    return Math.min(MAX_MOBILE_GRID_COLUMNS, Math.max(MIN_MOBILE_GRID_COLUMNS, Math.round(columns)));
+    this.gridDensity.adjust(direction, this.virtualGrid);
   }
 }

@@ -228,8 +228,7 @@ public class PdfMetadataWriter implements MetadataWriter {
                 .customFields(customFields)
                 .build();
 
-        XmpMetadataWriter xmpWriter = new XmpMetadataWriter()
-                .registerNamespace(BookLoreMetadata.NS_PREFIX, BookLoreMetadata.NS_URI);
+        XmpMetadataWriter xmpWriter = new XmpMetadataWriter();
         String xmpPacket = xmpWriter.write(xmpMeta);
 
         // Inject RDF Bag elements for tags/moods (not supported as simple custom fields)
