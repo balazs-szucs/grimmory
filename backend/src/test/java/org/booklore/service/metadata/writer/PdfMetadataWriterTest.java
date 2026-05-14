@@ -53,8 +53,9 @@ class PdfMetadataWriterTest {
         settings.setMetadataPersistenceSettings(persistence);
         Mockito.when(appSettingService.getAppSettings()).thenReturn(settings);
 
+        org.booklore.util.VipsImageService vipsImageService = Mockito.mock(org.booklore.util.VipsImageService.class);
         writer = new PdfMetadataWriter(appSettingService);
-        extractor = new PdfMetadataExtractor();
+        extractor = new PdfMetadataExtractor(vipsImageService);
         tempDir = Files.createTempDirectory("pdf_writer_test_");
     }
 

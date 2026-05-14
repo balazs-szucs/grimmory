@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
@@ -252,12 +251,10 @@ public class AuthorMetadataService {
         validatePhoto(file);
 
         try {
-            BufferedImage image = FileService.readImage(file.getInputStream());
-            if (image == null) {
-                throw ApiError.FILE_READ_ERROR.createException("Failed to decode image");
+            boolean success = fileService.saveAuthorImages(file.getInputStream(), authorId);
+            if (!success) {
+                throw ApiError.FILE_READ_ERROR.createException("Failed to save author photo");
             }
-            fileService.saveAuthorImages(image, authorId);
-            image.flush();
         } catch (IOException e) {
             throw ApiError.FILE_READ_ERROR.createException(e.getMessage());
         }

@@ -1,17 +1,12 @@
 package org.booklore.service.metadata;
 
 import lombok.extern.slf4j.Slf4j;
+import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.IIOImage;
-import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +16,12 @@ import java.util.regex.Pattern;
 @Service
 public class CoverImageGenerator {
 
+    private final VipsImageService vipsImageService;
+
+    public CoverImageGenerator(VipsImageService vipsImageService) {
+        this.vipsImageService = vipsImageService;
+    }
+
     private static final int WIDTH = 1200;
     private static final int HEIGHT = 1600;
     private static final int SQUARE_SIZE = 1200;
@@ -29,7 +30,6 @@ public class CoverImageGenerator {
     private static final double PHI_INV = 1.0 / PHI;
     private static final double PHI_SQ_INV = 1.0 / (PHI * PHI);
     private static final int MAX_TITLE_LINES = 5;
-    private static final int MAX_AUTHOR_LINES = 2;
     private static final int MAX_TITLE_LEN = 200;
     private static final int MAX_AUTHOR_LEN = 100;
     private static final int MIN_FONT = 36 * SCALE;
@@ -41,13 +41,12 @@ public class CoverImageGenerator {
 
     public byte[] generateCover(String title, String author, String subtitle) {
         BufferedImage render = null;
-        BufferedImage result = null;
         Graphics2D g = null;
 
         try {
             String safeTitle = sanitize(title, MAX_TITLE_LEN, "Unknown Title");
             String safeAuthor = sanitize(author, MAX_AUTHOR_LEN, "Unknown Author");
-            String safeSubtitle = sanitize(subtitle, MAX_TITLE_LEN, ""); // Using title length limit for subtitle
+            String safeSubtitle = sanitize(subtitle, MAX_TITLE_LEN, "");
 
             int w = WIDTH * SCALE;
             int h = HEIGHT * SCALE;
@@ -80,26 +79,18 @@ public class CoverImageGenerator {
                 if (g != null) g.dispose();
             }
 
-            result = downscale(render);
-            render.flush();
-            render = null;
-
-            return encodeJpeg(result);
+            return encodeJpeg(render);
 
         } catch (Exception e) {
             log.error("Cover generation failed: {}", title, e);
             throw new RuntimeException("Cover generation failed", e);
         } finally {
-            cleanup(g, render, result);
+            cleanup(g, render);
         }
     }
 
-    /**
-     * Generates a square cover image suitable for audiobooks.
-     */
     public byte[] generateSquareCover(String title, String author) {
         BufferedImage render = null;
-        BufferedImage result = null;
         Graphics2D g = null;
 
         try {
@@ -131,17 +122,13 @@ public class CoverImageGenerator {
                 if (g != null) g.dispose();
             }
 
-            result = downscaleSquare(render);
-            render.flush();
-            render = null;
-
-            return encodeJpeg(result);
+            return encodeSquareJpeg(render);
 
         } catch (Exception e) {
             log.error("Square cover generation failed: {}", title, e);
             throw new RuntimeException("Square cover generation failed", e);
         } finally {
-            cleanup(g, render, result);
+            cleanup(g, render);
         }
     }
 
@@ -338,11 +325,11 @@ public class CoverImageGenerator {
         int bottomBound = (int) (h * PHI_INV);
 
         String text = title.toUpperCase();
-        Font font = resolveFont(g, text, maxW, titleSize(title.length()), MAX_TITLE_LINES, true);
+        Font font = resolveFont(g, text, maxW, titleSize(title.length()), 5, true);
         g.setFont(font);
         FontMetrics fm = g.getFontMetrics();
 
-        List<String> lines = wrapText(text, fm, maxW, MAX_TITLE_LINES);
+        List<String> lines = wrapText(text, fm, maxW, 5);
         int lineH = (int) (fm.getHeight() * 1.12);
         int totalH = lines.size() * lineH;
 
@@ -419,7 +406,7 @@ public class CoverImageGenerator {
             else formattedAuthors.append(authors[i].trim());
         }
 
-        Font authorFont = resolveFont(g, formattedAuthors.toString(), maxW, authorSize(formattedAuthors.length()), MAX_AUTHOR_LINES, false);
+        Font authorFont = resolveFont(g, formattedAuthors.toString(), maxW, authorSize(formattedAuthors.length()), 2, false);
         g.setFont(authorFont);
         FontMetrics authorFm = g.getFontMetrics();
 
@@ -432,7 +419,6 @@ public class CoverImageGenerator {
         int authorLineH = (int) (authorFm.getHeight() * 1.18);
         int authorTotalH = lines.size() * authorLineH;
 
-        // Remove the "by" prefix for multiple authors
         boolean showByPrefix = lines.size() == 1 && author.length() < 45 && !author.contains(",");
 
         Font byFont = authorFont.deriveFont(authorFont.getSize() * 0.58f);
@@ -472,7 +458,7 @@ public class CoverImageGenerator {
 
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
-            if (!line.isEmpty()) {  // Only render non-empty lines
+            if (!line.isEmpty()) {
                 int lw = trackedWidth(authorFm, line, tracking);
                 int x = (w - lw) / 2;
                 int y = currentY + authorFm.getAscent() + i * authorLineH;
@@ -493,7 +479,6 @@ public class CoverImageGenerator {
         List<String> lines = wrapText(subtitle, subtitleFm, maxW, 2);
         int subtitleLineH = (int) (subtitleFm.getHeight() * 1.12);
 
-        // Position subtitle below the title with some spacing
         int spacing = (int) (subtitleLineH * 0.5);
         int startY = titleEnd + spacing + subtitleFm.getAscent();
 
@@ -710,32 +695,6 @@ public class CoverImageGenerator {
         return 50 * SCALE;
     }
 
-    private BufferedImage downscale(BufferedImage src) {
-        BufferedImage dst = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = dst.createGraphics();
-        try {
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(src, 0, 0, WIDTH, HEIGHT, null);
-            return dst;
-        } finally {
-            g.dispose();
-        }
-    }
-
-    private BufferedImage downscaleSquare(BufferedImage src) {
-        BufferedImage dst = new BufferedImage(SQUARE_SIZE, SQUARE_SIZE, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = dst.createGraphics();
-        try {
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.drawImage(src, 0, 0, SQUARE_SIZE, SQUARE_SIZE, null);
-            return dst;
-        } finally {
-            g.dispose();
-        }
-    }
-
     private int calcSquareMargin(int size) {
         int frameOuter = (int) (size * PHI_SQ_INV * 0.10);
         int frameInner = (int) (frameOuter * PHI);
@@ -782,7 +741,6 @@ public class CoverImageGenerator {
         int lineH = (int) (fm.getHeight() * 1.12);
         int totalH = lines.size() * lineH;
 
-        // Center title vertically in top portion
         int topZone = (int) (size * 0.55);
         int startY = margin + (topZone - margin - totalH) / 2 + fm.getAscent();
         startY = Math.max(startY, margin + fm.getAscent());
@@ -810,7 +768,6 @@ public class CoverImageGenerator {
         int authorLineH = (int) (authorFm.getHeight() * 1.15);
         int totalH = lines.size() * authorLineH;
 
-        // Position author in bottom portion
         int bottomStart = (int) (size * 0.65);
         int bottomEnd = size - margin;
         int availableH = bottomEnd - bottomStart - totalH;
@@ -847,24 +804,18 @@ public class CoverImageGenerator {
     }
 
     private byte[] encodeJpeg(BufferedImage img) {
-        ImageWriter writer = null;
-        ImageOutputStream ios = null;
-
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            writer = ImageIO.getImageWritersByFormatName("jpg").next();
-            ImageWriteParam param = writer.getDefaultWriteParam();
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(0.95f);
-
-            ios = ImageIO.createImageOutputStream(baos);
-            writer.setOutput(ios);
-            writer.write(null, new IIOImage(img, null, null), param);
-            return baos.toByteArray();
+        try {
+            return vipsImageService.downscaleAndEncodeJpeg(img, WIDTH, HEIGHT, 95);
         } catch (IOException e) {
             throw new RuntimeException("JPEG encoding failed", e);
-        } finally {
-            if (writer != null) writer.dispose();
-            if (ios != null) try { ios.close(); } catch (IOException _) {}
+        }
+    }
+
+    private byte[] encodeSquareJpeg(BufferedImage img) {
+        try {
+            return vipsImageService.downscaleAndEncodeJpeg(img, SQUARE_SIZE, SQUARE_SIZE, 95);
+        } catch (IOException e) {
+            throw new RuntimeException("Square JPEG encoding failed", e);
         }
     }
 

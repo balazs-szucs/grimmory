@@ -176,16 +176,13 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok:1.18.46")
 
     // --- Book & Image Processing ---
+    implementation("app.photofox.vips-ffm:vips-ffm-core:1.9.8")
+
     val pdfium4jVersion = if (useLocalLibs) "+" else "1.2.0"
     implementation("org.grimmory:pdfium4j:$pdfium4jVersion")
     runtimeOnly("org.grimmory:pdfium4j:$pdfium4jVersion:${pdfiumNativesClassifier()}")
 
-    // --- TwelveMonkeys ImageIO ---
-    implementation("com.twelvemonkeys.imageio:imageio-jpeg:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-tiff:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-webp:3.13.1")
-    implementation("com.twelvemonkeys.imageio:imageio-bmp:3.13.1")
-
+    // --- EPUB processing ---
     // epub4j-grimmory fork publishes as org.grimmory:epub4j-core
     val epub4jCoords = if (useLocalLibs) "org.grimmory:epub4j-core:+" else "org.grimmory:epub4j-core:1.4.0"
     implementation(epub4jCoords)

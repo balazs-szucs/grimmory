@@ -39,6 +39,7 @@ public class PdfReaderService {
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
+    private final org.booklore.util.VipsImageService vipsImageService;
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
@@ -72,8 +73,9 @@ public class PdfReaderService {
             for (int i = 1; i <= metadata.pageCount; i++) {
                 Path target = chapterCacheService.getCachedPage(cacheKey, i);
                 if (!Files.exists(target) || Files.size(target) == 0) {
-                    byte[] jpeg = doc.renderPageToBytes(i - 1, (int) DEFAULT_DPI, "jpeg");
-                    writeAtomically(target, jpeg);
+                    try (var page = doc.page(i - 1)) {
+                        writeAtomically(target, out -> vipsImageService.renderPageToJpeg(page, (int) DEFAULT_DPI, 85, out));
+                    }
                 }
             }
         }
@@ -131,9 +133,8 @@ public class PdfReaderService {
         // Render, cache atomically, then stream
         Path cached = chapterCacheService.getCachedPage(cacheKey, page);
         Files.createDirectories(cached.getParent());
-        byte[] jpeg = renderPageToBytes(pdfPath, page);
-        writeAtomically(cached, jpeg);
-        outputStream.write(jpeg);
+        writeAtomically(cached, out -> renderPageToStream(pdfPath, page, out));
+        Files.copy(cached, outputStream);
     }
 
     private String getCacheKey(Long bookId, String bookType, long lastModified) {
@@ -241,10 +242,11 @@ public class PdfReaderService {
         }
     }
 
-    private byte[] renderPageToBytes(Path pdfPath, int page) throws IOException {
+    private void renderPageToStream(Path pdfPath, int page, OutputStream outputStream) throws IOException {
         try (PdfDocument doc = PdfDocument.open(pdfPath)) {
-            // page is 1-based from the API, renderPageToBytes expects 0-based
-            return doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
+            try (var pdfPage = doc.page(page - 1)) {
+                vipsImageService.renderPageToJpeg(pdfPage, (int) DEFAULT_DPI, 85, outputStream);
+            }
         } catch (Exception e) {
             log.error("Failed to render PDF page {} from {}", page, pdfPath, e);
             throw new IOException(e);
@@ -255,13 +257,20 @@ public class PdfReaderService {
      * Writes bytes to a temp file then atomically moves to the target path.
      * If the write fails the partial temp file is cleaned up.
      */
-    private void writeAtomically(Path target, byte[] data) throws IOException {
+    private void writeAtomically(Path target, StreamingWriter writer) throws IOException {
         Path tmp = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", ".tmp");
         try {
-            Files.write(tmp, data);
+            try (OutputStream out = Files.newOutputStream(tmp)) {
+                writer.write(out);
+            }
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally {
             Files.deleteIfExists(tmp);
         }
+    }
+
+    @FunctionalInterface
+    private interface StreamingWriter {
+        void write(OutputStream outputStream) throws IOException;
     }
 }

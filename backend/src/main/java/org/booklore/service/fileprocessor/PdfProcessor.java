@@ -21,18 +21,21 @@ import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.booklore.util.FileService.truncate;
 
 @Slf4j
 @Service
-public class PdfProcessor extends AbstractFileProcessor implements BookFileProcessor {
+public class PdfProcessor extends AbstractFileProcessor {
 
     private final PdfMetadataExtractor pdfMetadataExtractor;
+    private final org.booklore.util.VipsImageService vipsImageService;
 
     public PdfProcessor(BookRepository bookRepository,
                         BookAdditionalFileRepository bookAdditionalFileRepository,
@@ -41,9 +44,11 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
                         FileService fileService,
                         MetadataMatchService metadataMatchService,
                         SidecarMetadataWriter sidecarMetadataWriter,
-                        PdfMetadataExtractor pdfMetadataExtractor) {
+                        PdfMetadataExtractor pdfMetadataExtractor,
+                        org.booklore.util.VipsImageService vipsImageService) {
         super(bookRepository, bookAdditionalFileRepository, bookCreatorService, bookMapper, fileService, metadataMatchService, sidecarMetadataWriter);
         this.pdfMetadataExtractor = pdfMetadataExtractor;
+        this.vipsImageService = vipsImageService;
     }
 
     @Override
@@ -205,18 +210,17 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
     }
 
     private boolean generateCoverImageAndSave(Long bookId, PdfDocument doc) throws IOException {
-        BufferedImage coverImage = null;
-        try (PdfPage page = doc.page(0)) {
-            coverImage = page.render(150).toBufferedImage();
-            return fileService.saveCoverImages(coverImage, bookId);
+        Path tempCover = Files.createTempFile("booklore-pdf-cover-", ".jpg");
+        try (PdfPage page = doc.page(0);
+             OutputStream out = Files.newOutputStream(tempCover)) {
+            vipsImageService.renderPageToJpeg(page, 150, 85, out);
+            return fileService.saveCoverImages(tempCover, bookId);
         } catch (OutOfMemoryError e) {
             log.error("Out of memory (heap space exhausted) while generating cover for bookId {}. Skipping cover generation.", bookId);
             System.gc(); // Hint to JVM to reclaim memory
             return false;
         } finally {
-            if (coverImage != null) {
-                coverImage.flush(); // Release native resources
-            }
+            Files.deleteIfExists(tempCover);
         }
     }
 }
