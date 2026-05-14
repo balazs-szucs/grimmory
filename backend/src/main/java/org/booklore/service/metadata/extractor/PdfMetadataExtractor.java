@@ -1,8 +1,10 @@
 package org.booklore.service.metadata.extractor;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.booklore.util.VipsImageService;
 import org.grimmory.pdfium4j.PdfDocument;
 import org.grimmory.pdfium4j.PdfPage;
 import org.grimmory.pdfium4j.XmpMetadataParser;
@@ -37,10 +39,10 @@ import java.util.function.Consumer;
 
 @Component
 @Slf4j
-@lombok.RequiredArgsConstructor
+@RequiredArgsConstructor
 public class PdfMetadataExtractor implements FileMetadataExtractor {
 
-    private final org.booklore.util.VipsImageService vipsImageService;
+    private final VipsImageService vipsImageService;
 
     private static final String DC_NAMESPACE = "http://purl.org/dc/elements/1.1/";
     private static final String BOOKLORE_NAMESPACE = "http://booklore.org/metadata/1.0/";
