@@ -3,10 +3,10 @@ package org.booklore.util;
 import app.photofox.vipsffm.*;
 import app.photofox.vipsffm.enums.VipsBandFormat;
 import org.grimmory.pdfium4j.PdfPage;
-import org.grimmory.pdfium4j.PdfDocument;
-import org.grimmory.pdfium4j.model.RenderResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -15,7 +15,15 @@ import java.nio.file.Path;
 @Slf4j
 @Service
 public class VipsImageService {
-    static { Vips.init(); }
+    public VipsImageService() {
+        try {
+            Vips.init();
+            // Best practice: disable operation cache for long-running servers to save memory
+            Vips.disableOperationCache();
+        } catch (Throwable t) {
+            log.warn("libvips native library not available: {}", t.toString());
+        }
+    }
 
     public ImageDimensions readDimensions(byte[] data) throws IOException {
         return runWithArena(arena -> {
@@ -52,9 +60,10 @@ public class VipsImageService {
 
     public void flattenResizeAndSave(byte[] data, Path out, int maxW, int maxH) throws IOException {
         runWithArena(arena -> {
-            VImage img = VImage.newFromBytes(arena, data).flatten();
-            double scale = Math.min(1.0, Math.min((double) maxW / img.getWidth(), (double) maxH / img.getHeight()));
-            if (scale < 1.0) img = img.resize(scale);
+            // Best practice: use thumbnailBuffer for efficient shrink-on-load
+            VBlob blob = VBlob.newFromBytes(arena, data);
+            VImage img = VImage.thumbnailBuffer(arena, blob, maxW, VipsOption.Int("height", maxH))
+                 .flatten();
             img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
@@ -62,9 +71,9 @@ public class VipsImageService {
 
     public void flattenResizeAndSave(Path in, Path out, int maxW, int maxH) throws IOException {
         runWithArena(arena -> {
-            VImage img = VImage.newFromFile(arena, in.toString()).flatten();
-            double scale = Math.min(1.0, Math.min((double) maxW / img.getWidth(), (double) maxH / img.getHeight()));
-            if (scale < 1.0) img = img.resize(scale);
+            // Best practice: use thumbnail for efficient shrink-on-load
+            VImage img = VImage.thumbnail(arena, in.toString(), maxW, VipsOption.Int("height", maxH))
+                 .flatten();
             img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
@@ -74,7 +83,7 @@ public class VipsImageService {
         runWithArena(arena -> {
             VImage img = VImage.newFromFile(arena, in.toString()).extractArea(x, y, w, h);
             if (w != targetW || h != targetH) img = img.resize((double) targetW / w);
-            img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true));
+            img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
     }
@@ -82,8 +91,9 @@ public class VipsImageService {
     public void flattenCropResizeAndSave(Path in, Path out, int x, int y, int w, int h, int targetW, int targetH) throws IOException {
         runWithArena(arena -> {
             VImage img = VImage.newFromFile(arena, in.toString()).flatten().extractArea(x, y, w, h);
-            img = img.resize((double) targetW / w);
-            img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true));
+            double scale = Math.min((double) targetW / w, (double) targetH / h);
+            img = img.resize(scale);
+            img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
     }
@@ -91,17 +101,18 @@ public class VipsImageService {
     public void flattenThumbnailAndSave(Path in, Path out, int w, int h) throws IOException {
         runWithArena(arena -> {
             VImage.thumbnail(arena, in.toString(), w, VipsOption.Int("height", h), VipsOption.String("crop", "centre"))
-                 .flatten().jpegsave(out.toString(), VipsOption.Int("Q", 80), VipsOption.Boolean("strip", true));
+                 .flatten().jpegsave(out.toString(), VipsOption.Int("Q", 80), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
     }
 
     public void processStreamToJpeg(InputStream is, OutputStream os, int maxW, int maxH) throws IOException {
         runWithArena(arena -> {
-            VImage img = VImage.newFromSource(arena, VSource.newFromInputStream(arena, is)).flatten();
-            double scale = Math.min(1.0, Math.min((double) maxW / img.getWidth(), (double) maxH / img.getHeight()));
-            if (scale < 1.0) img = img.resize(scale);
-            img.jpegsaveTarget(VTarget.newFromOutputStream(arena, os), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true));
+            // Best practice: use thumbnailSource for efficient shrink-on-load from stream
+            VSource source = VSource.newFromInputStream(arena, is);
+            VImage img = VImage.thumbnailSource(arena, source, maxW, VipsOption.Int("height", maxH))
+                 .flatten();
+            img.jpegsaveTarget(VTarget.newFromOutputStream(arena, os), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
     }
@@ -118,20 +129,11 @@ public class VipsImageService {
         return runWithArena(arena -> VImage.newFromBytes(arena, data).pngsaveBuffer().getBytes());
     }
 
-    public byte[] bufferedImageToJpeg(java.awt.image.BufferedImage img, int q) throws IOException {
+    public byte[] bufferedImageToJpeg(BufferedImage img, int q) throws IOException {
         return runWithArena(arena -> bufferedImageToVips(arena, img).jpegsaveBuffer(VipsOption.Int("Q", q), VipsOption.Boolean("strip", true)).getBytes());
     }
 
-    public byte[] downscaleBufferedImageToJpeg(java.awt.image.BufferedImage img, int maxW, int maxH, int q) throws IOException {
-        return runWithArena(arena -> {
-            VImage vimg = bufferedImageToVips(arena, img);
-            double scale = Math.min(1.0, Math.min((double) maxW / vimg.getWidth(), (double) maxH / vimg.getHeight()));
-            if (scale < 1.0) vimg = vimg.resize(scale);
-            return vimg.jpegsaveBuffer(VipsOption.Int("Q", q), VipsOption.Boolean("strip", true)).getBytes();
-        });
-    }
-
-    private VImage bufferedImageToVips(Arena arena, java.awt.image.BufferedImage img) {
+    private VImage bufferedImageToVips(Arena arena, BufferedImage img) {
         int w = img.getWidth(), h = img.getHeight();
         byte[] pixels = new byte[w * h * 3];
         for (int y = 0; y < h; y++) {
@@ -159,7 +161,7 @@ public class VipsImageService {
             // PDFium rendered in RGBA format (with FPDF_REVERSE_BYTE_ORDER which is default in PDFium4j)
             VImage vimg = VImage.newFromMemory(arena, segment, w, h, 4, VipsBandFormat.FORMAT_UCHAR.getRawValue());
             vimg = vimg.flatten(); // Remove alpha for JPEG
-            return vimg.jpegsaveBuffer(VipsOption.Int("Q", quality), VipsOption.Boolean("strip", true)).getBytes();
+            return vimg.jpegsaveBuffer(VipsOption.Int("Q", quality), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true)).getBytes();
         });
     }
 

@@ -38,7 +38,7 @@ class CbxConversionServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        cbxConversionService = new CbxConversionService(new ArchiveService());
+        cbxConversionService = new CbxConversionService(new ArchiveService(), org.mockito.Mockito.mock(org.booklore.util.VipsImageService.class));
         testCbzFile = createTestCbzFile();
         testBookEntity = createTestBookEntity();
     }

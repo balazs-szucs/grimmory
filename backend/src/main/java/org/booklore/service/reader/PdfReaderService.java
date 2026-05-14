@@ -39,6 +39,7 @@ public class PdfReaderService {
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
+    private final org.booklore.util.VipsImageService vipsImageService;
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
@@ -72,8 +73,10 @@ public class PdfReaderService {
             for (int i = 1; i <= metadata.pageCount; i++) {
                 Path target = chapterCacheService.getCachedPage(cacheKey, i);
                 if (!Files.exists(target) || Files.size(target) == 0) {
-                    byte[] jpeg = doc.renderPageToBytes(i - 1, (int) DEFAULT_DPI, "jpeg");
-                    writeAtomically(target, jpeg);
+                    try (var page = doc.page(i - 1)) {
+                        byte[] jpeg = vipsImageService.renderPageToJpeg(page, (int) DEFAULT_DPI, 85);
+                        writeAtomically(target, jpeg);
+                    }
                 }
             }
         }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -30,11 +31,14 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class CbxMetadataExtractorTest {
     @Mock private ArchiveService archiveService;
+    @Mock private org.booklore.util.VipsImageService vipsImageService;
     private CbxMetadataExtractor extractor;
 
     @BeforeEach
     void setUp() {
-        extractor = new CbxMetadataExtractor(archiveService);
+        vipsImageService = Mockito.mock(org.booklore.util.VipsImageService.class);
+        when(vipsImageService.canDecode(any(byte[].class))).thenReturn(true);
+        extractor = new CbxMetadataExtractor(archiveService, vipsImageService);
     }
 
     private byte[] createMinimalJpeg(int rgb) throws IOException {

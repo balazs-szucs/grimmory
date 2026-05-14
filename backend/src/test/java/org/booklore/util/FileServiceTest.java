@@ -25,6 +25,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -52,7 +53,7 @@ class FileServiceTest {
     Path tempDir;
 
     @BeforeEach
-    void setup() {
+    void setup() throws IOException {
         CoverCroppingSettings coverCroppingSettings = CoverCroppingSettings.builder()
                 .verticalCroppingEnabled(true)
                 .horizontalCroppingEnabled(true)
@@ -62,6 +63,15 @@ class FileServiceTest {
                 .coverCroppingSettings(coverCroppingSettings)
                 .build();
         lenient().when(appSettingService.getAppSettings()).thenReturn(appSettings);
+
+        // General VIPS stubbing to prevent NPEs in various tests
+        lenient().when(vipsImageService.readDimensionsFromFile(any())).thenReturn(new ImageDimensions(1000, 1500));
+        lenient().when(vipsImageService.readDimensions(any(byte[].class))).thenReturn(new ImageDimensions(1000, 1500));
+        lenient().when(vipsImageService.canDecode(any(byte[].class))).thenReturn(true);
+        lenient().when(vipsImageService.canDecode(any(Path.class))).thenReturn(true);
+        lenient().when(vipsImageService.canDecode(any(InputStream.class))).thenReturn(true);
+        lenient().when(vipsImageService.findContentBounds(any(Path.class))).thenReturn(new TrimBounds(0, 0, 1000, 1500));
+        lenient().when(vipsImageService.findContentBounds(any(byte[].class))).thenReturn(new TrimBounds(0, 0, 1000, 1500));
 
         RestTemplate mockRestTemplate = mock(RestTemplate.class);
         RestTemplate mockNoRedirectRestTemplate = mock(RestTemplate.class);
@@ -433,7 +443,7 @@ class FileServiceTest {
 
                 fileService.saveImage(emptyData, outputPath.toString());
 
-                verify(vipsImageService, never()).flattenResizeAndSave(any(), any(), anyInt(), anyInt());
+                verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
             }
 
             @Test
@@ -442,7 +452,7 @@ class FileServiceTest {
 
                 fileService.saveImage(null, outputPath.toString());
 
-                verify(vipsImageService, never()).flattenResizeAndSave(any(), any(), anyInt(), anyInt());
+                verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
             }
         }
     }
@@ -475,7 +485,7 @@ class FileServiceTest {
             @Test
             void largeImage_isScaledDownToMaxDimensions() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                when(vipsImageService.readDimensionsFromFile(any())).thenReturn(new ImageDimensions(2000, 3000));
+                when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(2000, 3000), new ImageDimensions(1000, 1500));
 
                 boolean result = fileService.saveCoverImages(imageData, 5L);
 
@@ -487,7 +497,9 @@ class FileServiceTest {
             void extremelyTallImage_isCropped() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
                 // 1000x10000 => ratio 10 (threshold 2.5)
-                when(vipsImageService.readDimensionsFromFile(any())).thenReturn(new ImageDimensions(1000, 10000));
+                when(vipsImageService.readDimensionsFromFile(any(Path.class)))
+                        .thenReturn(new ImageDimensions(1000, 10000))
+                        .thenReturn(new ImageDimensions(1000, 1500));
 
                 boolean result = fileService.saveCoverImages(imageData, 100L);
 
@@ -675,7 +687,8 @@ class FileServiceTest {
                 String imageUrl = "http://example.com/invalid.jpg";
                 long bookId = 42L;
 
-                when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)))
+                RestTemplate noRedirectRestTemplate = (RestTemplate) ReflectionTestUtils.getField(fileService, "noRedirectRestTemplate");
+                when(noRedirectRestTemplate.execute(anyString(), eq(HttpMethod.GET), any(), any()))
                         .thenThrow(new RuntimeException("Network error"));
 
                 assertThrows(RuntimeException.class, () -> fileService.createThumbnailFromUrl(bookId, imageUrl));

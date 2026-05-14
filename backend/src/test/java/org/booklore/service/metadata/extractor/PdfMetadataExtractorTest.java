@@ -10,23 +10,32 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.when;
 
 import org.booklore.test.RequiresPdfium;
+import org.booklore.util.VipsImageService;
+import org.mockito.Mockito;
 
 @RequiresPdfium
 class PdfMetadataExtractorTest {
 
     private PdfMetadataExtractor extractor;
+    private VipsImageService vipsImageService;
 
     @TempDir
     Path tempDir;
 
     @BeforeEach
-    void setUp() {
-        extractor = new PdfMetadataExtractor();
+    void setUp() throws IOException {
+        vipsImageService = Mockito.mock(VipsImageService.class);
+        when(vipsImageService.renderPageToJpeg(any(), anyInt(), anyInt())).thenReturn(new byte[]{(byte) 0xFF, (byte) 0xD8, 0x00});
+        extractor = new PdfMetadataExtractor(vipsImageService);
     }
 
     private File createPdf(PdfCustomizer customizer) throws Exception {

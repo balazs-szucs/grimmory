@@ -38,6 +38,9 @@ class CbxReaderServiceTest {
     @Mock
     ChapterCacheService chapterCacheService;
 
+    @Mock
+    org.booklore.util.VipsImageService vipsImageService;
+
     @InjectMocks
     CbxReaderService cbxReaderService;
 

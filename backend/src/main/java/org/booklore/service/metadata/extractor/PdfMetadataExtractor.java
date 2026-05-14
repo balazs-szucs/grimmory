@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.grimmory.pdfium4j.PdfDocument;
+import org.grimmory.pdfium4j.PdfPage;
 import org.grimmory.pdfium4j.XmpMetadataParser;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.grimmory.pdfium4j.model.XmpMetadata;
@@ -36,7 +37,10 @@ import java.util.function.Consumer;
 
 @Component
 @Slf4j
+@lombok.RequiredArgsConstructor
 public class PdfMetadataExtractor implements FileMetadataExtractor {
+
+    private final org.booklore.util.VipsImageService vipsImageService;
 
     private static final String DC_NAMESPACE = "http://purl.org/dc/elements/1.1/";
     private static final String BOOKLORE_NAMESPACE = "http://booklore.org/metadata/1.0/";
@@ -52,8 +56,9 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     @Override
     public byte[] extractCover(File file) {
-        try (PdfDocument doc = PdfDocument.open(file.toPath())) {
-            return doc.renderPageToBytes(0, 300, "jpeg");
+        try (PdfDocument doc = PdfDocument.open(file.toPath());
+             PdfPage page = doc.page(0)) {
+            return vipsImageService.renderPageToJpeg(page, 300, 85);
         } catch (Exception e) {
             log.warn("Failed to extract cover from PDF: {}", file.getAbsolutePath(), e);
             return null;

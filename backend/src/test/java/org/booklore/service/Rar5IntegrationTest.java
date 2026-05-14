@@ -47,7 +47,7 @@ class Rar5IntegrationTest {
         Path cbrCopy = tempDir.resolve("test.cbr");
         Files.copy(RAR5_CBR, cbrCopy);
 
-        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService());
+        CbxMetadataExtractor extractor = new CbxMetadataExtractor(new ArchiveService(), Mockito.mock(org.booklore.util.VipsImageService.class));
         BookMetadata metadata = extractor.extractMetadata(cbrCopy.toFile());
 
         assertThat(metadata.getTitle()).isEqualTo("Test RAR5 Comic");
@@ -73,7 +73,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache);
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(org.booklore.util.VipsImageService.class));
             List<Integer> pages = readerService.getAvailablePages(99L);
 
             assertThat(pages).hasSize(3);
@@ -98,7 +98,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache);
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(org.booklore.util.VipsImageService.class));
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             readerService.streamPageImage(99L, 1, out);
 
@@ -122,7 +122,7 @@ class Rar5IntegrationTest {
         meta.setTitle("Test RAR5 Comic");
         book.setMetadata(meta);
 
-        CbxConversionService conversionService = new CbxConversionService(new ArchiveService());
+        CbxConversionService conversionService = new CbxConversionService(new ArchiveService(), Mockito.mock(org.booklore.util.VipsImageService.class));
         File epub = conversionService.convertCbxToEpub(cbrCopy.toFile(), tempDir.toFile(), book, 85);
 
         assertThat(epub).exists();

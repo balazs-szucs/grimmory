@@ -19,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ByteArrayInputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -641,8 +640,8 @@ public class FileService {
     }
 
     public void createThumbnailFromPath(long bookId, Path imagePath) {
-        try (InputStream inputStream = Files.newInputStream(imagePath)) {
-            boolean success = saveCoverImages(inputStream, bookId);
+        try {
+            boolean success = saveCoverImages(imagePath, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save cover images");
             }
@@ -661,10 +660,7 @@ public class FileService {
         Path downloadedImage = null;
         try {
             downloadedImage = downloadImageToTempFile(imageUrl);
-            boolean success;
-            try (InputStream inputStream = Files.newInputStream(downloadedImage)) {
-                success = saveAuthorImages(inputStream, authorId);
-            }
+            boolean success = saveAuthorImages(downloadedImage, authorId);
             if (!success) {
                 log.warn("Failed to save author images for author ID: {}", authorId);
             }
@@ -829,8 +825,8 @@ public class FileService {
     }
 
     public void createAudiobookThumbnailFromPath(long bookId, Path imagePath) {
-        try (InputStream inputStream = Files.newInputStream(imagePath)) {
-            boolean success = saveAudiobookCoverImages(inputStream, bookId);
+        try {
+            boolean success = saveAudiobookCoverImages(imagePath, bookId);
             if (!success) {
                 throw ApiError.FILE_READ_ERROR.createException("Failed to save audiobook cover images");
             }

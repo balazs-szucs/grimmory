@@ -58,12 +58,17 @@ public final class NativeLibraries {
         }));
 
         probes.put(Library.LIBVIPS, new Probe("libvips", () -> {
-            app.photofox.vipsffm.Vips.run(arena -> {
-                app.photofox.vipsffm.VipsHelper.cache_set_max(0);
-                log.info("libvips {} initialised – operation cache disabled",
-                        app.photofox.vipsffm.VipsHelper.version_string());
-            });
-            return true;
+            try {
+                app.photofox.vipsffm.Vips.run(arena -> {
+                    app.photofox.vipsffm.Vips.disableOperationCache();
+                    log.info("libvips {} initialised – operation cache disabled",
+                            app.photofox.vipsffm.VipsHelper.version_string());
+                });
+                return true;
+            } catch (Throwable t) {
+                log.warn("libvips native library NOT available: {}", t.toString());
+                return false;
+            }
         }));
 
         PROBES = Collections.unmodifiableMap(probes);
