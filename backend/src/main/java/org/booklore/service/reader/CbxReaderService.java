@@ -16,6 +16,7 @@ import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
 import org.booklore.util.ArchiveUtils;
 import org.booklore.util.FileUtils;
+import org.booklore.util.ImageDimensions;
 import org.booklore.util.VipsImageService;
 import org.springframework.stereotype.Service;
 
@@ -126,7 +127,7 @@ public class CbxReaderService {
         for (int i = 1; i <= pageCount; i++) {
             Path cachedPage = chapterCacheService.getCachedPage(cacheKey, i);
             try {
-                org.booklore.util.ImageDimensions dims = vipsImageService.readDimensionsFromFile(cachedPage);
+                ImageDimensions dims = vipsImageService.readDimensionsFromFile(cachedPage);
                 dimensions.add(CbxPageDimension.builder().pageNumber(i).width(dims.width()).height(dims.height()).wide(dims.width() > dims.height()).build());
                 continue;
             } catch (Exception e) {
@@ -275,7 +276,7 @@ public class CbxReaderService {
             String entryName = imageEntries.get(i);
             try {
                 byte[] prefix = archiveService.getEntryBytesPrefix(cbxPath, entryName, DIMENSION_PREFIX_BYTES);
-                org.booklore.util.ImageDimensions dims = vipsImageService.readDimensions(prefix);
+                ImageDimensions dims = vipsImageService.readDimensions(prefix);
                 dimensions.add(CbxPageDimension.builder().pageNumber(pageNumber).width(dims.width()).height(dims.height()).wide(dims.width() > dims.height()).build());
                 continue;
             } catch (Exception e) {

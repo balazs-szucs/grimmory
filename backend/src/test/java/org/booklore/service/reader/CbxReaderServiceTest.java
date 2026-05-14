@@ -6,7 +6,6 @@ import org.booklore.exception.APIException;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
-import org.booklore.service.reader.ChapterCacheService;
 import org.booklore.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,9 +36,6 @@ class CbxReaderServiceTest {
 
     @Mock
     ChapterCacheService chapterCacheService;
-
-    @Mock
-    org.booklore.util.VipsImageService vipsImageService;
 
     @InjectMocks
     CbxReaderService cbxReaderService;

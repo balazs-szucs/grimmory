@@ -34,9 +34,6 @@ class PdfReaderServiceTest {
     @Mock
     private ChapterCacheService chapterCacheService;
 
-    @Mock
-    private org.booklore.util.VipsImageService vipsImageService;
-
     @InjectMocks
     private PdfReaderService pdfReaderService;
 
