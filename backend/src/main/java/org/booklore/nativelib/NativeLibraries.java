@@ -1,7 +1,8 @@
 package org.booklore.nativelib;
 
+import app.photofox.vipsffm.Vips;
+import app.photofox.vipsffm.VipsHelper;
 import lombok.extern.slf4j.Slf4j;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -59,10 +60,13 @@ public final class NativeLibraries {
 
         probes.put(Library.LIBVIPS, new Probe("libvips", () -> {
             try {
-                app.photofox.vipsffm.Vips.run(arena -> {
-                    app.photofox.vipsffm.Vips.disableOperationCache();
+                Vips.run(_ -> {
+                    Vips.disableOperationCache();
+                    if (log.isDebugEnabled()) {
+                        Vips.enableLeakDetection();
+                    }
                     log.info("libvips {} initialised – operation cache disabled",
-                            app.photofox.vipsffm.VipsHelper.version_string());
+                            VipsHelper.version_string());
                 });
                 return true;
             } catch (Throwable t) {
