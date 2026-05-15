@@ -20,14 +20,12 @@ import org.booklore.service.FileStreamingService;
 import org.springframework.http.MediaType;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -169,12 +167,6 @@ public class PdfReaderService {
         submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
 
         Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
-        
-        // Ensure browser caching metadata is set before streaming
-        String etag = FileStreamingService.generateETag(Files.size(cached), metadata.lastModified);
-        response.setHeader("ETag", etag);
-        response.setHeader("Cache-Control", "no-cache, must-revalidate");
-        
         fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
     }
 
@@ -211,7 +203,7 @@ public class PdfReaderService {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
                     log.warn("Background PDF cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.remove(key);
+                    // Intentionally NOT removing key - failed PDFs should not be retried indefinitely.
                 }
             });
         }

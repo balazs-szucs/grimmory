@@ -127,7 +127,6 @@ public class EpubReaderService {
     public void streamFile(Long bookId, String bookType, String filePath, OutputStream outputStream) throws IOException {
         Path epubPath = getBookPath(bookId, bookType);
         CachedEpubMetadata metadata = getCachedMetadata(epubPath, bookId, bookType);
-        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
 
         String cleanPath = filePath.startsWith("/") ? filePath.substring(1) : filePath;
         String actualPath;

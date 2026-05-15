@@ -109,7 +109,7 @@ public class CbxReaderService {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
                     log.warn("Background cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.remove(key);
+                    // Intentionally NOT removing key - failed books should not be retried indefinitely.
                 }
             });
         }
@@ -389,12 +389,6 @@ public class CbxReaderService {
         String diskKey = getDiskKey(cacheKey);
         if (chapterCacheService.hasPage(diskKey, page)) {
             Path cached = chapterCacheService.getCachedPage(diskKey, page);
-            
-            // Explicitly set cache metadata for disk-cache hits
-            String etag = FileStreamingService.generateETag(Files.size(cached), metadata.lastModified());
-            response.setHeader("ETag", etag);
-            response.setHeader("Cache-Control", "no-cache, must-revalidate");
-            
             fileStreamingService.streamWithRangeSupport(cached, contentType, request, response);
             return;
         }

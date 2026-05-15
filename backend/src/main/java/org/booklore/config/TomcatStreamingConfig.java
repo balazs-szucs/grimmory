@@ -2,6 +2,7 @@ package org.booklore.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.http11.AbstractHttp11Protocol;
+import org.apache.coyote.http2.Http2Protocol;
 import org.springframework.boot.tomcat.TomcatConnectorCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,6 +36,10 @@ public class TomcatStreamingConfig {
                 log.info("Tomcat streaming config: sendfile={}, readBuf=128KB, writeBuf=128KB",
                         protocol.getUseSendfile());
             }
+
+            // Enable HTTP/2 multiplexing for concurrent asset delivery
+            connector.addUpgradeProtocol(new Http2Protocol());
+            log.info("Tomcat HTTP/2 upgrade protocol enabled");
         };
     }
 }

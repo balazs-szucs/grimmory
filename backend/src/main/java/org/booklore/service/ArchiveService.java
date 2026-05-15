@@ -12,6 +12,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -186,10 +187,10 @@ public class ArchiveService {
 
         // Fast magic number check fallback: ZIP/CBZ/EPUB start with "PK\03\04" (0x50 4B 03 04)
         try (InputStream is = Files.newInputStream(path)) {
-            return is.read() == 0x50 &&
-                   is.read() == 0x4B &&
-                   is.read() == 0x03 &&
-                   is.read() == 0x04;
+            byte[] header = is.readNBytes(4);
+            return header.length == 4
+                    && header[0] == 0x50 && header[1] == 0x4B
+                    && header[2] == 0x03 && header[3] == 0x04;
         } catch (IOException e) {
             return false;
         }
