@@ -27,7 +27,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -132,7 +131,7 @@ public class KomgaService {
                 }
                 
                 if (!seriesBooks.isEmpty()) {
-                    Long libId = seriesBooks.get(0).getLibrary().getId();
+                    Long libId = seriesBooks.getFirst().getLibrary().getId();
                     KomgaSeriesDto seriesDto = komgaMapper.toKomgaSeriesDto(seriesName, libId, seriesBooks);
                     if (seriesDto != null) {
                         content.add(seriesDto);
