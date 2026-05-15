@@ -6,6 +6,7 @@ import org.booklore.exception.APIException;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
+import org.booklore.util.ArchiveUtils;
 import org.booklore.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -86,6 +88,68 @@ class CbxReaderServiceTest {
     }
 
     @Test
+    void testGetAvailablePages_CBZ_Success() throws Exception {
+        // ZIP/CBZ path
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("page1.jpg", "page2.jpg"));
+
+        try (
+            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+            MockedStatic<Files> filesStatic = mockStatic(Files.class);
+            MockedStatic<ArchiveUtils> archiveUtilsStatic = mockStatic(ArchiveUtils.class);
+        ) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
+            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
+            archiveUtilsStatic.when(() -> ArchiveUtils.detectArchiveType(cbzPath)).thenReturn(ArchiveUtils.ArchiveType.ZIP);
+
+            List<Integer> pages = cbxReaderService.getAvailablePages(1L);
+            assertEquals(List.of(1, 2), pages);
+        }
+    }
+
+    @Test
+    void testGetAvailablePages_CBR_Success() throws Exception {
+        // RAR/CBR path
+        Path cbrPath = Path.of("/tmp/test.cbr");
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cbrPath)).then((i) -> Stream.of("cbr_page1.jpg"));
+
+        try (
+            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+            MockedStatic<Files> filesStatic = mockStatic(Files.class);
+            MockedStatic<ArchiveUtils> archiveUtilsStatic = mockStatic(ArchiveUtils.class);
+        ) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbrPath);
+            filesStatic.when(() -> Files.getLastModifiedTime(cbrPath)).thenReturn(FileTime.from(Instant.now()));
+            archiveUtilsStatic.when(() -> ArchiveUtils.detectArchiveType(cbrPath)).thenReturn(ArchiveUtils.ArchiveType.RAR);
+
+            List<Integer> pages = cbxReaderService.getAvailablePages(1L);
+            assertEquals(List.of(1), pages);
+        }
+    }
+
+    @Test
+    void testGetAvailablePages_CB7_Success() throws Exception {
+        // 7Z/CB7 path
+        Path cb7Path = Path.of("/tmp/test.cb7");
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cb7Path)).then((i) -> Stream.of("cb7_page1.png"));
+
+        try (
+            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+            MockedStatic<Files> filesStatic = mockStatic(Files.class);
+            MockedStatic<ArchiveUtils> archiveUtilsStatic = mockStatic(ArchiveUtils.class);
+        ) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cb7Path);
+            filesStatic.when(() -> Files.getLastModifiedTime(cb7Path)).thenReturn(FileTime.from(Instant.now()));
+            archiveUtilsStatic.when(() -> ArchiveUtils.detectArchiveType(cb7Path)).thenReturn(ArchiveUtils.ArchiveType.SEVEN_ZIP);
+
+            List<Integer> pages = cbxReaderService.getAvailablePages(1L);
+            assertEquals(List.of(1), pages);
+        }
+    }
+
+    @Test
     void testStreamPageImage_Success() throws Exception {
         when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
         when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
@@ -95,15 +159,46 @@ class CbxReaderServiceTest {
         try (
             MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
             MockedStatic<Files> filesStatic = mockStatic(Files.class);
+            MockedStatic<ArchiveUtils> archiveUtilsStatic = mockStatic(ArchiveUtils.class);
         ) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
             filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
+            archiveUtilsStatic.when(() -> ArchiveUtils.detectArchiveType(cbzPath)).thenReturn(ArchiveUtils.ArchiveType.RAR); // Not zip to trigger transferEntryTo
 
             cbxReaderService.initCache(1L, null);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             cbxReaderService.streamPageImage(1L, 1, out);
             assertArrayEquals(new byte[]{1, 2, 3}, out.toByteArray());
+        }
+    }
+
+    @Test
+    void testStreamPageImage_CBZ_Success() throws Exception {
+        when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
+        when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
+        
+        // Mock ZipFile handle for CBZ optimization
+        ZipFile mockZip = mock(ZipFile.class);
+        ZipEntry mockEntry = mock(ZipEntry.class);
+        when(mockZip.getEntry("1.jpg")).thenReturn(mockEntry);
+        when(mockZip.getInputStream(mockEntry)).thenReturn(new ByteArrayInputStream(new byte[]{4, 5, 6}));
+        
+        // Mock cache to return our mock zip
+        when(mockZipCache.get(anyString(), any())).thenReturn(mockZip);
+
+        try (
+            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
+            MockedStatic<Files> filesStatic = mockStatic(Files.class);
+            MockedStatic<ArchiveUtils> archiveUtilsStatic = mockStatic(ArchiveUtils.class);
+        ) {
+            fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
+            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
+            archiveUtilsStatic.when(() -> ArchiveUtils.detectArchiveType(cbzPath)).thenReturn(ArchiveUtils.ArchiveType.ZIP);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            cbxReaderService.streamPageImage(1L, 1, out);
+            assertArrayEquals(new byte[]{4, 5, 6}, out.toByteArray());
         }
     }
 

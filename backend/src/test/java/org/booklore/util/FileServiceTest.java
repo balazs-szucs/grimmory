@@ -410,6 +410,14 @@ class FileServiceTest {
                 IOException ex = assertThrows(IOException.class, () -> FileService.validateImageData(imageData, vipsImageService));
                 assertTrue(ex.getMessage().contains("exceed limit"));
             }
+
+            @Test
+            void invalidData_throwsException() throws IOException {
+                byte[] invalidData = "not an image".getBytes();
+                when(vipsImageService.readDimensions(invalidData)).thenThrow(new IOException("Decode failed"));
+
+                assertThrows(IOException.class, () -> FileService.validateImageData(invalidData, vipsImageService));
+            }
         }
 
         @Nested
@@ -504,7 +512,82 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(imageData, 100L);
 
                 assertTrue(result);
+                // Verify flattenCropResizeAndSave is called for the tall image
                 verify(vipsImageService).flattenCropResizeAndSave(any(Path.class), any(Path.class), eq(0), anyInt(), eq(1000), eq(1500), eq(1000), eq(1500));
+            }
+
+            @Test
+            void extremelyWideImage_isCropped() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                // 10000x1000 => ratio 10 (threshold 2.5)
+                when(vipsImageService.readDimensionsFromFile(any(Path.class)))
+                        .thenReturn(new ImageDimensions(10000, 1000))
+                        .thenReturn(new ImageDimensions(1000, 1500));
+
+                boolean result = fileService.saveCoverImages(imageData, 101L);
+
+                assertTrue(result);
+                // Verify flattenCropResizeAndSave is called for the wide image
+                // 1000 / 1.5 = 666
+                verify(vipsImageService).flattenCropResizeAndSave(any(Path.class), any(Path.class), anyInt(), eq(0), eq(666), eq(1000), eq(1000), eq(1500));
+            }
+
+            @Test
+            void normalAspectRatioImage_isNotCropped() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                // 600x900 => ratio 1.5 (threshold 2.5)
+                when(vipsImageService.readDimensionsFromFile(any(Path.class)))
+                        .thenReturn(new ImageDimensions(600, 900))
+                        .thenReturn(new ImageDimensions(600, 900));
+
+                boolean result = fileService.saveCoverImages(imageData, 102L);
+
+                assertTrue(result);
+                // Should use regular flattenResizeAndSave, not crop
+                verify(vipsImageService, never()).flattenCropResizeAndSave(any(), any(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
+                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+            }
+
+            @Test
+            void originalMaintainsDimensions() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(800, 1200));
+
+                fileService.saveCoverImages(imageData, 4L);
+
+                // Verify that we pass the original dimensions or the max allowed
+                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+            }
+
+            @Test
+            void smallImage_maintainsOriginalDimensions() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(400, 600));
+
+                fileService.saveCoverImages(imageData, 6L);
+
+                // vips thumbnail/resize with maxW/maxH handles not upscaling if not needed,
+                // but we verify the call with correct max bounds.
+                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+            }
+
+            @Test
+            void convertsTransparentToOpaque() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                fileService.saveCoverImages(imageData, 3L);
+
+                // flattenResizeAndSave internally handles flattening in VipsImageService,
+                // so we just verify the call.
+                verify(vipsImageService, atLeastOnce()).flattenResizeAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+            }
+
+            @Test
+            void thumbnailHasCorrectDimensions() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                fileService.saveCoverImages(imageData, 1L);
+
+                // Verify thumbnail creation with correct target dimensions (250x350)
+                verify(vipsImageService).flattenThumbnailAndSave(any(Path.class), any(Path.class), eq(250), eq(350));
             }
         }
 
