@@ -67,14 +67,12 @@ public class CbxReaderService {
     private final ChapterCacheService chapterCacheService;
     private final FileStreamingService fileStreamingService;
 
-    /** Single-threaded executor for background disk-cache population. */
-    private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "cbx-cache-init");
-        t.setDaemon(true);
-        return t;
-    });
+    /** Dedicated executor for background archive processing. */
+    private final ExecutorService cacheExecutor = Executors.newVirtualThreadPerTaskExecutor();
     /** Tracks books whose async cache init has already been submitted. */
-    private final Set<String> cacheInitSubmitted = ConcurrentHashMap.newKeySet();
+    private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(60))
+            .build();
 
 
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
@@ -107,13 +105,13 @@ public class CbxReaderService {
      */
     private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
         String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.add(key)) {
+        if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
             cacheExecutor.submit(() -> {
                 try {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
                     log.warn("Background cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.remove(key);
+                    cacheInitSubmitted.invalidate(key);
                 }
             });
         }

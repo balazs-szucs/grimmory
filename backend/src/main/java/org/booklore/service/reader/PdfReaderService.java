@@ -53,18 +53,14 @@ public class PdfReaderService {
     private final FileStreamingService fileStreamingService;
 
     /** Tracks which books are currently being pre-rendered to disk. */
-    private final Set<String> cacheInitSubmitted = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(60))
+            .build();
 
     /**
      * Dedicated executor for background PDF rendering.
-     * Uses a single thread to avoid overwhelming the CPU/Memory with multiple
-     * concurrent PDFium render processes.
      */
-    private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "pdf-cache-init");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ExecutorService cacheExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /** Lightweight metadata cache - no native handles, just page count + outline. */
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
@@ -158,16 +154,11 @@ public class PdfReaderService {
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
         String diskKey = getDiskKey(cacheKey);
 
-        if (chapterCacheService.hasPage(diskKey, page)) {
-            submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
-            Files.copy(chapterCacheService.getCachedPage(diskKey, page), outputStream);
-            return;
-        }
-
         validatePageRequest(bookId, page, metadata.pageCount);
         submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
-        byte[] jpeg = renderPageToDiskOnce(pdfPath, diskKey, page);
-        outputStream.write(jpeg);
+
+        Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
+        Files.copy(cached, outputStream);
     }
 
     public void streamPageImage(Long bookId, String bookType, int page, HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -176,25 +167,14 @@ public class PdfReaderService {
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
         String diskKey = getDiskKey(cacheKey);
 
-        if (chapterCacheService.hasPage(diskKey, page)) {
-            submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
-            fileStreamingService.streamWithRangeSupport(chapterCacheService.getCachedPage(diskKey, page), MediaType.IMAGE_JPEG_VALUE, request, response);
-            return;
-        }
-
         validatePageRequest(bookId, page, metadata.pageCount);
         submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
-        byte[] jpeg = renderPageToDiskOnce(pdfPath, diskKey, page);
 
-        String etag = FileStreamingService.generateETag(jpeg.length, metadata.lastModified);
-        response.setHeader("ETag", etag);
-        response.setHeader("Cache-Control", "no-cache, must-revalidate");
-        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
-        response.setContentLength(jpeg.length);
-        response.getOutputStream().write(jpeg);
+        Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
+        fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
     }
 
-    private byte[] renderPageToDiskOnce(Path pdfPath, String diskKey, int page) throws IOException {
+    private Path renderPageToDiskOnce(Path pdfPath, String diskKey, int page) throws IOException {
         String lockKey = diskKey + ":" + page;
         ReentrantLock lock = renderLocks.computeIfAbsent(lockKey, _ -> new ReentrantLock());
 
@@ -202,7 +182,7 @@ public class PdfReaderService {
         try {
             Path cached = chapterCacheService.getCachedPage(diskKey, page);
             if (Files.exists(cached) && Files.size(cached) > 0) {
-                return Files.readAllBytes(cached);
+                return cached;
             }
 
             Files.createDirectories(cached.getParent());
@@ -210,8 +190,8 @@ public class PdfReaderService {
             try (PdfDocument doc = PdfDocument.open(pdfPath)) {
                 byte[] jpeg = doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
                 writeAtomically(cached, jpeg);
-                return jpeg;
             }
+            return cached;
         } finally {
             lock.unlock();
             if (!lock.hasQueuedThreads()) {
@@ -222,13 +202,13 @@ public class PdfReaderService {
 
     private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
         String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.add(key)) {
+        if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
             cacheExecutor.submit(() -> {
                 try {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
                     log.warn("Background PDF cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.remove(key);
+                    cacheInitSubmitted.invalidate(key);
                 }
             });
         }
