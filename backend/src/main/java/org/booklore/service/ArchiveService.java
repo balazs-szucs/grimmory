@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 @Slf4j
 @Service
@@ -33,7 +35,8 @@ public class ArchiveService {
     private final boolean available = NativeLibraries.get().isLibArchiveAvailable();
 
     private ReentrantLock getFileLock(Path path) {
-        int hash = path.toAbsolutePath().normalize().toString().hashCode();
+        // Normalize to absolute path for consistent hashing across callers
+        int hash = path.toAbsolutePath().normalize().hashCode();
         return lockStripes[Math.floorMod(hash, LOCK_STRIPE_COUNT)];
     }
 
@@ -54,6 +57,13 @@ public class ArchiveService {
     }
 
     public List<Entry> getEntries(Path path) throws IOException {
+        if (isZipPath(path)) {
+            try (ZipFile zip = new ZipFile(path.toFile())) {
+                return zip.stream()
+                        .map(ze -> new Entry(ze.getName(), ze.getSize()))
+                        .toList();
+            }
+        }
         return streamEntries(path).toList();
     }
 
@@ -90,6 +100,18 @@ public class ArchiveService {
     }
 
     public long transferEntryTo(Path path, String entryName, OutputStream outputStream) throws IOException {
+        if (isZipPath(path)) {
+            try (ZipFile zip = new ZipFile(path.toFile())) {
+                ZipEntry entry = zip.getEntry(entryName);
+                if (entry != null) {
+                    try (InputStream is = zip.getInputStream(entry)) {
+                        return is.transferTo(outputStream);
+                    }
+                }
+            }
+            throw new IOException("Entry not found in ZIP: " + entryName);
+        }
+
         requireAvailable();
         // We cannot directly use the NightCompress `InputStream` as it is limited
         // in its implementation and will cause fatal errors.  Instead, we can use
@@ -151,10 +173,11 @@ public class ArchiveService {
         return bounded.toByteArray();
     }
 
-    /**
-     * OutputStream that captures at most {@code limit} bytes, then throws
-     * {@link LimitReachedException} to short-circuit the transfer.
-     */
+    private static boolean isZipPath(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".zip") || name.endsWith(".cbz") || name.endsWith(".epub");
+    }
+
     static final class BoundedOutputStream extends OutputStream {
         private final byte[] buf;
         private int count;

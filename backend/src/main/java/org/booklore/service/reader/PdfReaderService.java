@@ -14,15 +14,24 @@ import org.booklore.repository.BookRepository;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.booklore.service.FileStreamingService;
+import org.springframework.http.MediaType;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 
 import com.github.benmanes.caffeine.cache.Cache;
@@ -39,19 +48,44 @@ public class PdfReaderService {
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
+    private final FileStreamingService fileStreamingService;
+
+    /** Tracks which books are currently being pre-rendered to disk. */
+    private final Set<String> cacheInitSubmitted = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    /**
+     * Dedicated executor for background PDF rendering.
+     * Uses a single thread to avoid overwhelming the CPU/Memory with multiple
+     * concurrent PDFium render processes.
+     */
+    private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "pdf-cache-init");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Lightweight metadata cache — no native handles, just page count + outline. */
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
 
+    /**
+     * Per-page render locks to prevent duplicate renders when multiple threads
+     * hit a cache-miss for the same page simultaneously.
+     */
+    private final ConcurrentHashMap<String, ReentrantLock> renderLocks = new ConcurrentHashMap<>();
+
+    private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
     private record CachedPdfMetadata(int pageCount, long lastModified, List<PdfOutlineItem> outline) {}
 
     public void initCache(Long bookId, String bookType) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
-        CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
-        String cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        String diskKey = getDiskKey(cacheKey);
 
-        Path cacheDir = chapterCacheService.getCachedPage(cacheKey, 1).getParent();
+        Path cacheDir = chapterCacheService.getCachedPage(diskKey, 1).getParent();
         if (!Files.exists(cacheDir)) {
             Files.createDirectories(cacheDir);
         }
@@ -66,11 +100,11 @@ public class PdfReaderService {
             return;
         }
 
-        log.info("Populating PDF disk cache for {}: {} pages", cacheKey, metadata.pageCount);
-        // PdfDocument is not thread-safe — render pages serially then cache
+        log.info("Populating PDF disk cache for {}: {} pages", diskKey, metadata.pageCount);
+
         try (PdfDocument doc = PdfDocument.open(pdfPath)) {
             for (int i = 1; i <= metadata.pageCount; i++) {
-                Path target = chapterCacheService.getCachedPage(cacheKey, i);
+                Path target = chapterCacheService.getCachedPage(diskKey, i);
                 if (!Files.exists(target) || Files.size(target) == 0) {
                     byte[] jpeg = doc.renderPageToBytes(i - 1, (int) DEFAULT_DPI, "jpeg");
                     writeAtomically(target, jpeg);
@@ -81,14 +115,14 @@ public class PdfReaderService {
         Files.setLastModifiedTime(cacheDir, Files.getLastModifiedTime(pdfPath));
     }
 
-    public void getAvailablePages(Long bookId) {
-        getAvailablePages(bookId, null);
+    public List<Integer> getAvailablePages(Long bookId) {
+        return getAvailablePages(bookId, null);
     }
 
     public List<Integer> getAvailablePages(Long bookId, String bookType) {
         Path pdfPath = getBookPath(bookId, bookType);
         try {
-            CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
+            CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
             return IntStream.rangeClosed(1, metadata.pageCount)
                     .boxed()
                     .toList();
@@ -101,7 +135,7 @@ public class PdfReaderService {
     public PdfBookInfo getBookInfo(Long bookId, String bookType) {
         Path pdfPath = getBookPath(bookId, bookType);
         try {
-            CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
+            CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
             return PdfBookInfo.builder()
                     .pageCount(metadata.pageCount)
                     .outline(metadata.outline)
@@ -118,32 +152,97 @@ public class PdfReaderService {
 
     public void streamPageImage(Long bookId, String bookType, int page, OutputStream outputStream) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
-        CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
-        String cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        String diskKey = getDiskKey(cacheKey);
 
-        if (chapterCacheService.hasPage(cacheKey, page)) {
-            Files.copy(chapterCacheService.getCachedPage(cacheKey, page), outputStream);
+        if (chapterCacheService.hasPage(diskKey, page)) {
+            submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
+            Files.copy(chapterCacheService.getCachedPage(diskKey, page), outputStream);
             return;
         }
 
         validatePageRequest(bookId, page, metadata.pageCount);
-
-        // Render, cache atomically, then stream
-        Path cached = chapterCacheService.getCachedPage(cacheKey, page);
-        Files.createDirectories(cached.getParent());
-        byte[] jpeg = renderPageToBytes(pdfPath, page);
-        writeAtomically(cached, jpeg);
+        submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
+        byte[] jpeg = renderPageToDiskOnce(pdfPath, diskKey, page);
         outputStream.write(jpeg);
     }
 
-    private String getCacheKey(Long bookId, String bookType, long lastModified) {
-        if (bookType != null) {
-            // Ensure we use the safe enum name to prevent path traversal
-            BookFileType type = BookFileType.fromName(bookType)
-                    .orElseThrow(() -> ApiError.INVALID_INPUT.createException("Invalid book type: " + bookType));
-            return bookId + "_" + type.name() + "_" + lastModified;
+    public void streamPageImage(Long bookId, String bookType, int page, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        Path pdfPath = getBookPath(bookId, bookType);
+        CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        String diskKey = getDiskKey(cacheKey);
+
+        if (chapterCacheService.hasPage(diskKey, page)) {
+            submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
+            fileStreamingService.streamWithRangeSupport(chapterCacheService.getCachedPage(diskKey, page), MediaType.IMAGE_JPEG_VALUE, request, response);
+            return;
         }
-        return bookId + "_" + lastModified;
+
+        validatePageRequest(bookId, page, metadata.pageCount);
+        submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
+        byte[] jpeg = renderPageToDiskOnce(pdfPath, diskKey, page);
+
+        String etag = FileStreamingService.generateETag(jpeg.length, metadata.lastModified);
+        response.setHeader("ETag", etag);
+        response.setHeader("Cache-Control", "no-cache, must-revalidate");
+        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
+        response.setContentLength(jpeg.length);
+        response.getOutputStream().write(jpeg);
+    }
+
+    private byte[] renderPageToDiskOnce(Path pdfPath, String diskKey, int page) throws IOException {
+        String lockKey = diskKey + ":" + page;
+        ReentrantLock lock = renderLocks.computeIfAbsent(lockKey, _ -> new ReentrantLock());
+
+        lock.lock();
+        try {
+            Path cached = chapterCacheService.getCachedPage(diskKey, page);
+            if (Files.exists(cached) && Files.size(cached) > 0) {
+                return Files.readAllBytes(cached);
+            }
+
+            Files.createDirectories(cached.getParent());
+
+            try (PdfDocument doc = PdfDocument.open(pdfPath)) {
+                byte[] jpeg = doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
+                writeAtomically(cached, jpeg);
+                return jpeg;
+            }
+        } finally {
+            lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                renderLocks.remove(lockKey, lock);
+            }
+        }
+    }
+
+    private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
+        String key = bookId + ":" + bookType + ":" + lastModified;
+        if (cacheInitSubmitted.add(key)) {
+            cacheExecutor.submit(() -> {
+                try {
+                    initCache(bookId, bookType);
+                } catch (Exception e) {
+                    log.warn("Background PDF cache init failed for book {}: {}", bookId, e.getMessage());
+                    cacheInitSubmitted.remove(key);
+                }
+            });
+        }
+    }
+
+    private ReaderCacheKey getCacheKey(Long bookId, String bookType, long lastModified) {
+        BookFileType type = null;
+        if (bookType != null) {
+            type = BookFileType.fromName(bookType)
+                    .orElseThrow(() -> ApiError.INVALID_INPUT.createException("Invalid book type: " + bookType));
+        }
+        return new ReaderCacheKey(bookId, type, lastModified);
+    }
+
+    private String getDiskKey(ReaderCacheKey key) {
+        return key.bookId() + "_" + (key.bookType() != null ? key.bookType().name() : "DEFAULT") + "_" + key.lastModified();
     }
 
     private Path getBookPath(Long bookId, String bookType) {
@@ -170,15 +269,13 @@ public class PdfReaderService {
         }
     }
 
-    private CachedPdfMetadata getCachedMetadata(Path pdfPath) throws IOException {
+    private CachedPdfMetadata getCachedMetadata(Path pdfPath, Long bookId, String bookType) throws IOException {
         String cacheKey = pdfPath.toString();
         long currentModified = Files.getLastModifiedTime(pdfPath).toMillis();
         CachedPdfMetadata cached = metadataCache.getIfPresent(cacheKey);
         if (cached != null && cached.lastModified == currentModified) {
-            log.debug("Cache hit for PDF: {}", pdfPath.getFileName());
             return cached;
         }
-        log.debug("Cache miss for PDF: {}, scanning...", pdfPath.getFileName());
         CachedPdfMetadata newMetadata = scanPdfMetadata(pdfPath);
         metadataCache.put(cacheKey, newMetadata);
         return newMetadata;
@@ -189,6 +286,7 @@ public class PdfReaderService {
             throw new FileNotFoundException("PDF file is not readable: " + pdfPath);
         }
         long lastModified = Files.getLastModifiedTime(pdfPath).toMillis();
+
         try (PdfDocument doc = PdfDocument.open(pdfPath)) {
             int pageCount = doc.pageCount();
             List<PdfOutlineItem> outline = extractOutline(doc);
@@ -215,46 +313,23 @@ public class PdfReaderService {
     private PdfOutlineItem convertBookmark(Bookmark bookmark) {
         try {
             String title = bookmark.title();
-            if (title == null || title.isBlank()) {
-                return null;
-            }
-
-            // PDFium4j pageIndex is 0-based, PdfOutlineItem.pageNumber is 1-based
+            if (title == null || title.isBlank()) return null;
             Integer pageNumber = (bookmark.pageIndex() >= 0) ? bookmark.pageIndex() + 1 : null;
-
             List<PdfOutlineItem> children = new ArrayList<>();
             for (Bookmark child : bookmark.children()) {
                 PdfOutlineItem childItem = convertBookmark(child);
-                if (childItem != null) {
-                    children.add(childItem);
-                }
+                if (childItem != null) children.add(childItem);
             }
-
             return PdfOutlineItem.builder()
                     .title(title.trim())
                     .pageNumber(pageNumber)
                     .children(children.isEmpty() ? null : children)
                     .build();
         } catch (Exception e) {
-            log.debug("Failed to process outline item: {}", e.getMessage());
             return null;
         }
     }
 
-    private byte[] renderPageToBytes(Path pdfPath, int page) throws IOException {
-        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
-            // page is 1-based from the API, renderPageToBytes expects 0-based
-            return doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
-        } catch (Exception e) {
-            log.error("Failed to render PDF page {} from {}", page, pdfPath, e);
-            throw new IOException(e);
-        }
-    }
-
-    /**
-     * Writes bytes to a temp file then atomically moves to the target path.
-     * If the write fails the partial temp file is cleaned up.
-     */
     private void writeAtomically(Path target, byte[] data) throws IOException {
         Path tmp = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", ".tmp");
         try {

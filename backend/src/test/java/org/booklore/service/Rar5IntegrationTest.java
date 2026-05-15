@@ -30,6 +30,11 @@ import java.util.zip.ZipFile;
 import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Optional;
 import org.mockito.Mockito;
+import org.booklore.service.FileStreamingService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.WriteListener;
 
 /**
  * Integration tests that feed a real RAR5 archive into the service layer
@@ -73,7 +78,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache);
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(FileStreamingService.class));
             List<Integer> pages = readerService.getAvailablePages(99L);
 
             assertThat(pages).hasSize(3);
@@ -98,9 +103,20 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache);
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(FileStreamingService.class));
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            readerService.streamPageImage(99L, 1, out);
+
+            HttpServletRequest mockRequest = Mockito.mock(HttpServletRequest.class);
+            HttpServletResponse mockResponse = Mockito.mock(HttpServletResponse.class);
+            ServletOutputStream servletOut = new ServletOutputStream() {
+                @Override public void write(int b) { out.write(b); }
+                @Override public void write(byte[] b, int off, int len) { out.write(b, off, len); }
+                @Override public boolean isReady() { return true; }
+                @Override public void setWriteListener(WriteListener writeListener) {}
+            };
+            Mockito.when(mockResponse.getOutputStream()).thenReturn(servletOut);
+
+            readerService.streamPageImage(99L, null, 1, mockRequest, mockResponse);
 
             byte[] imageBytes = out.toByteArray();
             assertThat(imageBytes).hasSizeGreaterThan(0);

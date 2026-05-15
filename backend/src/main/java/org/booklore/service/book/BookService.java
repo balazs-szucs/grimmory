@@ -1,5 +1,6 @@
 package org.booklore.service.book;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,7 +44,6 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.io.InputStream;
 
 @Slf4j
 @AllArgsConstructor
@@ -352,38 +353,28 @@ public class BookService {
         bookDownloadService.downloadAllBookFiles(bookId, response);
     }
 
-    public ResponseEntity<Resource> getBookContent(long bookId) {
-        return getBookContent(bookId, null);
-    }
+    public void streamBookContent(long bookId, String bookType, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
+                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
 
-    public ResponseEntity<Resource> getBookContent(long bookId, String bookType) {
-        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId).orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
-        String filePath;
+        Path filePath;
         if (bookType != null) {
-            BookFileType requestedType = BookFileType.valueOf(bookType.toUpperCase());
+            BookFileType requestedType = BookFileType.fromName(bookType)
+                    .orElseThrow(() -> ApiError.INVALID_INPUT.createException("Invalid book type: " + bookType));
             BookFileEntity bookFile = bookEntity.getBookFiles().stream()
                     .filter(bf -> bf.getBookType() == requestedType)
                     .findFirst()
                     .orElseThrow(() -> ApiError.FILE_NOT_FOUND.createException("No file of type " + bookType + " found for book"));
-            filePath = bookFile.getFullFilePath().toString();
+            filePath = bookFile.getFullFilePath();
         } else {
-            filePath = FileUtils.getBookFullPath(bookEntity).toString();
-        }
-        File file = new File(filePath);
-        if (!file.exists()) {
-            throw ApiError.FILE_NOT_FOUND.createException(filePath);
-        }
-        Long lastModified = FileUtils.getFileLastModified(Path.of(filePath));
-        ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
-
-        if (lastModified != null) {
-            builder.lastModified(lastModified);
+            filePath = FileUtils.getBookFullPath(bookEntity);
         }
 
-        return builder
-                .cacheControl(CacheControl.noCache().cachePrivate())
-                .contentType(MediaTypeFactory.getMediaType(filePath).orElse(MediaType.APPLICATION_OCTET_STREAM))
-                .body(new FileSystemResource(file));
+        String contentType = MediaTypeFactory.getMediaType(filePath.toString())
+                .map(MediaType::toString)
+                .orElse(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+
+        fileStreamingService.streamWithRangeSupport(filePath, contentType, request, response);
     }
 
     public void replaceBookContent(long bookId, String bookType, InputStream content) throws IOException {

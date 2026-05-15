@@ -328,7 +328,7 @@ public class FileStreamingService {
      * Sufficient for static-file identity without content hashing overhead.
      */
 
-    static String generateETag(long fileSize, long lastModified) {
+    public static String generateETag(long fileSize, long lastModified) {
         return "\"" + Long.toHexString(fileSize) + "-" + Long.toHexString(lastModified) + "\"";
     }
 
