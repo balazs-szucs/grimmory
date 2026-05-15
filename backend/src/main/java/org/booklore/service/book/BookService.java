@@ -30,7 +30,11 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -375,6 +379,17 @@ public class BookService {
                 .orElse(MediaType.APPLICATION_OCTET_STREAM_VALUE);
 
         fileStreamingService.streamWithRangeSupport(filePath, contentType, request, response);
+    }
+
+    @Deprecated
+    public ResponseEntity<Resource> getBookContent(long bookId) {
+        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
+                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
+        Path path = FileUtils.getBookFullPath(bookEntity);
+        if (!Files.exists(path)) {
+            throw ApiError.FILE_NOT_FOUND.createException(path.toString());
+        }
+        return ResponseEntity.ok(new FileSystemResource(path));
     }
 
     public void replaceBookContent(long bookId, String bookType, InputStream content) throws IOException {

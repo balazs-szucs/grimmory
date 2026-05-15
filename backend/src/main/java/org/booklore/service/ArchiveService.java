@@ -8,6 +8,7 @@ import org.booklore.exception.ApiError;
 import org.booklore.nativelib.NativeLibraries;
 import org.springframework.stereotype.Service;
 
+import org.apache.tika.Tika;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +27,7 @@ import java.util.zip.ZipFile;
 @Slf4j
 @Service
 public class ArchiveService {
+    private static final Tika TIKA = new Tika();
     private static final int LOCK_STRIPE_COUNT = 256;
     private final ReentrantLock[] lockStripes = IntStream.range(0, LOCK_STRIPE_COUNT)
             .mapToObj(_ -> new ReentrantLock())
@@ -42,7 +44,7 @@ public class ArchiveService {
 
     private void requireAvailable() throws IOException {
         if (!available) {
-            throw new IOException("LibArchive is not available – cannot process archive");
+            throw new IOException("LibArchive is not available - cannot process archive");
         }
     }
 
@@ -174,8 +176,12 @@ public class ArchiveService {
     }
 
     private static boolean isZipPath(Path path) {
-        String name = path.getFileName().toString().toLowerCase();
-        return name.endsWith(".zip") || name.endsWith(".cbz") || name.endsWith(".epub");
+        try {
+            String type = TIKA.detect(path);
+            return "application/zip".equals(type) || "application/epub+zip".equals(type) || "application/x-cbz".equals(type);
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     static final class BoundedOutputStream extends OutputStream {

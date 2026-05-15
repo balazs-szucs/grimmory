@@ -20,6 +20,8 @@ import org.booklore.service.FileStreamingService;
 import org.springframework.http.MediaType;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -64,7 +66,7 @@ public class PdfReaderService {
         return t;
     });
 
-    /** Lightweight metadata cache — no native handles, just page count + outline. */
+    /** Lightweight metadata cache - no native handles, just page count + outline. */
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
@@ -303,6 +305,7 @@ public class PdfReaderService {
                 if (outlineItem != null) {
                     outline.add(outlineItem);
                 }
+            // Tier 3: Native archive extraction (RAR, 7z, etc. - slowest)
             }
         } catch (Exception e) {
             log.debug("Failed to extract PDF outline: {}", e.getMessage());

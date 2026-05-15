@@ -397,7 +397,7 @@ public class CbxReaderService {
             return;
         }
 
-        // Tier 2: ZipFile random-access fallback (no handle caching — safe open/close per request)
+        // Tier 2: ZipFile random-access fallback (no handle caching - safe open/close per request)
         if (isZipPath(cbxPath)) {
             try (ZipFile zip = new ZipFile(cbxPath.toFile())) {
                 ZipEntry entry = zip.getEntry(entryName);
@@ -417,7 +417,7 @@ public class CbxReaderService {
             }
         }
 
-        // Tier 3: Native archive extraction (RAR, 7z, etc. — slowest)
+        // Tier 3: Native archive extraction (RAR, 7z, etc. - slowest)
         response.setContentType(contentType);
         archiveService.transferEntryTo(cbxPath, entryName, response.getOutputStream());
     }

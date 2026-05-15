@@ -141,7 +141,7 @@ public class EpubReaderService {
             throw new FileNotFoundException("File not found in EPUB: " + filePath);
         }
 
-        // Scoped open/close — no handle caching, no eviction race.
+        // Scoped open/close - no handle caching, no eviction race.
         // EPUB assets are small; this is safe and correct for a self-hosted reader.
         try (NativeArchive archive = NativeArchive.open(epubPath)) {
             archive.streamEntry(actualPath, outputStream);
