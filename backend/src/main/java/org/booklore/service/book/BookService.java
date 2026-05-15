@@ -381,7 +381,7 @@ public class BookService {
         fileStreamingService.streamWithRangeSupport(filePath, contentType, request, response);
     }
 
-    @Deprecated
+    @Deprecated(since = "2.x", forRemoval = true)
     public ResponseEntity<Resource> getBookContent(long bookId) {
         BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));

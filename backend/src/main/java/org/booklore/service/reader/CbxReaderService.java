@@ -70,9 +70,7 @@ public class CbxReaderService {
     /** Dedicated executor for background archive processing. */
     private final ExecutorService cacheExecutor = Executors.newVirtualThreadPerTaskExecutor();
     /** Tracks books whose async cache init has already been submitted. */
-    private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
-            .expireAfterWrite(Duration.ofMinutes(60))
-            .build();
+    private final Set<String> cacheInitSubmitted = ConcurrentHashMap.newKeySet();
 
 
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
@@ -105,13 +103,13 @@ public class CbxReaderService {
      */
     private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
         String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
+        if (cacheInitSubmitted.add(key)) {
             cacheExecutor.submit(() -> {
                 try {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
                     log.warn("Background cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.invalidate(key);
+                    cacheInitSubmitted.remove(key);
                 }
             });
         }
@@ -391,6 +389,12 @@ public class CbxReaderService {
         String diskKey = getDiskKey(cacheKey);
         if (chapterCacheService.hasPage(diskKey, page)) {
             Path cached = chapterCacheService.getCachedPage(diskKey, page);
+            
+            // Explicitly set cache metadata for disk-cache hits
+            String etag = FileStreamingService.generateETag(Files.size(cached), metadata.lastModified());
+            response.setHeader("ETag", etag);
+            response.setHeader("Cache-Control", "no-cache, must-revalidate");
+            
             fileStreamingService.streamWithRangeSupport(cached, contentType, request, response);
             return;
         }

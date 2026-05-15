@@ -12,12 +12,15 @@ import java.io.OutputStream;
 import java.io.EOFException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.concurrent.locks.LockSupport;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -177,9 +180,9 @@ public class FileStreamingService {
         if (length >= MIN_SENDFILE_SIZE && tryTomcatSendfile(request, filePath, start, length)) {
             return;
         }
-        try (var fileChannel = FileChannel.open(filePath, StandardOpenOption.READ);
-             var out = openOutput(response)) {
-            copyBlocking(fileChannel, start, length, out);
+        OutputStream out = openOutput(response);
+        try (var fileChannel = FileChannel.open(filePath, StandardOpenOption.READ)) {
+            copyToResponse(fileChannel, start, length, out);
         }
     }
 
@@ -202,12 +205,12 @@ public class FileStreamingService {
         // Once sendfile attributes are set, the application MUST NOT 
         // write any data to the response body. Tomcat will handle the transfer.
         try {
-            request.setAttribute(SENDFILE_FILENAME, filePath.toAbsolutePath().toString());
+            request.setAttribute(SENDFILE_FILENAME, filePath.toRealPath().toString());
             request.setAttribute(SENDFILE_START, start);
             request.setAttribute(SENDFILE_END, Math.addExact(start, length));
             return true;
-        } catch (ArithmeticException e) {
-            log.warn("Arithmetic overflow in sendfile range, falling back to manual transfer: {}", e.getMessage());
+        } catch (IOException | ArithmeticException e) {
+            log.debug("Sendfile fallback: {}", e.getMessage());
             return false;
         }
     }
@@ -288,39 +291,65 @@ public class FileStreamingService {
     }
 
 
-    private static void copyBlocking(FileChannel source, long position, long count, OutputStream out) throws IOException {
+    private static void copyToResponse(
+            FileChannel source,
+            long position,
+            long count,
+            OutputStream out
+    ) throws IOException {
         if (count <= 0) {
             out.flush();
             return;
         }
 
-        byte[] buffer = new byte[BUFFER_SIZE];
-        ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+        WritableByteChannel outChannel = Channels.newChannel(out);
+        long transferred = 0;
+        int stallCount = 0;
+
+        while (transferred < count) {
+            long n = source.transferTo(position + transferred, count - transferred, outChannel);
+            if (n > 0) {
+                transferred += n;
+                stallCount = 0;
+                continue;
+            }
+
+            // Fallback for NFS/FUSE/OverlayFS where transferTo returns 0 indefinitely
+            if (++stallCount > 100) {
+                copyWithHeapBuffer(source, position + transferred, count - transferred, out);
+                break;
+            }
+
+            // High-frequency stall, pause briefly to wait for I/O readiness
+            LockSupport.parkNanos(1_000_000L);
+        }
+        out.flush();
+    }
+
+    private static void copyWithHeapBuffer(
+            FileChannel source,
+            long position,
+            long count,
+            OutputStream out
+    ) throws IOException {
+        byte[] buf = new byte[BUFFER_SIZE];
+        ByteBuffer bb = ByteBuffer.wrap(buf);
         long remaining = count;
         long offset = position;
 
         while (remaining > 0) {
-            byteBuffer.clear();
-            if (remaining < buffer.length) {
-                byteBuffer.limit((int) remaining);
-            }
+            bb.clear();
+            bb.limit((int) Math.min(buf.length, remaining));
 
-            int read = source.read(byteBuffer, offset);
+            int read = source.read(bb, offset);
             if (read < 0) {
-                throw new EOFException("Unexpected end of file at position " + offset
-                        + " with " + remaining + " bytes remaining");
-            }
-            if (read == 0) {
-                // With regular files this basically never happens; yield and retry.
-                Thread.yield();
-                continue;
+                throw new EOFException("Unexpected EOF at position " + offset);
             }
 
-            out.write(buffer, 0, read);
+            out.write(buf, 0, read);
             offset += read;
             remaining -= read;
         }
-        out.flush();
     }
 
     /**

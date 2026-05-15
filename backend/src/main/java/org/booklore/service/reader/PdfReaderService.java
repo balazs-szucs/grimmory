@@ -53,9 +53,7 @@ public class PdfReaderService {
     private final FileStreamingService fileStreamingService;
 
     /** Tracks which books are currently being pre-rendered to disk. */
-    private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
-            .expireAfterWrite(Duration.ofMinutes(60))
-            .build();
+    private final Set<String> cacheInitSubmitted = ConcurrentHashMap.newKeySet();
 
     /**
      * Dedicated executor for background PDF rendering.
@@ -69,10 +67,10 @@ public class PdfReaderService {
             .build();
 
     /**
-     * Per-page render locks to prevent duplicate renders when multiple threads
-     * hit a cache-miss for the same page simultaneously.
+     * Per-book render locks to prevent duplicate renders and memory spikes.
+     * Locking on the book level ensures only one PDFium document is open per book.
      */
-    private final ConcurrentHashMap<String, ReentrantLock> renderLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<ReaderCacheKey, ReentrantLock> renderLocks = new ConcurrentHashMap<>();
 
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
     private record CachedPdfMetadata(int pageCount, long lastModified, List<PdfOutlineItem> outline) {}
@@ -157,7 +155,7 @@ public class PdfReaderService {
         validatePageRequest(bookId, page, metadata.pageCount);
         submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
 
-        Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
+        Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
         Files.copy(cached, outputStream);
     }
 
@@ -170,13 +168,18 @@ public class PdfReaderService {
         validatePageRequest(bookId, page, metadata.pageCount);
         submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
 
-        Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
+        Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
+        
+        // Ensure browser caching metadata is set before streaming
+        String etag = FileStreamingService.generateETag(Files.size(cached), metadata.lastModified);
+        response.setHeader("ETag", etag);
+        response.setHeader("Cache-Control", "no-cache, must-revalidate");
+        
         fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
     }
 
-    private Path renderPageToDiskOnce(Path pdfPath, String diskKey, int page) throws IOException {
-        String lockKey = diskKey + ":" + page;
-        ReentrantLock lock = renderLocks.computeIfAbsent(lockKey, _ -> new ReentrantLock());
+    private Path renderPageToDiskOnce(Path pdfPath, ReaderCacheKey key, String diskKey, int page) throws IOException {
+        ReentrantLock lock = renderLocks.computeIfAbsent(key, _ -> new ReentrantLock());
 
         lock.lock();
         try {
@@ -195,20 +198,20 @@ public class PdfReaderService {
         } finally {
             lock.unlock();
             if (!lock.hasQueuedThreads()) {
-                renderLocks.remove(lockKey, lock);
+                renderLocks.remove(key, lock);
             }
         }
     }
 
     private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
         String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
+        if (cacheInitSubmitted.add(key)) {
             cacheExecutor.submit(() -> {
                 try {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
                     log.warn("Background PDF cache init failed for book {}: {}", bookId, e.getMessage());
-                    cacheInitSubmitted.invalidate(key);
+                    cacheInitSubmitted.remove(key);
                 }
             });
         }
@@ -285,7 +288,6 @@ public class PdfReaderService {
                 if (outlineItem != null) {
                     outline.add(outlineItem);
                 }
-            // Tier 3: Native archive extraction (RAR, 7z, etc. - slowest)
             }
         } catch (Exception e) {
             log.debug("Failed to extract PDF outline: {}", e.getMessage());

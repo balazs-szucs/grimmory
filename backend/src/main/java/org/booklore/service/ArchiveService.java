@@ -8,7 +8,6 @@ import org.booklore.exception.ApiError;
 import org.booklore.nativelib.NativeLibraries;
 import org.springframework.stereotype.Service;
 
-import org.apache.tika.Tika;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,6 +17,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -27,7 +28,6 @@ import java.util.zip.ZipFile;
 @Slf4j
 @Service
 public class ArchiveService {
-    private static final Tika TIKA = new Tika();
     private static final int LOCK_STRIPE_COUNT = 256;
     private final ReentrantLock[] lockStripes = IntStream.range(0, LOCK_STRIPE_COUNT)
             .mapToObj(_ -> new ReentrantLock())
@@ -175,10 +175,21 @@ public class ArchiveService {
         return bounded.toByteArray();
     }
 
+    private static final Set<String> ZIP_EXTENSIONS = Set.of("cbz", "zip", "epub");
+
     private static boolean isZipPath(Path path) {
-        try {
-            String type = TIKA.detect(path);
-            return "application/zip".equals(type) || "application/epub+zip".equals(type) || "application/x-cbz".equals(type);
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0 && ZIP_EXTENSIONS.contains(name.substring(dot + 1))) {
+            return true;
+        }
+
+        // Fast magic number check fallback: ZIP/CBZ/EPUB start with "PK\03\04" (0x50 4B 03 04)
+        try (InputStream is = Files.newInputStream(path)) {
+            return is.read() == 0x50 &&
+                   is.read() == 0x4B &&
+                   is.read() == 0x03 &&
+                   is.read() == 0x04;
         } catch (IOException e) {
             return false;
         }
