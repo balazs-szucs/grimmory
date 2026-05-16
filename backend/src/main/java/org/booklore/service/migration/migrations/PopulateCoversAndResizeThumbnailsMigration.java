@@ -59,10 +59,23 @@ public class PopulateCoversAndResizeThumbnailsMigration implements Migration {
                                     Files.createDirectories(bookDir);
 
                                     Path coverFile = bookDir.resolve("cover.jpg");
-                                    vipsImageService.flattenResizeAndSave(path, coverFile, 1000, 1500);
-
                                     Path thumbnailFile = bookDir.resolve("thumbnail.jpg");
-                                    vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, 250, 350);
+
+                                    vipsImageService.processCoverUnified(
+                                            path,
+                                            coverFile,
+                                            thumbnailFile,
+                                            1000,
+                                            1500,
+                                            250,
+                                            350,
+                                            false, // No vertical crop
+                                            false, // No horizontal crop
+                                            1.5,
+                                            false, // No smart crop
+                                            1.5,   // target aspect ratio
+                                            0.02   // smart crop margin
+                                    );
 
                                     log.debug("Processed book {}: cover={} thumbnail={}", bookId, coverFile, thumbnailFile);
                                 } catch (IOException e) {

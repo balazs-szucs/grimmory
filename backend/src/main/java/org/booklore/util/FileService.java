@@ -641,29 +641,15 @@ public class FileService {
         Path photoFile = Path.of(folderPath, AUTHOR_PHOTO_FILENAME);
         Path thumbnailFile = Path.of(folderPath, AUTHOR_THUMBNAIL_FILENAME);
 
-        // Flatten + resize + save photo
-        vipsImageService.flattenResizeAndSave(imagePath, photoFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-
-        // Compute aspect-ratio crop for thumbnail from saved photo
-        ImageDimensions photoDims = vipsImageService.readDimensionsFromFile(photoFile);
-        double targetRatio = (double) THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT;
-        double sourceRatio = (double) photoDims.width() / photoDims.height();
-        int cropWidth, cropHeight, cropX, cropY;
-        if (sourceRatio > targetRatio) {
-            cropHeight = photoDims.height();
-            cropWidth = (int) (cropHeight * targetRatio);
-            cropX = (photoDims.width() - cropWidth) / 2;
-            cropY = 0;
-        } else {
-            cropWidth = photoDims.width();
-            cropHeight = (int) (cropWidth / targetRatio);
-            cropX = 0;
-            cropY = (photoDims.height() - cropHeight) / 2;
-        }
-
-        // Crop + resize → thumbnail
-        vipsImageService.cropResizeAndSave(photoFile, thumbnailFile,
-                cropX, cropY, cropWidth, cropHeight, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+        vipsImageService.processPhotoUnified(
+                imagePath,
+                photoFile,
+                thumbnailFile,
+                MAX_ORIGINAL_WIDTH,
+                MAX_ORIGINAL_HEIGHT,
+                THUMBNAIL_WIDTH,
+                THUMBNAIL_HEIGHT
+        );
 
         return true;
     }
@@ -678,28 +664,15 @@ public class FileService {
         Path photoFile = Path.of(folderPath, AUTHOR_PHOTO_FILENAME);
         Path thumbnailFile = Path.of(folderPath, AUTHOR_THUMBNAIL_FILENAME);
 
-        try (InputStream in = imageStream; var photoOut = Files.newOutputStream(photoFile)) {
-            vipsImageService.processStreamToJpeg(in, photoOut, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-        }
-
-        ImageDimensions photoDims = vipsImageService.readDimensionsFromFile(photoFile);
-        double targetRatio = (double) THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT;
-        double sourceRatio = (double) photoDims.width() / photoDims.height();
-        int cropWidth, cropHeight, cropX, cropY;
-        if (sourceRatio > targetRatio) {
-            cropHeight = photoDims.height();
-            cropWidth = (int) (cropHeight * targetRatio);
-            cropX = (photoDims.width() - cropWidth) / 2;
-            cropY = 0;
-        } else {
-            cropWidth = photoDims.width();
-            cropHeight = (int) (cropWidth / targetRatio);
-            cropX = 0;
-            cropY = (photoDims.height() - cropHeight) / 2;
-        }
-
-        vipsImageService.cropResizeAndSave(photoFile, thumbnailFile,
-                cropX, cropY, cropWidth, cropHeight, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+        vipsImageService.processPhotoUnified(
+                imageStream,
+                photoFile,
+                thumbnailFile,
+                MAX_ORIGINAL_WIDTH,
+                MAX_ORIGINAL_HEIGHT,
+                THUMBNAIL_WIDTH,
+                THUMBNAIL_HEIGHT
+        );
 
         return true;
     }
@@ -806,21 +779,13 @@ public class FileService {
         Path coverFile = Path.of(folderPath, AUDIOBOOK_COVER_FILENAME);
         Path thumbnailFile = Path.of(folderPath, AUDIOBOOK_THUMBNAIL_FILENAME);
 
-        // Read dimensions to compute center-square crop
-        ImageDimensions dims = vipsImageService.readDimensionsFromFile(imagePath);
-        int size = Math.min(dims.width(), dims.height());
-        int cropX = (dims.width() - size) / 2;
-        int cropY = (dims.height() - size) / 2;
-
-        int coverSize = Math.min(size, MAX_SQUARE_SIZE);
-
-        // Flatten + center-square crop + resize → audiobook cover
-        vipsImageService.flattenCropResizeAndSave(imagePath, coverFile,
-                cropX, cropY, size, size, coverSize, coverSize);
-
-        // Square thumbnail from saved cover
-        vipsImageService.cropResizeAndSave(coverFile, thumbnailFile,
-                0, 0, coverSize, coverSize, SQUARE_THUMBNAIL_SIZE, SQUARE_THUMBNAIL_SIZE);
+        vipsImageService.processAudiobookCoverUnified(
+                imagePath,
+                coverFile,
+                thumbnailFile,
+                MAX_SQUARE_SIZE,
+                SQUARE_THUMBNAIL_SIZE
+        );
 
         return true;
     }
@@ -854,31 +819,27 @@ public class FileService {
         Path coverFile = Path.of(folderPath, COVER_FILENAME);
         Path thumbnailFile = Path.of(folderPath, THUMBNAIL_FILENAME);
 
-        // Read dimensions and compute optional crop region
-        ImageDimensions dims = vipsImageService.readDimensionsFromFile(imagePath);
-        int[] crop = computeCoverCrop(imagePath, dims);
+        CoverCroppingSettings settings = appSettingService.getAppSettings().getCoverCroppingSettings();
+        boolean verticalCrop = settings != null && settings.isVerticalCroppingEnabled();
+        boolean horizontalCrop = settings != null && settings.isHorizontalCroppingEnabled();
+        double threshold = settings != null ? settings.getAspectRatioThreshold() : 1.5;
+        boolean smartCrop = settings != null && settings.isSmartCroppingEnabled();
 
-        if (crop != null) {
-            vipsImageService.flattenCropResizeAndSave(imagePath, coverFile,
-                    crop[0], crop[1], crop[2], crop[3], MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-        } else {
-            vipsImageService.flattenResizeAndSave(imagePath, coverFile, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-        }
-
-        // Determine thumbnail dimensions based on saved cover aspect ratio
-        ImageDimensions coverDims = vipsImageService.readDimensionsFromFile(coverFile);
-        int thumbWidth, thumbHeight;
-        double aspectRatio = (double) coverDims.width() / coverDims.height();
-        if (aspectRatio >= 0.85 && aspectRatio <= 1.15) {
-            thumbWidth = THUMBNAIL_WIDTH;
-            thumbHeight = THUMBNAIL_WIDTH;
-        } else {
-            thumbWidth = THUMBNAIL_WIDTH;
-            thumbHeight = THUMBNAIL_HEIGHT;
-        }
-
-        // Thumbnail from saved cover (file-to-file, avoids re-reading into memory)
-        vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, thumbWidth, thumbHeight);
+        vipsImageService.processCoverUnified(
+                imagePath,
+                coverFile,
+                thumbnailFile,
+                MAX_ORIGINAL_WIDTH,
+                MAX_ORIGINAL_HEIGHT,
+                THUMBNAIL_WIDTH,
+                THUMBNAIL_HEIGHT,
+                verticalCrop,
+                horizontalCrop,
+                threshold,
+                smartCrop,
+                TARGET_COVER_ASPECT_RATIO,
+                SMART_CROP_MARGIN_PERCENT
+        );
 
         return true;
     }
@@ -893,73 +854,29 @@ public class FileService {
         Path coverFile = Path.of(folderPath, COVER_FILENAME);
         Path thumbnailFile = Path.of(folderPath, THUMBNAIL_FILENAME);
 
-        try (InputStream in = imageStream; var coverOut = Files.newOutputStream(coverFile)) {
-            vipsImageService.processStreamToJpeg(in, coverOut, MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-        }
-
-        ImageDimensions dims = vipsImageService.readDimensionsFromFile(coverFile);
-        int[] crop = computeCoverCrop(coverFile, dims);
-        if (crop != null) {
-            Path croppedCoverFile = Path.of(folderPath, "cover-cropped.jpg");
-            vipsImageService.flattenCropResizeAndSave(coverFile, croppedCoverFile,
-                    crop[0], crop[1], crop[2], crop[3], MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-            Files.move(croppedCoverFile, coverFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        }
-
-        ImageDimensions coverDims = vipsImageService.readDimensionsFromFile(coverFile);
-        int thumbWidth, thumbHeight;
-        double aspectRatio = (double) coverDims.width() / coverDims.height();
-        if (aspectRatio >= 0.85 && aspectRatio <= 1.15) {
-            thumbWidth = THUMBNAIL_WIDTH;
-            thumbHeight = THUMBNAIL_WIDTH;
-        } else {
-            thumbWidth = THUMBNAIL_WIDTH;
-            thumbHeight = THUMBNAIL_HEIGHT;
-        }
-        vipsImageService.flattenThumbnailAndSave(coverFile, thumbnailFile, thumbWidth, thumbHeight);
-        return true;
-    }
-
-    private int[] computeCoverCrop(Path imagePath, ImageDimensions dims) throws IOException {
         CoverCroppingSettings settings = appSettingService.getAppSettings().getCoverCroppingSettings();
-        if (settings == null) {
-            return null;
-        }
+        boolean verticalCrop = settings != null && settings.isVerticalCroppingEnabled();
+        boolean horizontalCrop = settings != null && settings.isHorizontalCroppingEnabled();
+        double threshold = settings != null ? settings.getAspectRatioThreshold() : 1.5;
+        boolean smartCrop = settings != null && settings.isSmartCroppingEnabled();
 
-        int width = dims.width();
-        int height = dims.height();
-        double heightToWidthRatio = (double) height / width;
-        double widthToHeightRatio = (double) width / height;
-        double threshold = settings.getAspectRatioThreshold();
-        boolean smartCrop = settings.isSmartCroppingEnabled();
+        vipsImageService.processCoverUnified(
+                imageStream,
+                coverFile,
+                thumbnailFile,
+                MAX_ORIGINAL_WIDTH,
+                MAX_ORIGINAL_HEIGHT,
+                THUMBNAIL_WIDTH,
+                THUMBNAIL_HEIGHT,
+                verticalCrop,
+                horizontalCrop,
+                threshold,
+                smartCrop,
+                TARGET_COVER_ASPECT_RATIO,
+                SMART_CROP_MARGIN_PERCENT
+        );
 
-        boolean isExtremelyTall = settings.isVerticalCroppingEnabled() && heightToWidthRatio > threshold;
-        if (isExtremelyTall) {
-            int croppedHeight = (int) (width * TARGET_COVER_ASPECT_RATIO);
-            int startY = 0;
-            if (smartCrop) {
-                TrimBounds bounds = vipsImageService.findContentBounds(imagePath);
-                int margin = (int) (croppedHeight * SMART_CROP_MARGIN_PERCENT);
-                startY = Math.max(0, bounds.top() - margin);
-                startY = Math.min(startY, height - croppedHeight);
-            }
-            return new int[]{0, startY, width, croppedHeight};
-        }
-
-        boolean isExtremelyWide = settings.isHorizontalCroppingEnabled() && widthToHeightRatio > threshold;
-        if (isExtremelyWide) {
-            int croppedWidth = (int) (height / TARGET_COVER_ASPECT_RATIO);
-            int startX = 0;
-            if (smartCrop) {
-                TrimBounds bounds = vipsImageService.findContentBounds(imagePath);
-                int margin = (int) (croppedWidth * SMART_CROP_MARGIN_PERCENT);
-                startX = Math.max(0, bounds.left() - margin);
-                startX = Math.min(startX, width - croppedWidth);
-            }
-            return new int[]{startX, 0, croppedWidth, height};
-        }
-
-        return null;
+        return true;
     }
 
     public static void setBookCoverPath(BookMetadataEntity bookMetadataEntity) {

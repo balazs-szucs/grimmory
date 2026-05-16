@@ -125,60 +125,6 @@ public class VipsImageService {
         });
     }
 
-    public void cropResizeAndSave(Path in, Path out, int x, int y, int w, int h, int targetW, int targetH) throws IOException {
-        validateCropBounds(in, x, y, w, h);
-        runWithArena(arena -> {
-            VImage img = VImage.newFromFile(arena, in.toString()).autorot();
-            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB).extractArea(x, y, w, h);
-            if (w != targetW || h != targetH) {
-                double scale = Math.min((double) targetW / w, (double) targetH / h);
-                scale = Math.min(scale, 1.0d);
-                if (scale < 1.0d) {
-                    img = img.resize(scale);
-                }
-            }
-            img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
-            return null;
-        });
-    }
-
-    public void flattenCropResizeAndSave(Path in, Path out, int x, int y, int w, int h, int targetW, int targetH) throws IOException {
-        validateCropBounds(in, x, y, w, h);
-        runWithArena(arena -> {
-            VImage img = VImage.newFromFile(arena, in.toString()).autorot();
-            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
-            img = flattenIfHasAlpha(img).extractArea(x, y, w, h);
-            double scale = Math.min((double) targetW / w, (double) targetH / h);
-            scale = Math.min(scale, 1.0d);
-            if (scale < 1.0d) {
-                img = img.resize(scale);
-            }
-            img.jpegsave(out.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
-            return null;
-        });
-    }
-
-    public void flattenThumbnailAndSave(Path in, Path out, int w, int h) throws IOException {
-        runWithArena(arena -> {
-            VImage loaded = VImage.thumbnail(
-                    arena,
-                    in.toString(),
-                    w,
-                    VipsOption.Int("height", h),
-                    VipsOption.Enum("crop", VipsInteresting.INTERESTING_CENTRE)
-            );
-            VImage normalized = loaded.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
-            normalized = flattenIfHasAlpha(normalized);
-            normalized.jpegsave(
-                    out.toString(),
-                    VipsOption.Int("Q", 80),
-                    VipsOption.Boolean("strip", true),
-                    VipsOption.Boolean("optimize_coding", true)
-            );
-            return null;
-        });
-    }
-
     public void processStreamToJpeg(InputStream is, OutputStream os, int maxW, int maxH) throws IOException {
         runWithArena(arena -> {
             VSource source = VSource.newFromInputStream(arena, is);
@@ -188,6 +134,176 @@ public class VipsImageService {
             img.jpegsaveTarget(VTarget.newFromOutputStream(arena, os), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
             return null;
         });
+    }
+
+    /**
+     * Unified cover processing that handles loading, cropping, and thumbnailing in a single native pipeline.
+     * This avoids multiple I/O passes and minimizes memory usage.
+     */
+    public ImageDimensions processCoverUnified(InputStream is, Path coverOut, Path thumbOut,
+                                             int maxW, int maxH, int thumbW, int thumbH,
+                                             boolean verticalCrop, boolean horizontalCrop,
+                                             double threshold, boolean smartCrop,
+                                             double targetAspectRatio, double smartCropMargin) throws IOException {
+        return runWithArena(arena -> {
+            VSource source = VSource.newFromInputStream(arena, is);
+            return processCoverPipeline(arena, VImage.newFromSource(arena, source), coverOut, thumbOut, 
+                    maxW, maxH, thumbW, thumbH, verticalCrop, horizontalCrop, threshold, smartCrop, 
+                    targetAspectRatio, smartCropMargin);
+        });
+    }
+
+    public ImageDimensions processCoverUnified(Path in, Path coverOut, Path thumbOut,
+                                             int maxW, int maxH, int thumbW, int thumbH,
+                                             boolean verticalCrop, boolean horizontalCrop,
+                                             double threshold, boolean smartCrop,
+                                             double targetAspectRatio, double smartCropMargin) throws IOException {
+        return runWithArena(arena -> processCoverPipeline(arena, VImage.newFromFile(arena, in.toString()), coverOut, thumbOut,
+                maxW, maxH, thumbW, thumbH, verticalCrop, horizontalCrop, threshold, smartCrop,
+                targetAspectRatio, smartCropMargin));
+    }
+
+    private ImageDimensions processCoverPipeline(Arena arena, VImage img, Path coverOut, Path thumbOut,
+                                               int maxW, int maxH, int thumbW, int thumbH,
+                                               boolean verticalCrop, boolean horizontalCrop,
+                                               double threshold, boolean smartCrop,
+                                               double targetAspectRatio, double smartCropMargin) throws Exception {
+        img = img.autorot().colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+
+        int width = img.getWidth();
+        int height = img.getHeight();
+        double heightToWidthRatio = (double) height / width;
+        double widthToHeightRatio = (double) width / height;
+
+        // Perform cropping if needed
+        if (verticalCrop && heightToWidthRatio > threshold) {
+            int croppedHeight = (int) (width * targetAspectRatio);
+            int startY = 0;
+            if (smartCrop) {
+                var output = img.findTrim(VipsOption.Int("threshold", 10));
+                int margin = (int) (croppedHeight * smartCropMargin);
+                startY = Math.max(0, output.top() - margin);
+                startY = Math.min(startY, height - croppedHeight);
+            }
+            img = img.extractArea(0, startY, width, croppedHeight);
+        } else if (horizontalCrop && widthToHeightRatio > threshold) {
+            int croppedWidth = (int) (height / targetAspectRatio);
+            int startX = (width - croppedWidth) / 2; // Center crop for horizontal
+            if (smartCrop) {
+                var output = img.findTrim(VipsOption.Int("threshold", 10));
+                int margin = (int) (croppedWidth * smartCropMargin);
+                startX = Math.max(0, output.left() - margin);
+                startX = Math.min(startX, width - croppedWidth);
+            }
+            img = img.extractArea(startX, 0, croppedWidth, height);
+        }
+
+        // Flatten if needed before scaling
+        img = flattenIfHasAlpha(img);
+
+        // Resize to cover size
+        VImage coverImg = img;
+        if (img.getWidth() > maxW || img.getHeight() > maxH) {
+            double scale = Math.min((double) maxW / img.getWidth(), (double) maxH / img.getHeight());
+            coverImg = img.resize(scale);
+        }
+
+        // Save cover
+        coverImg.jpegsave(coverOut.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+
+        // Generate thumbnail from the processed cover image (avoiding re-loading)
+        double thumbScale = Math.min((double) thumbW / coverImg.getWidth(), (double) thumbH / coverImg.getHeight());
+        VImage thumbImg = coverImg.resize(thumbScale);
+        thumbImg.jpegsave(thumbOut.toString(), VipsOption.Int("Q", 80), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+
+        return new ImageDimensions(coverImg.getWidth(), coverImg.getHeight());
+    }
+
+    public ImageDimensions processAudiobookCoverUnified(Path in, Path coverOut, Path thumbOut,
+                                                      int maxSquareSize, int thumbSize) throws IOException {
+        return runWithArena(arena -> {
+            VImage img = VImage.newFromFile(arena, in.toString()).autorot();
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+
+            int width = img.getWidth();
+            int height = img.getHeight();
+            int size = Math.min(width, height);
+            int cropX = (width - size) / 2;
+            int cropY = (height - size) / 2;
+
+            // Center-square crop
+            img = img.extractArea(cropX, cropY, size, size);
+            img = flattenIfHasAlpha(img);
+
+            // Resize to audiobook cover size (maxSquareSize)
+            int coverSize = Math.min(size, maxSquareSize);
+            VImage coverImg = img.resize((double) coverSize / size);
+
+            // Save cover
+            coverImg.jpegsave(coverOut.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+
+            // Generate square thumbnail
+            VImage thumbImg = coverImg.resize((double) thumbSize / coverSize);
+            thumbImg.jpegsave(thumbOut.toString(), VipsOption.Int("Q", 80), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+
+            return new ImageDimensions(coverImg.getWidth(), coverImg.getHeight());
+        });
+    }
+
+    public ImageDimensions processPhotoUnified(Path in, Path photoOut, Path thumbOut,
+                                              int maxW, int maxH, int thumbW, int thumbH) throws IOException {
+        return runWithArena(arena -> {
+            VImage img = VImage.newFromFile(arena, in.toString()).autorot();
+            return processPhotoPipeline(img, photoOut, thumbOut, maxW, maxH, thumbW, thumbH);
+        });
+    }
+
+    public ImageDimensions processPhotoUnified(InputStream is, Path photoOut, Path thumbOut,
+                                              int maxW, int maxH, int thumbW, int thumbH) throws IOException {
+        return runWithArena(arena -> {
+            VSource source = VSource.newFromInputStream(arena, is);
+            VImage img = VImage.newFromSource(arena, source).autorot();
+            return processPhotoPipeline(img, photoOut, thumbOut, maxW, maxH, thumbW, thumbH);
+        });
+    }
+
+    private ImageDimensions processPhotoPipeline(VImage img, Path photoOut, Path thumbOut,
+                                               int maxW, int maxH, int thumbW, int thumbH) throws Exception {
+        img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+
+        // Resize to original photo size (maxW, maxH)
+        VImage photoImg = img;
+        if (img.getWidth() > maxW || img.getHeight() > maxH) {
+            double scale = Math.min((double) maxW / img.getWidth(), (double) maxH / img.getHeight());
+            photoImg = img.resize(scale);
+        }
+        photoImg = flattenIfHasAlpha(photoImg);
+        photoImg.jpegsave(photoOut.toString(), VipsOption.Int("Q", 85), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+
+        // Generate thumbnail with center crop to match target ratio
+        double targetRatio = (double) thumbW / thumbH;
+        int width = photoImg.getWidth();
+        int height = photoImg.getHeight();
+        double sourceRatio = (double) width / height;
+
+        int cropW, cropH, cropX, cropY;
+        if (sourceRatio > targetRatio) {
+            cropH = height;
+            cropW = (int) (cropH * targetRatio);
+            cropX = (width - cropW) / 2;
+            cropY = 0;
+        } else {
+            cropW = width;
+            cropH = (int) (cropW / targetRatio);
+            cropX = 0;
+            cropY = (height - cropH) / 2;
+        }
+
+        VImage thumbImg = photoImg.extractArea(cropX, cropY, cropW, cropH);
+        thumbImg = thumbImg.resize((double) thumbW / cropW);
+        thumbImg.jpegsave(thumbOut.toString(), VipsOption.Int("Q", 80), VipsOption.Boolean("strip", true), VipsOption.Boolean("optimize_coding", true));
+
+        return new ImageDimensions(photoImg.getWidth(), photoImg.getHeight());
     }
 
     public void transcodeStreamToJpeg(InputStream is, OutputStream os, int quality) throws IOException {
@@ -234,18 +350,6 @@ public class VipsImageService {
         return img.hasAlpha() ? img.flatten() : img;
     }
 
-    private void validateCropBounds(Path in, int x, int y, int w, int h) throws IOException {
-        if (x < 0 || y < 0 || w <= 0 || h <= 0) {
-            throw new IOException("Invalid crop bounds: x=" + x + ", y=" + y + ", w=" + w + ", h=" + h);
-        }
-
-        ImageDimensions dims = readDimensionsFromFile(in);
-        if ((long) x + w > dims.width() || (long) y + h > dims.height()) {
-            throw new IOException(
-                    "Crop bounds out of range for image " + in + " (" + dims.width() + "x" + dims.height() + ")"
-            );
-        }
-    }
 
     public byte[] renderPageToJpeg(PdfPage page, int dpi, int quality) throws IOException {
         return runWithArena(arena -> {
@@ -301,21 +405,6 @@ public class VipsImageService {
         return img;
     }
 
-    public TrimBounds findContentBounds(byte[] data) throws IOException {
-        return runWithArena(arena -> {
-            VImage img = VImage.newFromBytes(arena, data).autorot();
-            var output = img.findTrim(VipsOption.Int("threshold", 10));
-            return new TrimBounds(output.left(), output.top(), output.width(), output.height());
-        });
-    }
-
-    public TrimBounds findContentBounds(Path path) throws IOException {
-        return runWithArena(arena -> {
-            VImage img = VImage.newFromFile(arena, path.toString()).autorot();
-            var output = img.findTrim(VipsOption.Int("threshold", 10));
-            return new TrimBounds(output.left(), output.top(), output.width(), output.height());
-        });
-    }
 
     private <T> T runWithArena(VipsCallable<T> callable) throws IOException {
         ensureAvailable();

@@ -59,7 +59,6 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     @Override
     public InputStream extractCover(File file) throws IOException {
-        // Native VIPS pdfload is the most performant path as it avoids intermediate Java-side 
         // rasterization and uses streaming native memory. 150 DPI provides optimal speed/quality.
         byte[] jpeg = vipsImageService.renderPdfPageToJpeg(file.toPath(), 0, 150, 85);
         return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
