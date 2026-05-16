@@ -23,7 +23,6 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.ResponseEntity;
@@ -35,9 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Comparator;
-import java.io.File;
-import java.util.HashSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -283,6 +279,7 @@ class BookServiceTest {
     void getBookThumbnail_fileMissing_returnsDefault() {
         when(fileService.getThumbnailFile(1L)).thenReturn("/tmp/nonexistent.jpg");
         Resource res = bookService.getBookThumbnail(1L);
+        assertNotNull(res);
     }
 
     @Test

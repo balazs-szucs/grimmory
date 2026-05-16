@@ -6,7 +6,6 @@ import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
 import org.booklore.service.FileStreamingService;
-import org.booklore.service.reader.ChapterCacheService;
 import org.booklore.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,11 +13,15 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -27,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class CbxReaderServiceTest {
 
     @Mock
@@ -41,11 +45,11 @@ class CbxReaderServiceTest {
     @Mock
     FileStreamingService fileStreamingService;
 
+    @Mock
+    ExecutorService readerCacheExecutor;
+
     @InjectMocks
     CbxReaderService cbxReaderService;
-
-    @Captor
-    ArgumentCaptor<Long> longCaptor;
 
     @TempDir
     Path tempDir;
@@ -57,6 +61,9 @@ class CbxReaderServiceTest {
     void setup() throws Exception {
         bookEntity = new BookEntity();
         bookEntity.setId(1L);
+        lenient().when(chapterCacheService.lockForCacheKey(anyString())).thenReturn(new ReentrantLock());
+        lenient().when(chapterCacheService.getCachedPage(anyString(), anyInt()))
+                .thenAnswer(invocation -> tempDir.resolve("page-" + invocation.getArgument(1) + ".jpg"));
         cbzPath = tempDir.resolve("test.cbz");
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(cbzPath))) {
             ZipEntry entry = new ZipEntry("1.jpg");
@@ -94,6 +101,7 @@ class CbxReaderServiceTest {
         
         // Return a dummy path for the cached page
         Path dummyPath = tempDir.resolve("dummy.jpg");
+        Files.write(dummyPath, new byte[]{1, 2, 3});
         when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(dummyPath);
         
         try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {

@@ -34,17 +34,33 @@ import java.util.stream.Stream;
 public class ChapterCacheService {
 
     private static final long MTIME_TOLERANCE_MS = 2000;
+    private static final long TOUCH_DEBOUNCE_MS = Duration.ofSeconds(30).toMillis();
+    private static final int TOUCH_DEBOUNCE_MAX_KEYS = 50_000;
+    private static final int DEFAULT_MAX_CACHE_AGE_DAYS = 14;
 
     private final AppProperties appProperties;
     private final ArchiveService archiveService;
     private final ExecutorService readerCacheExecutor;
     private final ConcurrentHashMap<String, ReentrantLock> cacheLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Path, Long> touchDebounce = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelay = 1, initialDelay = 1, timeUnit = TimeUnit.HOURS)
     public void cleanupCache() {
         AppProperties.Cache config = appProperties.getReader().getCache();
-        long maxBytes = (long) config.getMaxSizeGb() * 1024 * 1024 * 1024;
-        long maxAgeMillis = Duration.ofDays(config.getMaxAgeDays()).toMillis();
+        Integer maxSizeGbConfig = config != null ? config.getMaxSizeGb() : null;
+        Integer maxAgeDaysConfig = config != null ? config.getMaxAgeDays() : null;
+
+        if (maxSizeGbConfig == null || maxSizeGbConfig <= 0) {
+            log.debug("Reader cache size cleanup disabled: maxSizeGb={}", maxSizeGbConfig);
+            return;
+        }
+
+        int maxAgeDays = (maxAgeDaysConfig != null && maxAgeDaysConfig > 0)
+                ? maxAgeDaysConfig
+                : DEFAULT_MAX_CACHE_AGE_DAYS;
+
+        long maxBytes = maxSizeGbConfig.longValue() * 1024L * 1024L * 1024L;
+        long maxAgeMillis = Duration.ofDays(maxAgeDays).toMillis();
         Instant cutoff = Instant.now().minusMillis(maxAgeMillis);
 
         Path cacheRoot = Paths.get(appProperties.getPathConfig(), "cache", "chapters");
@@ -55,10 +71,25 @@ public class ChapterCacheService {
             try (Stream<Path> books = Files.list(cacheRoot)) {
                 books.forEach(bookDir -> {
                     try {
-                        if (Files.getLastModifiedTime(bookDir).toInstant().isBefore(cutoff)) {
-                            log.info("Deleting expired reader cache: {}", bookDir.getFileName());
-                            deleteDirectoryRecursively(bookDir);
+                        if (!Files.isDirectory(bookDir)) {
+                            return;
                         }
+
+                        String key = bookDir.getFileName().toString();
+                        ReentrantLock lock = lockForCacheKey(key);
+                        if (!lock.tryLock()) {
+                            return;
+                        }
+
+                        try {
+                            if (Files.getLastModifiedTime(bookDir).toInstant().isBefore(cutoff)) {
+                                log.info("Deleting expired reader cache: {}", bookDir.getFileName());
+                                deleteDirectoryRecursively(bookDir);
+                            }
+                        } finally {
+                            lock.unlock();
+                        }
+
                     } catch (IOException e) {
                         log.warn("Failed to check expiry for cache {}: {}", bookDir, e.getMessage());
                     }
@@ -69,7 +100,7 @@ public class ChapterCacheService {
             long currentSize = calculateDirectorySize(cacheRoot);
             if (currentSize > maxBytes) {
                 log.info("Reader cache exceeds {} GB (current: {} GB), cleaning up...",
-                        config.getMaxSizeGb(), String.format("%.2f", currentSize / 1024.0 / 1024.0 / 1024.0));
+                    maxSizeGbConfig, String.format("%.2f", currentSize / 1024.0 / 1024.0 / 1024.0));
 
                 try (Stream<Path> books = Files.list(cacheRoot)) {
                     List<Path> sortedBooks = books
@@ -83,14 +114,24 @@ public class ChapterCacheService {
                             .toList();
 
                     for (Path bookDir : sortedBooks) {
-                        String key = bookDir.getFileName().toString();
-                        ReentrantLock lock = cacheLocks.get(key);
-                        if (lock != null && lock.isLocked()) continue;
+                        if (!Files.isDirectory(bookDir)) {
+                            continue;
+                        }
 
-                        long dirSize = calculateDirectorySize(bookDir);
-                        deleteDirectoryRecursively(bookDir);
-                        currentSize -= dirSize;
-                        if (currentSize <= maxBytes * 0.8) break; // Clean down to 80%
+                        String key = bookDir.getFileName().toString();
+                        ReentrantLock lock = lockForCacheKey(key);
+                        if (!lock.tryLock()) {
+                            continue;
+                        }
+
+                        try {
+                            long dirSize = calculateDirectorySize(bookDir);
+                            deleteDirectoryRecursively(bookDir);
+                            currentSize -= dirSize;
+                            if (currentSize <= maxBytes * 0.8) break; // Clean down to 80%
+                        } finally {
+                            lock.unlock();
+                        }
                     }
                 }
             }
@@ -100,11 +141,31 @@ public class ChapterCacheService {
     }
 
     private void touch(Path dir) {
+        Path normalized = dir.toAbsolutePath().normalize();
+        if (!Files.exists(normalized)) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        Long previous = touchDebounce.put(normalized, now);
+        if (previous != null && now - previous < TOUCH_DEBOUNCE_MS) {
+            return;
+        }
+
+        if (touchDebounce.size() > TOUCH_DEBOUNCE_MAX_KEYS) {
+            long cutoff = now - (TOUCH_DEBOUNCE_MS * 2);
+            touchDebounce.entrySet().removeIf(e -> e.getValue() < cutoff);
+        }
+
         readerCacheExecutor.execute(() -> {
             try {
-                Files.setLastModifiedTime(dir, FileTime.from(Instant.now()));
+                Files.setLastModifiedTime(normalized, FileTime.from(Instant.now()));
             } catch (IOException ignored) {}
         });
+    }
+
+    public ReentrantLock lockForCacheKey(String cacheKey) {
+        return cacheLocks.computeIfAbsent(cacheKey, _ -> new ReentrantLock());
     }
 
     private long calculateDirectorySize(Path path) throws IOException {
@@ -141,7 +202,7 @@ public class ChapterCacheService {
      * which can cause SIGSEGV / out-of-memory crashes in the native heap.
      */
     public void prepareCbxCache(String cacheKey, Path cbxPath, List<String> entries) throws IOException {
-        ReentrantLock lock = cacheLocks.computeIfAbsent(cacheKey, _ -> new ReentrantLock());
+        ReentrantLock lock = lockForCacheKey(cacheKey);
         lock.lock();
         try {
             Path cacheDir = getCacheDir(cacheKey);
@@ -214,10 +275,20 @@ public class ChapterCacheService {
     }
 
     private Path getCacheDir(String cacheKey) {
-        if (cacheKey == null || cacheKey.contains("..")) {
+        if (cacheKey == null || cacheKey.isBlank()) {
             throw ApiError.INVALID_INPUT.createException("Invalid cache key: " + cacheKey);
         }
-        return Paths.get(appProperties.getPathConfig(), "cache", "chapters", cacheKey);
+
+        Path root = Paths.get(appProperties.getPathConfig(), "cache", "chapters")
+                .toAbsolutePath()
+                .normalize();
+        Path resolved = root.resolve(cacheKey).normalize();
+
+        if (!resolved.startsWith(root)) {
+            throw ApiError.INVALID_INPUT.createException("Invalid cache key: " + cacheKey);
+        }
+
+        return resolved;
     }
 
     private boolean isCacheStale(Path cacheDir, Path sourcePath, int expectedPages) throws IOException {

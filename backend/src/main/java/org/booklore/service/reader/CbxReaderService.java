@@ -36,7 +36,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -75,15 +74,6 @@ public class CbxReaderService {
             .expireAfterWrite(Duration.ofMinutes(10))
             .maximumSize(10_000)
             .build();
-
-    /**
-     * Per-book render locks to prevent duplicate renders and memory spikes.
-     */
-    private static final int LOCK_STRIPES = 64;
-    private final ReentrantLock[] renderLocks = IntStream.range(0, LOCK_STRIPES)
-            .mapToObj(_ -> new ReentrantLock())
-            .toArray(ReentrantLock[]::new);
-
 
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified, long size) {}
     private record CachedArchiveMetadata(List<String> imageEntries, List<CbxPageDimension> pageDimensions, long lastModified, long size, boolean isZip) {
@@ -361,7 +351,7 @@ public class CbxReaderService {
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified(), metadata.size());
         String diskKey = getDiskKey(cacheKey);
 
-        Path cached = getOrExtractPageToCache(cbxPath, cacheKey, diskKey, page, entryName);
+        Path cached = getOrExtractPageToCache(cbxPath, diskKey, page, entryName);
         Files.copy(cached, outputStream);
     }
 
@@ -378,31 +368,41 @@ public class CbxReaderService {
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified(), metadata.size());
         String diskKey = getDiskKey(cacheKey);
 
-        Path cached = getOrExtractPageToCache(cbxPath, cacheKey, diskKey, page, entryName);
+        Path cached = getOrExtractPageToCache(cbxPath, diskKey, page, entryName);
 
         // Trigger sequential prefetching for better UX
-        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD);
+        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata);
 
         fileStreamingService.streamWithRangeSupport(cached, contentType, request, response);
     }
 
-    private void prefetchPages(Long bookId, String bookType, int from, int to) {
+    private void prefetchPages(Long bookId, String bookType, int from, int to, CachedArchiveMetadata metadata) {
+        int end = Math.min(to, metadata.imageEntries().size());
+        if (from > end) {
+            return;
+        }
+
+        ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified(), metadata.size());
+        String diskKey = getDiskKey(key);
+
+        List<Integer> pages = new ArrayList<>();
+        for (int page = from; page <= end; page++) {
+            String prefetchKey = diskKey + ":" + page;
+            if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
+                pages.add(page);
+            }
+        }
+
+        if (pages.isEmpty()) {
+            return;
+        }
+
         readerCacheExecutor.submit(() -> {
             try {
                 Path cbxPath = getBookPath(bookId, bookType);
-                CachedArchiveMetadata metadata = getCachedMetadata(cbxPath);
-                int end = Math.min(to, metadata.imageEntries().size());
-                if (from > end) return;
-
-                ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified(), metadata.size());
-                String diskKey = getDiskKey(key);
-
-                for (int page = from; page <= end; page++) {
-                    String prefetchKey = diskKey + ":" + page;
-                    if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
-                        String entryName = metadata.imageEntries().get(page - 1);
-                        getOrExtractPageToCache(cbxPath, key, diskKey, page, entryName);
-                    }
+                for (int page : pages) {
+                    String entryName = metadata.imageEntries().get(page - 1);
+                    getOrExtractPageToCache(cbxPath, diskKey, page, entryName);
                 }
             } catch (Exception e) {
                 log.debug("CBX prefetch failed for book {}: {}", bookId, e.getMessage());
@@ -412,7 +412,6 @@ public class CbxReaderService {
 
     private Path getOrExtractPageToCache(
             Path cbxPath,
-            ReaderCacheKey cacheKey,
             String diskKey,
             int page,
             String entryName
@@ -423,7 +422,7 @@ public class CbxReaderService {
             return cached;
         }
 
-        ReentrantLock lock = renderLocks[cacheKey.hashCode() & (LOCK_STRIPES - 1)];
+        ReentrantLock lock = chapterCacheService.lockForCacheKey(diskKey);
         lock.lock();
         try {
             if (Files.exists(cached) && Files.size(cached) > 0) {

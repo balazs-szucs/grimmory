@@ -20,7 +20,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.concurrent.locks.LockSupport;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -298,11 +297,13 @@ public class FileStreamingService {
     ) throws IOException {
         if (count < 8192) {
             copyWithHeapBuffer(source, position, count, out);
+            out.flush();
             return;
         }
         WritableByteChannel outChannel = Channels.newChannel(out);
         long remaining = count;
         long offset = position;
+        int zeroCount = 0;
 
         // Try zero-copy first (works on many servlet containers)
         while (remaining > 0) {
@@ -310,11 +311,17 @@ public class FileStreamingService {
             if (n > 0) {
                 offset += n;
                 remaining -= n;
+                zeroCount = 0;
                 continue;
             }
-            // transferTo returned 0 — fall back to heap copy for the rest
-            copyWithHeapBuffer(source, offset, remaining, out);
-            break;
+
+            if (++zeroCount >= 3) {
+                // transferTo repeatedly returned 0 - fall back to heap copy.
+                copyWithHeapBuffer(source, offset, remaining, out);
+                break;
+            }
+
+            Thread.onSpinWait();
         }
         out.flush();
     }

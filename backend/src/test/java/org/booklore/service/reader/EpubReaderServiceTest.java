@@ -30,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -60,6 +61,7 @@ class EpubReaderServiceTest {
     void setup() throws Exception {
         bookEntity = new BookEntity();
         bookEntity.setId(1L);
+        when(chapterCacheService.lockForCacheKey(anyString())).thenReturn(new ReentrantLock());
         epubPath = tempDir.resolve("test.epub");
         Files.deleteIfExists(epubPath);
     }
@@ -167,7 +169,7 @@ class EpubReaderServiceTest {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
             // Mock ChapterCacheService behavior for the asset extraction
-            when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(tempDir.resolve("mock-cached-asset"));
+            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-asset"));
 
             epubReaderService.streamFile(1L, null, chapter1Href, outputStream);
 
@@ -226,7 +228,7 @@ class EpubReaderServiceTest {
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // Mock ChapterCacheService behavior for the asset extraction
-            when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(tempDir.resolve("mock-cached-container"));
+            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-container"));
 
             epubReaderService.streamFile(1L, null, "META-INF/container.xml", outputStream);
 
@@ -405,7 +407,7 @@ class EpubReaderServiceTest {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // Path with leading slash should work
             // Mock ChapterCacheService behavior for the asset extraction
-            when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(tempDir.resolve("mock-cached-slash"));
+            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-slash"));
 
             epubReaderService.streamFile(1L, null, "/" + relativePath, outputStream);
 

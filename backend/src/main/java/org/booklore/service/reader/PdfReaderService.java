@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 
@@ -40,13 +41,13 @@ public class PdfReaderService {
 
     private static final int MAX_CACHE_ENTRIES = 15;
     private static final float DEFAULT_DPI = 200f;
-    private static final long MTIME_TOLERANCE_MS = 2000;
     private static final int PREFETCH_AHEAD = 2;
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
     private final FileStreamingService fileStreamingService;
     private final ExecutorService readerCacheExecutor;
+    private final Semaphore readerCpuSemaphore;
 
     /** Tracks pages whose async pre-render has already been submitted. */
     private final Cache<String, Boolean> prefetchInflight = Caffeine.newBuilder()
@@ -60,15 +61,6 @@ public class PdfReaderService {
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
 
-    /**
-     * Per-book render locks to prevent duplicate renders and memory spikes.
-     * Locking on the book level ensures only one PDFium document is open per book.
-     */
-    private static final int LOCK_STRIPES = 64;
-    private final ReentrantLock[] renderLocks = IntStream.range(0, LOCK_STRIPES)
-            .mapToObj(_ -> new ReentrantLock())
-            .toArray(ReentrantLock[]::new);
-
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified, long size) {}
     private record CachedPdfMetadata(int pageCount, long lastModified, long size, List<PdfOutlineItem> outline) {}
 
@@ -77,35 +69,37 @@ public class PdfReaderService {
         CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
         String diskKey = getDiskKey(cacheKey);
+        ReentrantLock lock = chapterCacheService.lockForCacheKey(diskKey);
 
-        Path cacheDir = chapterCacheService.getCachedPage(diskKey, 1).getParent();
-        if (!Files.exists(cacheDir)) {
-            Files.createDirectories(cacheDir);
-        }
+        lock.lock();
+        try {
+            Path cacheDir = chapterCacheService.getCachedPage(diskKey, 1).getParent();
+            if (!Files.exists(cacheDir)) {
+                Files.createDirectories(cacheDir);
+            }
 
-        long cacheMtime = Files.getLastModifiedTime(cacheDir).toMillis();
-        boolean cacheEmpty;
-        try (var stream = Files.list(cacheDir)) {
-            cacheEmpty = stream.findAny().isEmpty();
-        }
+            if (metadata.pageCount > 0
+                    && chapterCacheService.hasPage(diskKey, 1)
+                    && chapterCacheService.hasPage(diskKey, metadata.pageCount)) {
+                return;
+            }
 
-        if (!cacheEmpty && Math.abs(cacheMtime - metadata.lastModified) <= MTIME_TOLERANCE_MS) {
-            return;
-        }
+            log.info("Populating PDF disk cache for {}: {} pages", diskKey, metadata.pageCount);
 
-        log.info("Populating PDF disk cache for {}: {} pages", diskKey, metadata.pageCount);
-
-        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
-            for (int i = 1; i <= metadata.pageCount; i++) {
-                Path target = chapterCacheService.getCachedPage(diskKey, i);
-                if (!Files.exists(target) || Files.size(target) == 0) {
-                    byte[] jpeg = doc.renderPageToBytes(i - 1, (int) DEFAULT_DPI, "jpeg");
-                    writeAtomically(target, jpeg);
+            try (PdfDocument doc = PdfDocument.open(pdfPath)) {
+                for (int i = 1; i <= metadata.pageCount; i++) {
+                    Path target = chapterCacheService.getCachedPage(diskKey, i);
+                    if (!Files.exists(target) || Files.size(target) == 0) {
+                        byte[] jpeg = renderPage(doc, i - 1);
+                        writeAtomically(target, jpeg);
+                    }
                 }
             }
-        }
 
-        Files.setLastModifiedTime(cacheDir, Files.getLastModifiedTime(pdfPath));
+            Files.setLastModifiedTime(cacheDir, Files.getLastModifiedTime(pdfPath));
+        } finally {
+            lock.unlock();
+        }
     }
 
     public List<Integer> getAvailablePages(Long bookId) {
@@ -151,7 +145,7 @@ public class PdfReaderService {
 
         validatePageRequest(bookId, page, metadata.pageCount);
 
-        Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
+        Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
         Files.copy(cached, outputStream);
     }
 
@@ -163,7 +157,7 @@ public class PdfReaderService {
 
         validatePageRequest(bookId, page, metadata.pageCount);
 
-        Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
+        Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
 
         // Trigger sequential prefetching for better UX
         prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata);
@@ -172,34 +166,52 @@ public class PdfReaderService {
     }
 
     private void prefetchPages(Long bookId, String bookType, int from, int to, CachedPdfMetadata metadata) {
+        ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
+        String diskKey = getDiskKey(key);
+        int end = Math.min(to, metadata.pageCount);
+        if (from > end) return;
+
+        List<Integer> pages = new ArrayList<>();
+        for (int page = from; page <= end; page++) {
+            String prefetchKey = diskKey + ":" + page;
+            if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
+                pages.add(page);
+            }
+        }
+
+        if (pages.isEmpty()) return;
+
         readerCacheExecutor.submit(() -> {
             try {
                 Path pdfPath = getBookPath(bookId, bookType);
-                ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
-                String diskKey = getDiskKey(key);
-
-                renderPageBatch(pdfPath, key, diskKey, from, to, metadata.pageCount);
+                renderPageBatch(pdfPath, diskKey, pages);
             } catch (Exception e) {
                 log.debug("PDF prefetch failed for book {}: {}", bookId, e.getMessage());
             }
         });
     }
 
-    private void renderPageBatch(Path pdfPath, ReaderCacheKey key, String diskKey, int from, int to, int maxPages) throws IOException {
-        int end = Math.min(to, maxPages);
-        if (from > end) return;
-
-        ReentrantLock lock = renderLocks[key.hashCode() & (LOCK_STRIPES - 1)];
+    private void renderPageBatch(Path pdfPath, String diskKey, List<Integer> pages) throws IOException {
+        ReentrantLock lock = chapterCacheService.lockForCacheKey(diskKey);
         lock.lock();
-        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
-            for (int page = from; page <= end; page++) {
-                String prefetchKey = diskKey + ":" + page;
-                if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
-                    Path cached = chapterCacheService.getCachedPage(diskKey, page);
-                    if (Files.exists(cached) && Files.size(cached) > 0) continue;
+        try {
+            List<Integer> toRender = new ArrayList<>();
+            for (int page : pages) {
+                Path cached = chapterCacheService.getCachedPage(diskKey, page);
+                if (!Files.exists(cached) || Files.size(cached) == 0) {
+                    toRender.add(page);
+                }
+            }
 
+            if (toRender.isEmpty()) {
+                return;
+            }
+
+            try (PdfDocument doc = PdfDocument.open(pdfPath)) {
+                for (int page : toRender) {
+                    Path cached = chapterCacheService.getCachedPage(diskKey, page);
                     Files.createDirectories(cached.getParent());
-                    byte[] jpeg = doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
+                    byte[] jpeg = renderPage(doc, page - 1);
                     writeAtomically(cached, jpeg);
                 }
             }
@@ -208,8 +220,8 @@ public class PdfReaderService {
         }
     }
 
-    private Path renderPageToDiskOnce(Path pdfPath, ReaderCacheKey key, String diskKey, int page) throws IOException {
-        ReentrantLock lock = renderLocks[key.hashCode() & (LOCK_STRIPES - 1)];
+    private Path renderPageToDiskOnce(Path pdfPath, String diskKey, int page) throws IOException {
+        ReentrantLock lock = chapterCacheService.lockForCacheKey(diskKey);
 
         lock.lock();
         try {
@@ -221,7 +233,7 @@ public class PdfReaderService {
             Files.createDirectories(cached.getParent());
 
             try (PdfDocument doc = PdfDocument.open(pdfPath)) {
-                byte[] jpeg = doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
+                byte[] jpeg = renderPage(doc, page - 1);
                 writeAtomically(cached, jpeg);
             }
             return cached;
@@ -270,13 +282,30 @@ public class PdfReaderService {
     private CachedPdfMetadata getCachedMetadata(Path pdfPath) throws IOException {
         String cacheKey = pdfPath.toString();
         long currentModified = Files.getLastModifiedTime(pdfPath).toMillis();
+        long currentSize = Files.size(pdfPath);
         CachedPdfMetadata cached = metadataCache.getIfPresent(cacheKey);
-        if (cached != null && cached.lastModified == currentModified) {
+        if (cached != null && cached.lastModified == currentModified && cached.size == currentSize) {
             return cached;
         }
         CachedPdfMetadata newMetadata = scanPdfMetadata(pdfPath);
         metadataCache.put(cacheKey, newMetadata);
         return newMetadata;
+    }
+
+    private byte[] renderPage(PdfDocument doc, int pageIndex) throws IOException {
+        boolean acquired = false;
+        try {
+            readerCpuSemaphore.acquire();
+            acquired = true;
+            return doc.renderPageToBytes(pageIndex, (int) DEFAULT_DPI, "jpeg");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting to render PDF page", e);
+        } finally {
+            if (acquired) {
+                readerCpuSemaphore.release();
+            }
+        }
     }
 
     private CachedPdfMetadata scanPdfMetadata(Path pdfPath) throws IOException {

@@ -51,5 +51,10 @@ public class AppProperties {
     public static class Cache {
         private Integer maxSizeGb = 5;
         private Integer maxAgeDays = 14;
+        /**
+         * Optional upper bound for concurrent CPU/native reader work.
+         * When null or <= 0, defaults to max(1, availableProcessors / 2).
+         */
+        private Integer cpuPermits;
     }
 }

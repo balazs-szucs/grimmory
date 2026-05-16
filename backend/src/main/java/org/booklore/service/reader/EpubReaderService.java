@@ -21,14 +21,16 @@ import org.springframework.stereotype.Service;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.booklore.service.FileStreamingService;
-import org.springframework.http.MediaType;
-import org.springframework.http.MediaTypeFactory;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
@@ -140,7 +142,7 @@ public class EpubReaderService {
         Files.copy(cached, outputStream);
     }
 
-    public void streamFile(Long bookId, String bookType, String filePath, HttpServletRequest request, HttpServletResponse response) throws IOException {
+    public void streamFile(Long bookId, String bookType, String filePath, String contentType, HttpServletRequest request, HttpServletResponse response) throws IOException {
         Path epubPath = getBookPath(bookId, bookType);
         CachedEpubMetadata metadata = getCachedMetadata(epubPath);
 
@@ -151,8 +153,6 @@ public class EpubReaderService {
 
         String diskKey = getDiskKey(bookId, bookType, metadata.lastModified(), metadata.size());
         Path cached = getOrExtractAssetToCache(epubPath, diskKey, actualPath);
-
-        String contentType = getContentType(bookId, bookType, filePath);
         fileStreamingService.streamWithRangeSupport(cached, contentType, request, response);
     }
 
@@ -169,27 +169,64 @@ public class EpubReaderService {
     }
 
     private Path getOrExtractAssetToCache(Path epubPath, String diskKey, String entryName) throws IOException {
-        // Use a sub-key for the specific asset to avoid flat namespace collisions in cache dir
-        String assetCacheKey = diskKey + "/" + Integer.toHexString(entryName.hashCode());
-        String fileName = entryName.contains("/") ? entryName.substring(entryName.lastIndexOf('/') + 1) : entryName;
+        String assetCacheKey = diskKey + "/assets";
+        String fileName = sha256Hex(entryName) + safeExtension(entryName);
         Path cached = chapterCacheService.getCachedAsset(assetCacheKey, fileName);
 
         if (Files.exists(cached) && Files.size(cached) > 0) {
             return cached;
         }
 
-        Files.createDirectories(cached.getParent());
-        Path tmp = Files.createTempFile(cached.getParent(), "epub-", ".tmp");
+        ReentrantLock lock = chapterCacheService.lockForCacheKey(diskKey);
+        lock.lock();
         try {
-            try (OutputStream out = Files.newOutputStream(tmp);
-                 NativeArchive archive = NativeArchive.open(epubPath)) {
-                archive.streamEntry(entryName, out);
+            if (Files.exists(cached) && Files.size(cached) > 0) {
+                return cached;
             }
-            Files.move(tmp, cached, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+
+            Files.createDirectories(cached.getParent());
+            Path tmp = Files.createTempFile(cached.getParent(), "epub-", ".tmp");
+            try {
+                try (OutputStream out = Files.newOutputStream(tmp);
+                     NativeArchive archive = NativeArchive.open(epubPath)) {
+                    archive.streamEntry(entryName, out);
+                }
+                Files.move(tmp, cached, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } finally {
+                Files.deleteIfExists(tmp);
+            }
         } finally {
-            Files.deleteIfExists(tmp);
+            lock.unlock();
         }
         return cached;
+    }
+
+    private static String safeExtension(String path) {
+        int slash = path.lastIndexOf('/');
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return ".bin";
+        }
+
+        String ext = name.substring(dot).toLowerCase(Locale.ROOT);
+        return ext.matches("\\.[a-z0-9]{1,12}") ? ext : ".bin";
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+
+            StringBuilder sb = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) {
+                sb.append(Character.forDigit((b >>> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 
     private String getDiskKey(Long bookId, String bookType, long lastModified, long size) {

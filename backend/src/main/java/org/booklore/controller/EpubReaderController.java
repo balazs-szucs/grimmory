@@ -54,14 +54,9 @@ public class EpubReaderController {
         String contentType = epubReaderService.getContentType(bookId, bookType, cleanPath);
         response.setContentType(contentType);
 
-        long fileSize = epubReaderService.getFileSize(bookId, bookType, cleanPath);
-        if (fileSize > 0) {
-            response.setContentLengthLong(fileSize);
-        }
-
         // Defense in depth for untrusted EPUB resources. See Foliate's security guidance:
         // https://github.com/johnfactotum/foliate-js#security
-        response.setHeader("Content-Security-Policy", "script-src 'none'");
+        response.setHeader("Content-Security-Policy", "script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
 
         if (contentType.startsWith("font/") ||
                 "application/font-woff".equals(contentType) ||
@@ -71,7 +66,7 @@ public class EpubReaderController {
         }
 
         try {
-            epubReaderService.streamFile(bookId, bookType, cleanPath, request, response);
+            epubReaderService.streamFile(bookId, bookType, cleanPath, contentType, request, response);
         } catch (FileNotFoundException e) {
             response.reset();
             response.sendError(HttpServletResponse.SC_NOT_FOUND);

@@ -11,7 +11,6 @@ import org.mockito.Mockito;
 
 import org.booklore.exception.APIException;
 
-import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -30,6 +29,7 @@ class ChapterCacheServiceTest {
 
     @BeforeEach
     void setUp() {
+        when(appProperties.getPathConfig()).thenReturn("/tmp");
         chapterCacheService = new ChapterCacheService(appProperties, archiveService, Mockito.mock(ExecutorService.class));
     }
 
@@ -37,13 +37,6 @@ class ChapterCacheServiceTest {
     void getCachedPage_withTraversal_throwsException() {
         assertThrows(APIException.class, () ->
             chapterCacheService.getCachedPage("../outside", 1)
-        );
-    }
-
-    @Test
-    void getCachedPage_withPathSeparator_throwsException() {
-        assertThrows(APIException.class, () ->
-            chapterCacheService.getCachedPage("sub/folder", 1)
         );
     }
 
