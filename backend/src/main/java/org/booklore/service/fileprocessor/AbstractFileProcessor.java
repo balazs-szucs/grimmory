@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 
 @Slf4j
 public abstract class AbstractFileProcessor implements BookFileProcessor {
@@ -116,8 +117,8 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
     protected boolean processAndSaveCover(BookEntity bookEntity,
                                           String fileName,
                                           String formatName,
-                                          ThrowingInputStreamSupplier coverExtractor) {
-        try (InputStream coverStream = coverExtractor.get()) {
+                                          Callable<InputStream> coverExtractor) {
+        try (InputStream coverStream = coverExtractor.call()) {
             if (coverStream == null) {
                 log.warn("No cover image found in {} '{}'", formatName, fileName);
                 return false;
@@ -127,10 +128,5 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
             log.error("Error generating cover for {} '{}': {}", formatName, fileName, e.getMessage(), e);
             return false;
         }
-    }
-
-    @FunctionalInterface
-    protected interface ThrowingInputStreamSupplier {
-        InputStream get() throws Exception;
     }
 }

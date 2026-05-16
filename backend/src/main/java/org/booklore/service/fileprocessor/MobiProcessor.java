@@ -46,8 +46,7 @@ public class MobiProcessor extends AbstractFileProcessor {
 
     @Override
     public BookEntity processNewFile(LibraryFile libraryFile) {
-        BookFileType fileType = determineFileType(libraryFile.getFileName());
-        BookEntity bookEntity = bookCreatorService.createShellBook(libraryFile, fileType);
+        BookEntity bookEntity = bookCreatorService.createShellBook(libraryFile, BookFileType.MOBI);
         setBookMetadata(bookEntity);
         boolean coverGenerated = generateCover(bookEntity);
         if (!coverGenerated) {
@@ -77,10 +76,6 @@ public class MobiProcessor extends AbstractFileProcessor {
     @Override
     public List<BookFileType> getSupportedTypes() {
         return List.of(BookFileType.MOBI);
-    }
-
-    private BookFileType determineFileType(String fileName) {
-        return BookFileType.MOBI;
     }
 
     private void setBookMetadata(BookEntity bookEntity) {

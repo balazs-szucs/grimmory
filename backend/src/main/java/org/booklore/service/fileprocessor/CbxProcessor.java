@@ -78,11 +78,7 @@ public class CbxProcessor extends AbstractFileProcessor {
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
         Path bookPath = FileUtils.getBookFullPath(bookEntity, bookFile);
 
-        boolean saved = processAndSaveCover(bookEntity, bookFile.getFileName(), "CBX", () -> cbxMetadataExtractor.extractCover(bookPath));
-        if (!saved) {
-            log.warn("Could not save image extracted from CBX as cover for '{}'", bookFile.getFileName());
-        }
-        return saved;
+        return processAndSaveCover(bookEntity, bookFile.getFileName(), "CBX", () -> cbxMetadataExtractor.extractCover(bookPath));
     }
 
     @Override

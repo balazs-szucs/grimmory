@@ -426,7 +426,18 @@ class FileServiceTest {
 
                 fileService.saveImage(imageData, outputPath.toString());
 
-                verify(vipsImageService).processStreamToJpeg(any(InputStream.class), any(OutputStream.class), eq(1000), eq(1500));
+                verify(vipsImageService).flattenResizeAndSave(eq(imageData), eq(outputPath), eq(1000), eq(1500));
+            }
+
+            @Test
+            void validStream_callsVips() throws IOException {
+                byte[] imageData = new byte[]{1, 2, 3};
+                Path outputPath = tempDir.resolve("test-stream-output.jpg");
+                InputStream is = new ByteArrayInputStream(imageData);
+
+                fileService.saveImage(is, outputPath.toString());
+
+                verify(vipsImageService).processStreamToJpeg(eq(is), any(OutputStream.class), eq(1000), eq(1500));
             }
 
             @Test
@@ -446,14 +457,16 @@ class FileServiceTest {
 
                 fileService.saveImage(emptyData, outputPath.toString());
 
-                verify(vipsImageService, never()).processStreamToJpeg(any(InputStream.class), any(OutputStream.class), anyInt(), anyInt());
+                verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService, never()).processStreamToJpeg(any(), any(), anyInt(), anyInt());
             }
 
             @Test
             void nullImageData_doesNotCallVips() throws IOException {
                 Path outputPath = tempDir.resolve("null.jpg");
                 fileService.saveImage((byte[]) null, outputPath.toString());
-                verify(vipsImageService, never()).processStreamToJpeg(any(InputStream.class), any(OutputStream.class), anyInt(), anyInt());
+                verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService, never()).processStreamToJpeg(any(), any(), anyInt(), anyInt());
             }
         }
     }
