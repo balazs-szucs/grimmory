@@ -1,5 +1,7 @@
 package org.booklore.service.reader;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.AppProperties;
@@ -19,7 +21,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -34,15 +35,21 @@ import java.util.stream.Stream;
 public class ChapterCacheService {
 
     private static final long MTIME_TOLERANCE_MS = 2000;
-    private static final long TOUCH_DEBOUNCE_MS = Duration.ofSeconds(30).toMillis();
-    private static final int TOUCH_DEBOUNCE_MAX_KEYS = 50_000;
     private static final int DEFAULT_MAX_CACHE_AGE_DAYS = 14;
 
     private final AppProperties appProperties;
     private final ArchiveService archiveService;
     private final ExecutorService readerCacheExecutor;
-    private final ConcurrentHashMap<String, ReentrantLock> cacheLocks = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Path, Long> touchDebounce = new ConcurrentHashMap<>();
+
+    private final Cache<String, ReentrantLock> cacheLocks = Caffeine.newBuilder()
+            .expireAfterAccess(Duration.ofMinutes(30))
+            .maximumSize(10_000)
+            .build();
+
+    private final Cache<Path, Boolean> touchDebounce = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofSeconds(30))
+            .maximumSize(50_000)
+            .build();
 
     @Scheduled(fixedDelay = 1, initialDelay = 1, timeUnit = TimeUnit.HOURS)
     public void cleanupCache() {
@@ -146,15 +153,8 @@ public class ChapterCacheService {
             return;
         }
 
-        long now = System.currentTimeMillis();
-        Long previous = touchDebounce.put(normalized, now);
-        if (previous != null && now - previous < TOUCH_DEBOUNCE_MS) {
+        if (touchDebounce.asMap().putIfAbsent(normalized, Boolean.TRUE) != null) {
             return;
-        }
-
-        if (touchDebounce.size() > TOUCH_DEBOUNCE_MAX_KEYS) {
-            long cutoff = now - (TOUCH_DEBOUNCE_MS * 2);
-            touchDebounce.entrySet().removeIf(e -> e.getValue() < cutoff);
         }
 
         readerCacheExecutor.execute(() -> {
@@ -165,7 +165,7 @@ public class ChapterCacheService {
     }
 
     public ReentrantLock lockForCacheKey(String cacheKey) {
-        return cacheLocks.computeIfAbsent(cacheKey, _ -> new ReentrantLock());
+        return cacheLocks.get(cacheKey, _ -> new ReentrantLock());
     }
 
     private long calculateDirectorySize(Path path) throws IOException {

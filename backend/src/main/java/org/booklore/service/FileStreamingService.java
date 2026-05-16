@@ -321,7 +321,7 @@ public class FileStreamingService {
                 break;
             }
 
-            Thread.onSpinWait();
+            Thread.yield();
         }
         out.flush();
     }

@@ -160,12 +160,13 @@ public class PdfReaderService {
         Path cached = renderPageToDiskOnce(pdfPath, diskKey, page);
 
         // Trigger sequential prefetching for better UX
-        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata);
+        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata, pdfPath);
 
         fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
+
     }
 
-    private void prefetchPages(Long bookId, String bookType, int from, int to, CachedPdfMetadata metadata) {
+    private void prefetchPages(Long bookId, String bookType, int from, int to, CachedPdfMetadata metadata, Path pdfPath) {
         ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
         String diskKey = getDiskKey(key);
         int end = Math.min(to, metadata.pageCount);
@@ -183,7 +184,6 @@ public class PdfReaderService {
 
         readerCacheExecutor.submit(() -> {
             try {
-                Path pdfPath = getBookPath(bookId, bookType);
                 renderPageBatch(pdfPath, diskKey, pages);
             } catch (Exception e) {
                 log.debug("PDF prefetch failed for book {}: {}", bookId, e.getMessage());

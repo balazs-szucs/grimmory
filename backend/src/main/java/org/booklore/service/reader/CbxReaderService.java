@@ -371,12 +371,12 @@ public class CbxReaderService {
         Path cached = getOrExtractPageToCache(cbxPath, diskKey, page, entryName);
 
         // Trigger sequential prefetching for better UX
-        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata);
+        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata, cbxPath);
 
         fileStreamingService.streamWithRangeSupport(cached, contentType, request, response);
     }
 
-    private void prefetchPages(Long bookId, String bookType, int from, int to, CachedArchiveMetadata metadata) {
+    private void prefetchPages(Long bookId, String bookType, int from, int to, CachedArchiveMetadata metadata, Path cbxPath) {
         int end = Math.min(to, metadata.imageEntries().size());
         if (from > end) {
             return;
@@ -399,7 +399,6 @@ public class CbxReaderService {
 
         readerCacheExecutor.submit(() -> {
             try {
-                Path cbxPath = getBookPath(bookId, bookType);
                 for (int page : pages) {
                     String entryName = metadata.imageEntries().get(page - 1);
                     getOrExtractPageToCache(cbxPath, diskKey, page, entryName);
