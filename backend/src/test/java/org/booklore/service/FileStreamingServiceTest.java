@@ -189,7 +189,7 @@ class FileStreamingServiceTest {
 
         String expectedETag = computeExpectedETag(testFile);
         verify(response).setHeader("ETag", expectedETag);
-        verify(response).setHeader("Cache-Control", "no-cache, must-revalidate");
+        verify(response).setHeader("Cache-Control", "private, no-cache, must-revalidate");
         verify(response, never()).setHeader(eq("Pragma"), any());
     }
 

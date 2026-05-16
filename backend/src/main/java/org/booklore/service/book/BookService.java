@@ -392,6 +392,11 @@ public class BookService {
         return ResponseEntity.ok(new FileSystemResource(path));
     }
 
+    @Deprecated(since = "2.x", forRemoval = true)
+    public ResponseEntity<Resource> getBookContent(long bookId, String bookType) {
+        throw new UnsupportedOperationException("Use streamBookContent instead");
+    }
+
     public void replaceBookContent(long bookId, String bookType, InputStream content) throws IOException {
         BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));

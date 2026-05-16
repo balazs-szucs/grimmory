@@ -78,10 +78,9 @@ public class FileStreamingService {
         response.setContentType(contentType);
         response.setHeader("ETag", etag);
         response.setDateHeader("Last-Modified", lastModified);
-        response.setHeader("Vary", "Accept-Encoding");
         // Allow caching with mandatory revalidation via ETag eliminates
         // redundant byte transfers on seeks while keeping access-control checks.
-        response.setHeader("Cache-Control", "no-cache, must-revalidate");
+        response.setHeader("Cache-Control", "private, no-cache, must-revalidate");
         response.setHeader("Content-Disposition", "inline");
 
         // Handle ETag-based conditional revalidation
@@ -297,59 +296,27 @@ public class FileStreamingService {
             long count,
             OutputStream out
     ) throws IOException {
-        if (count <= 0) {
-            out.flush();
-            return;
-        }
+        byte[] bytes = new byte[BUFFER_SIZE];
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
 
-        WritableByteChannel outChannel = Channels.newChannel(out);
-        long transferred = 0;
-        int stallCount = 0;
-
-        while (transferred < count) {
-            long n = source.transferTo(position + transferred, count - transferred, outChannel);
-            if (n > 0) {
-                transferred += n;
-                stallCount = 0;
-                continue;
-            }
-
-            // Fallback for NFS/FUSE/OverlayFS where transferTo returns 0 indefinitely
-            if (++stallCount > 100) {
-                copyWithHeapBuffer(source, position + transferred, count - transferred, out);
-                break;
-            }
-
-            // High-frequency stall, pause briefly to wait for I/O readiness
-            LockSupport.parkNanos(1_000_000L);
-        }
-        out.flush();
-    }
-
-    private static void copyWithHeapBuffer(
-            FileChannel source,
-            long position,
-            long count,
-            OutputStream out
-    ) throws IOException {
-        byte[] buf = new byte[BUFFER_SIZE];
-        ByteBuffer bb = ByteBuffer.wrap(buf);
         long remaining = count;
         long offset = position;
 
         while (remaining > 0) {
-            bb.clear();
-            bb.limit((int) Math.min(buf.length, remaining));
+            buffer.clear();
+            buffer.limit((int) Math.min(bytes.length, remaining));
 
-            int read = source.read(bb, offset);
+            int read = source.read(buffer, offset);
             if (read < 0) {
                 throw new EOFException("Unexpected EOF at position " + offset);
             }
 
-            out.write(buf, 0, read);
+            out.write(bytes, 0, read);
             offset += read;
             remaining -= read;
         }
+
+        out.flush();
     }
 
     /**
@@ -363,6 +330,7 @@ public class FileStreamingService {
 
     // Byte-range parser
     static Range parseRange(String header, long size) {
+        if (size <= 0) return null;
         if (header == null || header.length() < 6 || !header.regionMatches(true, 0, "bytes=", 0, 6)) return null;
 
         int startPos = 6, len = header.length();

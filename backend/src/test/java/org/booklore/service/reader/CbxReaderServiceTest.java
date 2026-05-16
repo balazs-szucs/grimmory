@@ -1,15 +1,16 @@
 package org.booklore.service.reader;
 
-import com.github.benmanes.caffeine.cache.Cache;
 import org.booklore.exception.ApiError;
 import org.booklore.exception.APIException;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.service.ArchiveService;
+import org.booklore.service.FileStreamingService;
 import org.booklore.service.reader.ChapterCacheService;
 import org.booklore.util.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -17,11 +18,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
-import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -38,11 +38,17 @@ class CbxReaderServiceTest {
     @Mock
     ChapterCacheService chapterCacheService;
 
+    @Mock
+    FileStreamingService fileStreamingService;
+
     @InjectMocks
     CbxReaderService cbxReaderService;
 
     @Captor
     ArgumentCaptor<Long> longCaptor;
+
+    @TempDir
+    Path tempDir;
 
     BookEntity bookEntity;
     Path cbzPath;
@@ -51,7 +57,13 @@ class CbxReaderServiceTest {
     void setup() throws Exception {
         bookEntity = new BookEntity();
         bookEntity.setId(1L);
-        cbzPath = Path.of("/tmp/test.cbz");
+        cbzPath = tempDir.resolve("test.cbz");
+        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(cbzPath))) {
+            ZipEntry entry = new ZipEntry("1.jpg");
+            zos.putNextEntry(entry);
+            zos.write(new byte[]{1, 2, 3});
+            zos.closeEntry();
+        }
     }
 
     @Test
@@ -65,12 +77,8 @@ class CbxReaderServiceTest {
         when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
         when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
 
-        try (
-            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
-            MockedStatic<Files> filesStatic = mockStatic(Files.class);
-        ) {
+        try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
-            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
 
             cbxReaderService.initCache(1L, null);
 
@@ -83,15 +91,13 @@ class CbxReaderServiceTest {
     void testStreamPageImage_Success() throws Exception {
         when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
         when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
-        when(
-            archiveService.transferEntryTo(eq(cbzPath), eq("1.jpg"), any())
-        ).then((i) -> {i.getArgument(2, OutputStream.class).write(new byte[]{1, 2, 3}); return null; });
-        try (
-            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
-            MockedStatic<Files> filesStatic = mockStatic(Files.class);
-        ) {
+        
+        // Return a dummy path for the cached page
+        Path dummyPath = tempDir.resolve("dummy.jpg");
+        when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(dummyPath);
+        
+        try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
-            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
 
             cbxReaderService.initCache(1L, null);
 
@@ -105,12 +111,9 @@ class CbxReaderServiceTest {
     void testStreamPageImage_PageOutOfRange_Throws() throws Exception {
         when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
         when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
-        try (
-            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
-            MockedStatic<Files> filesStatic = mockStatic(Files.class);
-        ) {
+
+        try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
-            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
 
             cbxReaderService.initCache(1L, null);
 
@@ -125,12 +128,9 @@ class CbxReaderServiceTest {
     void testStreamPageImage_EntryNotFound_Throws() throws Exception {
         when(bookRepository.findByIdForStreaming(1L)).thenReturn(Optional.of(bookEntity));
         when(archiveService.streamEntryNames(cbzPath)).then((i) -> Stream.of("1.jpg"));
-        try (
-            MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class);
-            MockedStatic<Files> filesStatic = mockStatic(Files.class);
-        ) {
+
+        try (MockedStatic<FileUtils> fileUtilsStatic = mockStatic(FileUtils.class)) {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(bookEntity)).thenReturn(cbzPath);
-            filesStatic.when(() -> Files.getLastModifiedTime(cbzPath)).thenReturn(FileTime.from(Instant.now()));
 
             assertThrows(
                     FileNotFoundException.class,

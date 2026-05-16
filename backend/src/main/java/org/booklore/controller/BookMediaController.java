@@ -72,7 +72,7 @@ public class BookMediaController {
     public void getCbxPage(
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Page number to retrieve") @PathVariable int pageNumber,
-            @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
+            @Parameter(description = "Optional book type for alternative comic/archive format, e.g. CBZ, CBR") @RequestParam(required = false) String bookType,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         cbxReaderService.streamPageImage(bookId, bookType, pageNumber, request, response);
@@ -85,7 +85,7 @@ public class BookMediaController {
     public void getPdfPage(
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Page number to retrieve") @PathVariable int pageNumber,
-            @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
+            @Parameter(description = "Optional book type for alternative comic/archive format, e.g. CBZ, CBR") @RequestParam(required = false) String bookType,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         pdfReaderService.streamPageImage(bookId, bookType, pageNumber, request, response);

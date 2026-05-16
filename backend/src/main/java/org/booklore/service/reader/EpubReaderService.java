@@ -74,9 +74,6 @@ public class EpubReaderService {
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
 
-
-
-    private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
     private record CachedEpubMetadata(EpubBookInfo bookInfo, long lastModified,
                                       Set<String> validPaths,
                                       Map<String, EpubManifestItem> manifestByHref) {
@@ -112,7 +109,7 @@ public class EpubReaderService {
     public EpubBookInfo getBookInfo(Long bookId, String bookType) {
         Path epubPath = getBookPath(bookId, bookType);
         try {
-            CachedEpubMetadata metadata = getCachedMetadata(epubPath, bookId, bookType);
+            CachedEpubMetadata metadata = getCachedMetadata(epubPath);
             return metadata.bookInfo;
         } catch (IOException e) {
             log.error("Failed to read EPUB for book {}", bookId, e);
@@ -126,7 +123,7 @@ public class EpubReaderService {
 
     public void streamFile(Long bookId, String bookType, String filePath, OutputStream outputStream) throws IOException {
         Path epubPath = getBookPath(bookId, bookType);
-        CachedEpubMetadata metadata = getCachedMetadata(epubPath, bookId, bookType);
+        CachedEpubMetadata metadata = getCachedMetadata(epubPath);
 
         String cleanPath = filePath.startsWith("/") ? filePath.substring(1) : filePath;
         String actualPath;
@@ -154,7 +151,7 @@ public class EpubReaderService {
     public String getContentType(Long bookId, String bookType, String filePath) {
         Path epubPath = getBookPath(bookId, bookType);
         try {
-            CachedEpubMetadata metadata = getCachedMetadata(epubPath, bookId, bookType);
+            CachedEpubMetadata metadata = getCachedMetadata(epubPath);
             String normalizedPath = normalizePath(filePath, metadata.bookInfo.getRootPath());
             EpubManifestItem item = metadata.manifestByHref.get(normalizedPath);
             return item != null ? item.getMediaType() : guessContentType(filePath);
@@ -170,7 +167,7 @@ public class EpubReaderService {
     public long getFileSize(Long bookId, String bookType, String filePath) {
         Path epubPath = getBookPath(bookId, bookType);
         try {
-            CachedEpubMetadata metadata = getCachedMetadata(epubPath, bookId, bookType);
+            CachedEpubMetadata metadata = getCachedMetadata(epubPath);
             String normalizedPath = normalizePath(filePath, metadata.bookInfo.getRootPath());
 
             // O(1) lookup instead of O(n) stream filter
@@ -196,7 +193,7 @@ public class EpubReaderService {
         return FileUtils.getBookFullPath(bookEntity);
     }
 
-    private CachedEpubMetadata getCachedMetadata(Path epubPath, Long bookId, String bookType) throws IOException {
+    private CachedEpubMetadata getCachedMetadata(Path epubPath) throws IOException {
         String cacheKey = epubPath.toString();
         long currentModified = Files.getLastModifiedTime(epubPath).toMillis();
         CachedEpubMetadata cached = metadataCache.getIfPresent(cacheKey);
@@ -362,15 +359,6 @@ public class EpubReaderService {
                 .href(href)
                 .children(children)
                 .build();
-    }
-
-    private ReaderCacheKey getCacheKey(Long bookId, String bookType, long lastModified) {
-        BookFileType type = null;
-        if (bookType != null) {
-            type = BookFileType.fromName(bookType)
-                    .orElseThrow(() -> ApiError.INVALID_INPUT.createException("Invalid book type: " + bookType));
-        }
-        return new ReaderCacheKey(bookId, type, lastModified);
     }
 
     private String normalizePath(String path, String rootPath) {

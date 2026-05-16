@@ -14,6 +14,7 @@ import org.booklore.repository.BookRepository;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.booklore.service.FileStreamingService;
@@ -27,8 +28,6 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
@@ -51,12 +50,22 @@ public class PdfReaderService {
     private final FileStreamingService fileStreamingService;
 
     /** Tracks which books are currently being pre-rendered to disk. */
-    private final Set<String> cacheInitSubmitted = ConcurrentHashMap.newKeySet();
+    private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(60))
+            .maximumSize(10_000)
+            .build();
 
     /**
      * Dedicated executor for background PDF rendering.
      */
-    private final ExecutorService cacheExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ExecutorService cacheExecutor = Executors.newFixedThreadPool(
+            Math.max(2, Runtime.getRuntime().availableProcessors() / 2)
+    );
+
+    @PreDestroy
+    void shutdown() {
+        cacheExecutor.shutdown();
+    }
 
     /** Lightweight metadata cache - no native handles, just page count + outline. */
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
@@ -68,14 +77,17 @@ public class PdfReaderService {
      * Per-book render locks to prevent duplicate renders and memory spikes.
      * Locking on the book level ensures only one PDFium document is open per book.
      */
-    private final ConcurrentHashMap<ReaderCacheKey, ReentrantLock> renderLocks = new ConcurrentHashMap<>();
+    private static final int LOCK_STRIPES = 64;
+    private final ReentrantLock[] renderLocks = IntStream.range(0, LOCK_STRIPES)
+            .mapToObj(_ -> new ReentrantLock())
+            .toArray(ReentrantLock[]::new);
 
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
     private record CachedPdfMetadata(int pageCount, long lastModified, List<PdfOutlineItem> outline) {}
 
     public void initCache(Long bookId, String bookType) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
-        CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+        CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
         String diskKey = getDiskKey(cacheKey);
 
@@ -116,7 +128,7 @@ public class PdfReaderService {
     public List<Integer> getAvailablePages(Long bookId, String bookType) {
         Path pdfPath = getBookPath(bookId, bookType);
         try {
-            CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+            CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
             return IntStream.rangeClosed(1, metadata.pageCount)
                     .boxed()
                     .toList();
@@ -129,7 +141,7 @@ public class PdfReaderService {
     public PdfBookInfo getBookInfo(Long bookId, String bookType) {
         Path pdfPath = getBookPath(bookId, bookType);
         try {
-            CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+            CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
             return PdfBookInfo.builder()
                     .pageCount(metadata.pageCount)
                     .outline(metadata.outline)
@@ -146,12 +158,11 @@ public class PdfReaderService {
 
     public void streamPageImage(Long bookId, String bookType, int page, OutputStream outputStream) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
-        CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+        CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
         String diskKey = getDiskKey(cacheKey);
 
         validatePageRequest(bookId, page, metadata.pageCount);
-        submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
 
         Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
         Files.copy(cached, outputStream);
@@ -159,19 +170,18 @@ public class PdfReaderService {
 
     public void streamPageImage(Long bookId, String bookType, int page, HttpServletRequest request, HttpServletResponse response) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
-        CachedPdfMetadata metadata = getCachedMetadata(pdfPath, bookId, bookType);
+        CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
         ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
         String diskKey = getDiskKey(cacheKey);
 
         validatePageRequest(bookId, page, metadata.pageCount);
-        submitBackgroundCacheInit(bookId, bookType, metadata.lastModified);
 
         Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
         fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
     }
 
     private Path renderPageToDiskOnce(Path pdfPath, ReaderCacheKey key, String diskKey, int page) throws IOException {
-        ReentrantLock lock = renderLocks.computeIfAbsent(key, _ -> new ReentrantLock());
+        ReentrantLock lock = renderLocks[Math.floorMod(key.hashCode(), LOCK_STRIPES)];
 
         lock.lock();
         try {
@@ -189,15 +199,12 @@ public class PdfReaderService {
             return cached;
         } finally {
             lock.unlock();
-            if (!lock.hasQueuedThreads()) {
-                renderLocks.remove(key, lock);
-            }
         }
     }
 
     private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
         String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.add(key)) {
+        if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
             cacheExecutor.submit(() -> {
                 try {
                     initCache(bookId, bookType);
@@ -246,7 +253,7 @@ public class PdfReaderService {
         }
     }
 
-    private CachedPdfMetadata getCachedMetadata(Path pdfPath, Long bookId, String bookType) throws IOException {
+    private CachedPdfMetadata getCachedMetadata(Path pdfPath) throws IOException {
         String cacheKey = pdfPath.toString();
         long currentModified = Files.getLastModifiedTime(pdfPath).toMillis();
         CachedPdfMetadata cached = metadataCache.getIfPresent(cacheKey);

@@ -30,16 +30,8 @@ public class TomcatStreamingConfig {
             if (connector.getProtocolHandler() instanceof AbstractHttp11Protocol<?> protocol) {
                 protocol.setUseSendfile(true);
 
-                protocol.setProperty("socket.appReadBufSize", "131072");
-                protocol.setProperty("socket.appWriteBufSize", "131072");
-
-                log.info("Tomcat streaming config: sendfile={}, readBuf=128KB, writeBuf=128KB",
-                        protocol.getUseSendfile());
+                log.info("Tomcat sendfile enabled: {}", protocol.getUseSendfile());
             }
-
-            // Enable HTTP/2 multiplexing for concurrent asset delivery
-            connector.addUpgradeProtocol(new Http2Protocol());
-            log.info("Tomcat HTTP/2 upgrade protocol enabled");
         };
     }
 }
