@@ -36,7 +36,7 @@ class PdfMetadataExtractorTest {
     @BeforeEach
     void setUp() throws IOException {
         vipsImageService = Mockito.mock(VipsImageService.class);
-        when(vipsImageService.renderPageToJpeg(any(), anyInt(), anyInt())).thenReturn(new byte[]{(byte) 0xFF, (byte) 0xD8, 0x00});
+        when(vipsImageService.renderPdfPageToJpeg(any(), anyInt(), anyInt(), anyInt())).thenReturn(new byte[]{(byte) 0xFF, (byte) 0xD8, 0x00});
         extractor = new PdfMetadataExtractor(vipsImageService);
     }
 

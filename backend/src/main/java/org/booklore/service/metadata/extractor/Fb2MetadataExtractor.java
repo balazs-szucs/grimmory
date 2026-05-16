@@ -104,7 +104,7 @@ public class Fb2MetadataExtractor implements FileMetadataExtractor {
                     switch (localName) {
                         case "title-info" -> extractTitleInfo(reader, metadataBuilder, authors, categories);
                         case "publish-info" -> extractPublishInfo(reader, metadataBuilder);
-                        case "document-info" -> extractDocumentInfo(reader, metadataBuilder);
+                        case "document-info" -> extractDocumentInfo(reader);
                     }
                 }
             }
@@ -215,14 +215,10 @@ public class Fb2MetadataExtractor implements FileMetadataExtractor {
         }
     }
 
-    private void extractDocumentInfo(javax.xml.stream.XMLStreamReader reader, BookMetadata.BookMetadataBuilder builder) throws javax.xml.stream.XMLStreamException {
+    private void extractDocumentInfo(javax.xml.stream.XMLStreamReader reader) throws javax.xml.stream.XMLStreamException {
         while (reader.hasNext()) {
             int event = reader.next();
-            if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
-                if ("id".equals(reader.getLocalName())) {
-                    log.debug("FB2 document ID: {}", reader.getElementText().trim());
-                }
-            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "document-info".equals(reader.getLocalName())) {
+            if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "document-info".equals(reader.getLocalName())) {
                 break;
             }
         }

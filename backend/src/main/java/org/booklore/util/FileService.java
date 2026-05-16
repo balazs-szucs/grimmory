@@ -8,6 +8,7 @@ import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.service.appsettings.AppSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.grimmory.pdfium4j.PdfPage;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -237,14 +238,7 @@ public class FileService {
             log.warn("Skipping saveImage for {}: image data is null or empty", filePath);
             return;
         }
-        File outputFile = new File(filePath);
-        File parentDir = outputFile.getParentFile();
-        if (!parentDir.exists() && !parentDir.mkdirs()) {
-            throw new IOException("Failed to create directory: " + parentDir);
-        }
-        vipsImageService.flattenResizeAndSave(imageData, outputFile.toPath(),
-                MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
-        log.info("Image saved successfully to: {}", filePath);
+        saveImage(new java.io.ByteArrayInputStream(imageData), filePath);
     }
 
     public void saveImage(InputStream inputStream, String filePath) throws IOException {
@@ -761,11 +755,11 @@ public class FileService {
     }
 
     public boolean saveAudiobookCoverImages(byte[] imageData, long bookId) throws IOException {
-        Path tempImage = writeImageBytesToTempFile(imageData);
-        try {
-            return saveAudiobookCoverImages(tempImage, bookId);
-        } finally {
-            deleteTempFileQuietly(tempImage);
+        if (imageData == null || imageData.length == 0) {
+            return false;
+        }
+        try (InputStream is = new java.io.ByteArrayInputStream(imageData)) {
+            return saveAudiobookCoverImages(is, bookId);
         }
     }
 
@@ -801,8 +795,24 @@ public class FileService {
     }
 
     public boolean saveCoverImages(byte[] imageData, long bookId) throws IOException {
-        Path tempImage = writeImageBytesToTempFile(imageData);
+        if (imageData == null || imageData.length == 0) {
+            return false;
+        }
+        try (InputStream is = new java.io.ByteArrayInputStream(imageData)) {
+            return saveCoverImages(is, bookId);
+        }
+    }
+
+    /**
+     * Streams image data from a writer directly into the cover processing pipeline.
+     * This avoids any intermediate byte[] allocations or temporary files.
+     */
+    public boolean saveCoverImages(long bookId, StreamingWriter writer) throws IOException {
+        Path tempImage = Files.createTempFile("booklore-stream-", ".img");
         try {
+            try (OutputStream out = Files.newOutputStream(tempImage)) {
+                writer.write(out);
+            }
             return saveCoverImages(tempImage, bookId);
         } finally {
             deleteTempFileQuietly(tempImage);
@@ -879,6 +889,41 @@ public class FileService {
         return true;
     }
 
+    public boolean savePdfCoverImages(long bookId, PdfPage page) throws IOException {
+        String folderPath = getImagesFolder(bookId);
+        File folder = new File(folderPath);
+        if (!folder.exists() && !folder.mkdirs()) {
+            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
+        }
+
+        Path coverFile = Path.of(folderPath, COVER_FILENAME);
+        Path thumbnailFile = Path.of(folderPath, THUMBNAIL_FILENAME);
+
+        CoverCroppingSettings settings = appSettingService.getAppSettings().getCoverCroppingSettings();
+        boolean verticalCrop = settings != null && settings.isVerticalCroppingEnabled();
+        boolean horizontalCrop = settings != null && settings.isHorizontalCroppingEnabled();
+        double threshold = settings != null ? settings.getAspectRatioThreshold() : 1.5;
+        boolean smartCrop = settings != null && settings.isSmartCroppingEnabled();
+
+        vipsImageService.processPdfCoverUnified(
+                page,
+                coverFile,
+                thumbnailFile,
+                MAX_ORIGINAL_WIDTH,
+                MAX_ORIGINAL_HEIGHT,
+                THUMBNAIL_WIDTH,
+                THUMBNAIL_HEIGHT,
+                verticalCrop,
+                horizontalCrop,
+                threshold,
+                smartCrop,
+                TARGET_COVER_ASPECT_RATIO,
+                SMART_CROP_MARGIN_PERCENT
+        );
+
+        return true;
+    }
+
     public static void setBookCoverPath(BookMetadataEntity bookMetadataEntity) {
         bookMetadataEntity.setCoverUpdatedOn(Instant.now());
     }
@@ -918,26 +963,13 @@ public class FileService {
         }
     }
 
-    private Path writeImageBytesToTempFile(byte[] imageData) throws IOException {
-        if (imageData == null || imageData.length == 0) {
-            throw new IOException("Image data is null or empty");
-        }
-
-        Path tempFile = Files.createTempFile("booklore-image-", ".img");
-        boolean completed = false;
-        try {
-            Files.write(tempFile, imageData);
-            completed = true;
-            return tempFile;
-        } finally {
-            if (!completed) {
-                deleteTempFileQuietly(tempFile);
-            }
-        }
-    }
-
     public String getIconsSvgFolder() {
         return Paths.get(appProperties.getPathConfig(), ICONS_DIR, SVG_DIR).toString();
+    }
+
+    @FunctionalInterface
+    public interface StreamingWriter {
+        void write(OutputStream os) throws IOException;
     }
 
     // ========================================

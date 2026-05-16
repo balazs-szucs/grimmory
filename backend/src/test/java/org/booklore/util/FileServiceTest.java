@@ -17,7 +17,9 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -27,6 +29,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -66,13 +69,11 @@ class FileServiceTest {
         lenient().when(appSettingService.getAppSettings()).thenReturn(appSettings);
 
         // General VIPS stubbing to prevent NPEs in various tests
-        lenient().when(vipsImageService.readDimensionsFromFile(any())).thenReturn(new ImageDimensions(1000, 1500));
-        lenient().when(vipsImageService.readDimensions(any(byte[].class))).thenReturn(new ImageDimensions(1000, 1500));
         lenient().when(vipsImageService.canDecode(any(byte[].class))).thenReturn(true);
         lenient().when(vipsImageService.canDecode(any(Path.class))).thenReturn(true);
         lenient().when(vipsImageService.canDecode(any(InputStream.class))).thenReturn(true);
-        lenient().when(vipsImageService.findContentBounds(any(Path.class))).thenReturn(new TrimBounds(0, 0, 1000, 1500));
-        lenient().when(vipsImageService.findContentBounds(any(byte[].class))).thenReturn(new TrimBounds(0, 0, 1000, 1500));
+        lenient().when(vipsImageService.readDimensions(any(byte[].class))).thenReturn(new ImageDimensions(1000, 1500));
+        lenient().when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(1000, 1500));
 
         RestTemplate mockRestTemplate = mock(RestTemplate.class);
         RestTemplate mockNoRedirectRestTemplate = mock(RestTemplate.class);
@@ -432,7 +433,7 @@ class FileServiceTest {
 
                 fileService.saveImage(imageData, outputPath.toString());
 
-                verify(vipsImageService).flattenResizeAndSave(eq(imageData), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService).processStreamToJpeg(any(InputStream.class), any(OutputStream.class), eq(1000), eq(1500));
             }
 
             @Test
@@ -452,14 +453,14 @@ class FileServiceTest {
 
                 fileService.saveImage(emptyData, outputPath.toString());
 
-                verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService, never()).processStreamToJpeg(any(InputStream.class), any(OutputStream.class), anyInt(), anyInt());
             }
 
             @Test
             void nullImageData_doesNotCallVips() throws IOException {
                 Path outputPath = tempDir.resolve("null.jpg");
                 fileService.saveImage((byte[]) null, outputPath.toString());
-                verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService, never()).processStreamToJpeg(any(InputStream.class), any(OutputStream.class), anyInt(), anyInt());
             }
         }
     }
@@ -471,7 +472,6 @@ class FileServiceTest {
         @BeforeEach
         void setup() throws IOException {
             lenient().when(appProperties.getPathConfig()).thenReturn(tempDir.toString());
-            lenient().when(vipsImageService.readDimensionsFromFile(any())).thenReturn(new ImageDimensions(800, 1200));
         }
 
         @Nested
@@ -485,89 +485,65 @@ class FileServiceTest {
                 boolean result = fileService.saveCoverImages(imageData, 1L);
 
                 assertTrue(result);
-                verify(vipsImageService, atLeastOnce()).flattenResizeAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
-                verify(vipsImageService, atLeastOnce()).flattenThumbnailAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
             void largeImage_isScaledDownToMaxDimensions() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(2000, 3000), new ImageDimensions(1000, 1500));
 
                 boolean result = fileService.saveCoverImages(imageData, 5L);
 
                 assertTrue(result);
-                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), eq(1000), eq(1500), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
             void extremelyTallImage_isCropped() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                // 1000x10000 => ratio 10 (threshold 2.5)
-                when(vipsImageService.readDimensionsFromFile(any(Path.class)))
-                        .thenReturn(new ImageDimensions(1000, 10000))
-                        .thenReturn(new ImageDimensions(1000, 1500));
 
                 boolean result = fileService.saveCoverImages(imageData, 100L);
 
                 assertTrue(result);
-                // Verify flattenCropResizeAndSave is called for the tall image
-                verify(vipsImageService).flattenCropResizeAndSave(any(Path.class), any(Path.class), eq(0), anyInt(), eq(1000), eq(1500), eq(1000), eq(1500));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), eq(1000), eq(1500), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
             void extremelyWideImage_isCropped() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                // 10000x1000 => ratio 10 (threshold 2.5)
-                when(vipsImageService.readDimensionsFromFile(any(Path.class)))
-                        .thenReturn(new ImageDimensions(10000, 1000))
-                        .thenReturn(new ImageDimensions(1000, 1500));
 
                 boolean result = fileService.saveCoverImages(imageData, 101L);
 
                 assertTrue(result);
-                // Verify flattenCropResizeAndSave is called for the wide image
-                // 1000 / 1.5 = 666
-                verify(vipsImageService).flattenCropResizeAndSave(any(Path.class), any(Path.class), anyInt(), eq(0), eq(666), eq(1000), eq(1000), eq(1500));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), eq(1000), eq(1500), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
             void normalAspectRatioImage_isNotCropped() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                // 600x900 => ratio 1.5 (threshold 2.5)
-                when(vipsImageService.readDimensionsFromFile(any(Path.class)))
-                        .thenReturn(new ImageDimensions(600, 900))
-                        .thenReturn(new ImageDimensions(600, 900));
 
                 boolean result = fileService.saveCoverImages(imageData, 102L);
 
                 assertTrue(result);
-                // Should use regular flattenResizeAndSave, not crop
-                verify(vipsImageService, never()).flattenCropResizeAndSave(any(), any(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
-                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), eq(1000), eq(1500), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
             void originalMaintainsDimensions() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(800, 1200));
 
                 fileService.saveCoverImages(imageData, 4L);
 
-                // Verify that we pass the original dimensions or the max allowed
-                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), eq(1000), eq(1500), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
             void smallImage_maintainsOriginalDimensions() throws IOException {
                 byte[] imageData = new byte[]{1, 2, 3};
-                when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(400, 600));
 
                 fileService.saveCoverImages(imageData, 6L);
 
-                // vips thumbnail/resize with maxW/maxH handles not upscaling if not needed,
-                // but we verify the call with correct max bounds.
-                verify(vipsImageService).flattenResizeAndSave(any(Path.class), any(Path.class), eq(1000), eq(1500));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), eq(1000), eq(1500), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
@@ -575,9 +551,7 @@ class FileServiceTest {
                 byte[] imageData = new byte[]{1, 2, 3};
                 fileService.saveCoverImages(imageData, 3L);
 
-                // flattenResizeAndSave internally handles flattening in VipsImageService,
-                // so we just verify the call.
-                verify(vipsImageService, atLeastOnce()).flattenResizeAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
@@ -585,8 +559,7 @@ class FileServiceTest {
                 byte[] imageData = new byte[]{1, 2, 3};
                 fileService.saveCoverImages(imageData, 1L);
 
-                // Verify thumbnail creation with correct target dimensions (250x350)
-                verify(vipsImageService).flattenThumbnailAndSave(any(Path.class), any(Path.class), eq(250), eq(350));
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), anyInt(), anyInt(), eq(250), eq(350), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
         }
 
@@ -597,10 +570,10 @@ class FileServiceTest {
             @Test
             void validImageBytes_succeeds() throws IOException {
                 byte[] imageBytes = new byte[]{1, 2, 3};
-                when(vipsImageService.readDimensions(imageBytes)).thenReturn(new ImageDimensions(300, 400));
+                when(vipsImageService.readDimensions(imageBytes)).thenReturn(new ImageDimensions(100, 100));
 
                 assertDoesNotThrow(() -> fileService.createThumbnailFromBytes(15L, imageBytes));
-                verify(vipsImageService, atLeastOnce()).flattenResizeAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService).processCoverUnified(any(InputStream.class), any(Path.class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
@@ -647,7 +620,7 @@ class FileServiceTest {
     class NetworkOperationsTests {
 
         @Mock
-        private RestTemplate restTemplate;
+        private RestTemplate noRedirectRestTemplate;
 
         @Mock
         private AppSettingService appSettingServiceForNetwork;
@@ -668,7 +641,7 @@ class FileServiceTest {
                     .build();
             lenient().when(appSettingServiceForNetwork.getAppSettings()).thenReturn(appSettings);
 
-            fileService = new FileService(appProperties, restTemplate, appSettingServiceForNetwork, restTemplate, vipsImageService);
+            fileService = new FileService(appProperties, mock(RestTemplate.class), appSettingServiceForNetwork, noRedirectRestTemplate, vipsImageService);
         }
 
         @Nested
@@ -681,9 +654,9 @@ class FileServiceTest {
                 String imageUrl = "http://1.1.1.1/image.jpg";
                 byte[] imageBytes = new byte[]{1, 2, 3};
 
-                ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(imageBytes);
-                when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)))
-                        .thenReturn(responseEntity);
+                ResponseEntity<byte[]> response = ResponseEntity.ok(imageBytes);
+                when(noRedirectRestTemplate.exchange(eq(imageUrl), eq(HttpMethod.GET), any(), eq(byte[].class)))
+                        .thenReturn(response);
 
                 byte[] result = fileService.downloadImageFromUrl(imageUrl);
 
@@ -694,9 +667,9 @@ class FileServiceTest {
             @DisplayName("throws exception when response body is null")
             void downloadImageFromUrl_nullBody_throwsException() {
                 String imageUrl = "http://1.1.1.1/image.jpg";
-                ResponseEntity<byte[]> responseEntity = ResponseEntity.ok(null);
-                when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)))
-                        .thenReturn(responseEntity);
+                ResponseEntity<byte[]> response = ResponseEntity.ok(null);
+                when(noRedirectRestTemplate.exchange(eq(imageUrl), eq(HttpMethod.GET), any(), eq(byte[].class)))
+                        .thenReturn(response);
 
                 assertThrows(IOException.class, () -> fileService.downloadImageFromUrl(imageUrl));
             }
@@ -708,17 +681,22 @@ class FileServiceTest {
                 String cdnIpRedirect = "http://3.168.64.124/cover.jpg";
                 byte[] imageBytes = new byte[]{1, 2, 3};
 
-                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302).header("Location", cdnIpRedirect).build();
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(HttpStatus.FOUND)
+                        .header(HttpHeaders.LOCATION, cdnIpRedirect).build();
                 ResponseEntity<byte[]> imageResponse = ResponseEntity.ok(imageBytes);
 
-                var urlCaptor = ArgumentCaptor.forClass(String.class);
-                when(restTemplate.exchange(urlCaptor.capture(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)))
+                when(noRedirectRestTemplate.exchange(anyString(), eq(HttpMethod.GET), any(), eq(byte[].class)))
                         .thenReturn(redirectResponse, imageResponse);
 
                 byte[] result = fileService.downloadImageFromUrl(originalUrl);
 
                 assertArrayEquals(imageBytes, result);
+                
+                ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+                verify(noRedirectRestTemplate, times(2)).exchange(urlCaptor.capture(), eq(HttpMethod.GET), any(), eq(byte[].class));
+                
                 assertEquals(originalUrl, urlCaptor.getAllValues().get(0));
+                // Verify it was rewritten to use example.com instead of 3.168.64.124
                 assertEquals("http://example.com/cover.jpg", urlCaptor.getAllValues().get(1));
             }
 
@@ -726,9 +704,10 @@ class FileServiceTest {
             @DisplayName("throws exception when redirect exceeds max limit")
             void downloadImageFromUrl_tooManyRedirects_throwsException() {
                 String imageUrl = "http://1.1.1.1/cover.jpg";
-                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(302).header("Location", "http://2.2.2.2/cover.jpg").build();
+                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(HttpStatus.FOUND)
+                        .header(HttpHeaders.LOCATION, "http://2.2.2.2/cover.jpg").build();
 
-                when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(byte[].class)))
+                when(noRedirectRestTemplate.exchange(anyString(), eq(HttpMethod.GET), any(), eq(byte[].class)))
                         .thenReturn(redirectResponse);
 
                 IOException ex = assertThrows(IOException.class, () -> fileService.downloadImageFromUrl(imageUrl));
@@ -747,20 +726,17 @@ class FileServiceTest {
                 long bookId = 42L;
                 byte[] imageBytes = new byte[]{1, 2, 3};
 
-                // For downloadImageToTempFile -> downloadImageToPath -> noRedirectRestTemplate.execute
-                RestTemplate noRedirectRestTemplate = (RestTemplate) ReflectionTestUtils.getField(fileService, "noRedirectRestTemplate");
                 when(noRedirectRestTemplate.execute(anyString(), eq(HttpMethod.GET), any(), any())).thenAnswer(invocation -> {
                     org.springframework.web.client.ResponseExtractor<?> extractor = invocation.getArgument(3);
                     org.springframework.http.client.ClientHttpResponse response = mock(org.springframework.http.client.ClientHttpResponse.class);
-                    when(response.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.OK);
+                    when(response.getStatusCode()).thenReturn(HttpStatus.OK);
                     when(response.getBody()).thenReturn(new ByteArrayInputStream(imageBytes));
-                    extractor.extractData(response);
-                    return null;
+                    return extractor.extractData(response);
                 });
 
                 assertDoesNotThrow(() -> fileService.createThumbnailFromUrl(bookId, imageUrl));
 
-                verify(vipsImageService, atLeastOnce()).flattenResizeAndSave(any(Path.class), any(Path.class), anyInt(), anyInt());
+                verify(vipsImageService).processCoverUnified(any(Path.class), any(Path.class), any(Path.class), anyInt(), anyInt(), anyInt(), anyInt(), anyBoolean(), anyBoolean(), anyDouble(), anyBoolean(), anyDouble(), anyDouble());
             }
 
             @Test
@@ -769,7 +745,6 @@ class FileServiceTest {
                 String imageUrl = "http://example.com/invalid.jpg";
                 long bookId = 42L;
 
-                RestTemplate noRedirectRestTemplate = (RestTemplate) ReflectionTestUtils.getField(fileService, "noRedirectRestTemplate");
                 when(noRedirectRestTemplate.execute(anyString(), eq(HttpMethod.GET), any(), any()))
                         .thenThrow(new RuntimeException("Network error"));
 

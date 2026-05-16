@@ -94,12 +94,8 @@ public class SidecarService {
             bookMetadataUpdater.setBookMetadata(context);
         }
 
-        try (InputStream coverStream = sidecarReader.getSidecarCoverInputStream(bookPath)) {
-            if (coverStream != null) {
-                log.info("Sidecar cover found for book ID {} - cover import is a separate operation", bookId);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to check sidecar cover for book ID {}: {}", bookId, e.getMessage());
+        if (sidecarReader.hasSidecarCover(bookPath)) {
+            log.info("Sidecar cover found for book ID {} - cover import is a separate operation", bookId);
         }
     }
 

@@ -29,6 +29,13 @@ public class SidecarMetadataReader {
                 .build();
     }
 
+    public boolean hasSidecarCover(Path bookPath) {
+        if (bookPath == null) {
+            return false;
+        }
+        return Files.exists(getCoverPath(bookPath));
+    }
+
     public Optional<SidecarMetadata> readSidecarMetadata(Path bookPath) {
         if (bookPath == null) {
             return Optional.empty();

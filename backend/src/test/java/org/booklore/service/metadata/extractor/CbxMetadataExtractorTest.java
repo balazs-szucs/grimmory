@@ -74,7 +74,6 @@ class CbxMetadataExtractorTest {
         for (String key : keys) {
             byte[] data = contents.get(key);
             when(archiveService.getEntryBytes(path, key)).thenReturn(data);
-            when(archiveService.getEntryInputStream(path, key)).thenAnswer(_ -> new ByteArrayInputStream(data));
         }
 
         return path;
@@ -99,7 +98,6 @@ class CbxMetadataExtractorTest {
         String xml = wrapInComicInfo(innerXml);
         byte[] bytes = xml.getBytes();
         when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(bytes);
-        when(archiveService.getEntryInputStream(path, "ComicInfo.xml")).thenAnswer(_ -> new ByteArrayInputStream(bytes));
         when(archiveService.streamEntryNames(path)).then((i) -> Stream.of("ComicInfo.xml"));
 
         return path;

@@ -210,17 +210,14 @@ public class PdfProcessor extends AbstractFileProcessor {
     }
 
     private boolean generateCoverImageAndSave(Long bookId, PdfDocument doc) throws IOException {
-        Path tempCover = Files.createTempFile("booklore-pdf-cover-", ".jpg");
-        try (PdfPage page = doc.page(0);
-             OutputStream out = Files.newOutputStream(tempCover)) {
-            vipsImageService.renderPageToJpeg(page, 150, 85, out);
-            return fileService.saveCoverImages(tempCover, bookId);
+        try (PdfPage page = doc.page(0)) {
+            // Stream directly from native rasterizer to the cover processing pipeline.
+            // This avoids any intermediate byte[] allocations in Java heap.
+            return fileService.savePdfCoverImages(bookId, page);
         } catch (OutOfMemoryError e) {
             log.error("Out of memory (heap space exhausted) while generating cover for bookId {}. Skipping cover generation.", bookId);
             System.gc(); // Hint to JVM to reclaim memory
             return false;
-        } finally {
-            Files.deleteIfExists(tempCover);
         }
     }
 }

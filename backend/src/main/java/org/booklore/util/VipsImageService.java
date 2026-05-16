@@ -22,11 +22,13 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.file.Path;
+import java.io.ByteArrayOutputStream;
+import org.booklore.nativelib.NativeLibraryManager;
 
 @Slf4j
 @Service
 public class VipsImageService {
-    private final boolean available;
+    private final NativeLibraryManager nativeLibraryManager;
 
     /**
      * PDFium flag: reverse byte order so the rasteriser writes RGBA instead of its native BGRA.
@@ -34,19 +36,8 @@ public class VipsImageService {
      */
     private static final int FPDF_REVERSE_BYTE_ORDER = 0x10;
 
-    public VipsImageService() {
-        boolean initialized = false;
-        try {
-            Vips.init();
-            Vips.disableOperationCache();
-            if (log.isDebugEnabled()) {
-                Vips.enableLeakDetection();
-            }
-            initialized = true;
-        } catch (Throwable t) {
-            log.warn("libvips native library not available: {}", t.toString());
-        }
-        this.available = initialized;
+    public VipsImageService(NativeLibraryManager nativeLibraryManager) {
+        this.nativeLibraryManager = nativeLibraryManager;
     }
 
     public ImageDimensions readDimensions(byte[] data) throws IOException {
@@ -161,6 +152,19 @@ public class VipsImageService {
         return runWithArena(arena -> processCoverPipeline(arena, VImage.newFromFile(arena, in.toString()), coverOut, thumbOut,
                 maxW, maxH, thumbW, thumbH, verticalCrop, horizontalCrop, threshold, smartCrop,
                 targetAspectRatio, smartCropMargin));
+    }
+
+    public ImageDimensions processPdfCoverUnified(PdfPage page, Path coverOut, Path thumbOut,
+                                                int maxW, int maxH, int thumbW, int thumbH,
+                                                boolean verticalCrop, boolean horizontalCrop,
+                                                double threshold, boolean smartCrop,
+                                                double targetAspectRatio, double smartCropMargin) throws IOException {
+        return runWithArena(arena -> {
+            VImage img = renderPdfPageAsVipsImage(arena, page, 150); // Use 150 DPI for covers
+            return processCoverPipeline(arena, img, coverOut, thumbOut,
+                    maxW, maxH, thumbW, thumbH, verticalCrop, horizontalCrop, threshold, smartCrop,
+                    targetAspectRatio, smartCropMargin);
+        });
     }
 
     private ImageDimensions processCoverPipeline(Arena arena, VImage img, Path coverOut, Path thumbOut,
@@ -322,6 +326,9 @@ public class VipsImageService {
     public byte[] downscaleAndEncodeJpeg(BufferedImage img, int targetW, int targetH, int q) throws IOException {
         return runWithArena(arena -> {
             VImage vimg = bufferedImageToVips(arena, img);
+            // We delegate downscaling to libvips.thumbnailImage even for BufferedImage inputs.
+            // This is significantly faster than Java2D RescaleOp or AffineTransform and produces
+            // superior results via lanczos3 kernels.
             if (vimg.getWidth() != targetW || vimg.getHeight() != targetH) {
                 vimg = vimg.thumbnailImage(targetW, VipsOption.Int("height", targetH));
             }
@@ -352,29 +359,32 @@ public class VipsImageService {
 
 
     public byte[] renderPageToJpeg(PdfPage page, int dpi, int quality) throws IOException {
-        return runWithArena(arena -> {
-            VImage vimg = flattenIfHasAlpha(renderPdfPageAsVipsImage(arena, page, dpi));
-            return vimg.jpegsaveBuffer(
-                    VipsOption.Int("Q", quality),
-                    VipsOption.Boolean("strip", true),
-                    VipsOption.Boolean("optimize_coding", true)
-            ).getBytes();
-        });
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(64 * 1024);
+        renderPageToJpeg(page, dpi, quality, baos);
+        return baos.toByteArray();
     }
 
     public byte[] renderPdfPageToJpeg(Path path, int page, int dpi, int quality) throws IOException {
-        return runWithArena(arena -> {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(128 * 1024);
+        renderPdfPageToJpeg(path, page, dpi, quality, baos);
+        return baos.toByteArray();
+    }
+
+    public void renderPdfPageToJpeg(Path path, int page, int dpi, int quality, OutputStream os) throws IOException {
+        runWithArena(arena -> {
             // Using VIPS native pdfload via path specifier is much faster than
             // manual rasterization as it allows for internal streaming and optimizations.
             String vipsPath = path.toAbsolutePath().toString() + "[page=" + page + ",dpi=" + dpi + "]";
             VImage img = VImage.newFromFile(arena, vipsPath);
             img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
             img = flattenIfHasAlpha(img);
-            return img.jpegsaveBuffer(
+            img.jpegsaveTarget(
+                    VTarget.newFromOutputStream(arena, os),
                     VipsOption.Int("Q", quality),
                     VipsOption.Boolean("strip", true),
                     VipsOption.Boolean("optimize_coding", true)
-            ).getBytes();
+            );
+            return null;
         });
     }
 
@@ -418,7 +428,7 @@ public class VipsImageService {
     }
 
     private void ensureAvailable() throws IOException {
-        if (!available) {
+        if (!nativeLibraryManager.isVipsAvailable()) {
             throw new IOException("libvips is unavailable (degraded mode)");
         }
     }

@@ -505,9 +505,6 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
                 .orElse(null);
     }
 
-    private boolean canDecode(byte[] bytes) {
-        return vipsImageService.canDecode(bytes);
-    }
 
     private Stream<String> extractCoverEntryNameFromComicInfo(Path cbxPath) {
         Set<String> possibleCoverImages = new LinkedHashSet<>();

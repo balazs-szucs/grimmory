@@ -102,11 +102,6 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         return List.of(BookFileType.CBX);
     }
 
-    // Deprecated in favor of streaming extraction
-    private Optional<byte[]> extractCoverBytesFromArchive(Path path) {
-        return Optional.empty();
-    }
-
     private void extractAndSetMetadata(BookEntity bookEntity) {
         try {
             BookMetadata extracted = cbxMetadataExtractor.extractMetadata(FileUtils.getBookFullPath(bookEntity).toFile());
