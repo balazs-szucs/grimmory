@@ -16,11 +16,6 @@ public class ReaderConfig {
      */
     @Bean(destroyMethod = "shutdown")
     public ExecutorService readerCacheExecutor() {
-        int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
-        return Executors.newFixedThreadPool(threads, r -> {
-            Thread t = new Thread(r, "reader-cache");
-            t.setDaemon(true);
-            return t;
-        });
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 }

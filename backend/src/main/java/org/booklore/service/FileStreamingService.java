@@ -296,6 +296,10 @@ public class FileStreamingService {
             long count,
             OutputStream out
     ) throws IOException {
+        if (count < 8192) {
+            copyWithHeapBuffer(source, position, count, out);
+            return;
+        }
         WritableByteChannel outChannel = Channels.newChannel(out);
         long remaining = count;
         long offset = position;
@@ -379,7 +383,8 @@ public class FileStreamingService {
             }
 
             long end = Long.parseLong(header, dash + 1, endPos, 10); // Bounded: "N-M"
-            return (start > end || start >= size) ? null : new Range(start, Math.min(end, size - 1));
+            if (start > end) return null;
+            return (start >= size) ? null : new Range(start, Math.min(end, size - 1));
         } catch (NumberFormatException e) {
             return null;
         }

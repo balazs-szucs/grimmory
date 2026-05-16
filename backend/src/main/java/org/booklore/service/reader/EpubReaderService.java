@@ -170,7 +170,7 @@ public class EpubReaderService {
 
     private Path getOrExtractAssetToCache(Path epubPath, String diskKey, String entryName) throws IOException {
         // Use a sub-key for the specific asset to avoid flat namespace collisions in cache dir
-        String assetCacheKey = diskKey + "/" + Base64.getUrlEncoder().withoutPadding().encodeToString(entryName.getBytes());
+        String assetCacheKey = diskKey + "/" + Integer.toHexString(entryName.hashCode());
         String fileName = entryName.contains("/") ? entryName.substring(entryName.lastIndexOf('/') + 1) : entryName;
         Path cached = chapterCacheService.getCachedAsset(assetCacheKey, fileName);
 

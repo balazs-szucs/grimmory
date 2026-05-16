@@ -14,11 +14,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
@@ -35,6 +37,7 @@ public class ChapterCacheService {
 
     private final AppProperties appProperties;
     private final ArchiveService archiveService;
+    private final ExecutorService readerCacheExecutor;
     private final ConcurrentHashMap<String, ReentrantLock> cacheLocks = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelay = 1, initialDelay = 1, timeUnit = TimeUnit.HOURS)
@@ -80,6 +83,10 @@ public class ChapterCacheService {
                             .toList();
 
                     for (Path bookDir : sortedBooks) {
+                        String key = bookDir.getFileName().toString();
+                        ReentrantLock lock = cacheLocks.get(key);
+                        if (lock != null && lock.isLocked()) continue;
+
                         long dirSize = calculateDirectorySize(bookDir);
                         deleteDirectoryRecursively(bookDir);
                         currentSize -= dirSize;
@@ -90,6 +97,14 @@ public class ChapterCacheService {
         } catch (IOException e) {
             log.error("Failed to cleanup reader cache", e);
         }
+    }
+
+    private void touch(Path dir) {
+        readerCacheExecutor.execute(() -> {
+            try {
+                Files.setLastModifiedTime(dir, FileTime.from(Instant.now()));
+            } catch (IOException ignored) {}
+        });
     }
 
     private long calculateDirectorySize(Path path) throws IOException {
@@ -156,11 +171,15 @@ public class ChapterCacheService {
     }
 
     public Path getCachedPage(String cacheKey, int pageNumber) {
-        return getCacheDir(cacheKey).resolve("page_" + pageNumber + ".jpg");
+        Path dir = getCacheDir(cacheKey);
+        touch(dir);
+        return dir.resolve("page_" + pageNumber + ".jpg");
     }
 
     public Path getCachedAsset(String cacheKey, String fileName) {
-        return getCacheDir(cacheKey).resolve(fileName);
+        Path dir = getCacheDir(cacheKey);
+        touch(dir);
+        return dir.resolve(fileName);
     }
 
     public boolean hasPage(String cacheKey, int pageNumber) {

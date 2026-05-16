@@ -7,10 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
 
 import org.booklore.exception.APIException;
 
 import java.nio.file.Path;
+import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
@@ -28,7 +30,7 @@ class ChapterCacheServiceTest {
 
     @BeforeEach
     void setUp() {
-        chapterCacheService = new ChapterCacheService(appProperties, archiveService);
+        chapterCacheService = new ChapterCacheService(appProperties, archiveService, Mockito.mock(ExecutorService.class));
     }
 
     @Test

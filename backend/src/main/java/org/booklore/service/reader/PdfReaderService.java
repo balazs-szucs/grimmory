@@ -166,34 +166,50 @@ public class PdfReaderService {
         Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
 
         // Trigger sequential prefetching for better UX
-        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD);
+        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD, metadata);
 
         fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
     }
 
-    private void prefetchPages(Long bookId, String bookType, int from, int to) {
+    private void prefetchPages(Long bookId, String bookType, int from, int to, CachedPdfMetadata metadata) {
         readerCacheExecutor.submit(() -> {
             try {
                 Path pdfPath = getBookPath(bookId, bookType);
-                CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
                 ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
                 String diskKey = getDiskKey(key);
 
-                int end = Math.min(to, metadata.pageCount);
-                for (int page = from; page <= end; page++) {
-                    String prefetchKey = diskKey + ":" + page;
-                    if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
-                        renderPageToDiskOnce(pdfPath, key, diskKey, page);
-                    }
-                }
+                renderPageBatch(pdfPath, key, diskKey, from, to, metadata.pageCount);
             } catch (Exception e) {
                 log.debug("PDF prefetch failed for book {}: {}", bookId, e.getMessage());
             }
         });
     }
 
+    private void renderPageBatch(Path pdfPath, ReaderCacheKey key, String diskKey, int from, int to, int maxPages) throws IOException {
+        int end = Math.min(to, maxPages);
+        if (from > end) return;
+
+        ReentrantLock lock = renderLocks[key.hashCode() & (LOCK_STRIPES - 1)];
+        lock.lock();
+        try (PdfDocument doc = PdfDocument.open(pdfPath)) {
+            for (int page = from; page <= end; page++) {
+                String prefetchKey = diskKey + ":" + page;
+                if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
+                    Path cached = chapterCacheService.getCachedPage(diskKey, page);
+                    if (Files.exists(cached) && Files.size(cached) > 0) continue;
+
+                    Files.createDirectories(cached.getParent());
+                    byte[] jpeg = doc.renderPageToBytes(page - 1, (int) DEFAULT_DPI, "jpeg");
+                    writeAtomically(cached, jpeg);
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private Path renderPageToDiskOnce(Path pdfPath, ReaderCacheKey key, String diskKey, int page) throws IOException {
-        ReentrantLock lock = renderLocks[Math.floorMod(key.hashCode(), LOCK_STRIPES)];
+        ReentrantLock lock = renderLocks[key.hashCode() & (LOCK_STRIPES - 1)];
 
         lock.lock();
         try {

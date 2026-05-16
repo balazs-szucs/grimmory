@@ -86,12 +86,13 @@ public class CbxReaderService {
 
 
     private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified, long size) {}
-    private record CachedArchiveMetadata(List<String> imageEntries, List<CbxPageDimension> pageDimensions, long lastModified, long size) {
+    private record CachedArchiveMetadata(List<String> imageEntries, List<CbxPageDimension> pageDimensions, long lastModified, long size, boolean isZip) {
         CachedArchiveMetadata {
             imageEntries = List.copyOf(imageEntries);
             pageDimensions = pageDimensions != null ? List.copyOf(pageDimensions) : null;
         }
     }
+
 
     public void initCache(Long bookId, String bookType) throws IOException {
         Path cbxPath = getBookPath(bookId, bookType);
@@ -102,7 +103,7 @@ public class CbxReaderService {
 
         if (metadata.pageDimensions() == null) {
             List<CbxPageDimension> dimensions = computeDimensionsFromDiskCache(diskKey, metadata.imageEntries().size());
-            CachedArchiveMetadata updated = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified(), metadata.size());
+            CachedArchiveMetadata updated = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified(), metadata.size(), metadata.isZip());
             archiveCache.put(cbxPath.toString(), updated);
         }
     }
@@ -210,15 +211,15 @@ public class CbxReaderService {
             String diskCacheKey = getDiskKey(ck);
             if (chapterCacheService.hasPage(diskCacheKey, 1) && chapterCacheService.hasPage(diskCacheKey, metadata.imageEntries().size())) {
                 List<CbxPageDimension> dimensions = computeDimensionsFromDiskCache(diskCacheKey, metadata.imageEntries().size());
-                CachedArchiveMetadata updated = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified(), metadata.size());
+                CachedArchiveMetadata updated = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified(), metadata.size(), metadata.isZip());
                 archiveCache.put(cbxPath.toString(), updated);
                 return dimensions;
             }
 
             // Streaming: read only image headers, not full images
-            List<CbxPageDimension> dimensions = readDimensionsStreaming(cbxPath, metadata.imageEntries());
+            List<CbxPageDimension> dimensions = readDimensionsStreaming(cbxPath, metadata.imageEntries(), metadata.isZip());
 
-            CachedArchiveMetadata updatedMetadata = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified(), metadata.size());
+            CachedArchiveMetadata updatedMetadata = new CachedArchiveMetadata(metadata.imageEntries(), dimensions, metadata.lastModified(), metadata.size(), metadata.isZip());
             archiveCache.put(cbxPath.toString(), updatedMetadata);
 
             return dimensions;
@@ -239,9 +240,9 @@ public class CbxReaderService {
      * {@link ArchiveService#getEntryBytesPrefix} which is sufficient for all
      * common image header formats (JPEG SOF, PNG IHDR, WebP VP8, etc.).
      */
-    private List<CbxPageDimension> readDimensionsStreaming(Path cbxPath, List<String> imageEntries) {
+    private List<CbxPageDimension> readDimensionsStreaming(Path cbxPath, List<String> imageEntries, boolean isZip) {
         // Try the ZipFile fast-path first (random access, no full extraction)
-        if (isZipPath(cbxPath)) {
+        if (isZip) {
             try {
                 return readDimensionsViaZipFile(cbxPath, imageEntries);
             } catch (IOException e) {
@@ -422,7 +423,7 @@ public class CbxReaderService {
             return cached;
         }
 
-        ReentrantLock lock = renderLocks[Math.floorMod(cacheKey.hashCode(), LOCK_STRIPES)];
+        ReentrantLock lock = renderLocks[cacheKey.hashCode() & (LOCK_STRIPES - 1)];
         lock.lock();
         try {
             if (Files.exists(cached) && Files.size(cached) > 0) {
@@ -508,9 +509,10 @@ public class CbxReaderService {
     private CachedArchiveMetadata scanArchiveMetadata(Path cbxPath) throws IOException {
         long lastModified = Files.getLastModifiedTime(cbxPath).toMillis();
         long size = Files.size(cbxPath);
+        boolean isZip = isZipPath(cbxPath);
 
         List<String> entries = getImageEntries(cbxPath);
-        return new CachedArchiveMetadata(entries, null, lastModified, size);
+        return new CachedArchiveMetadata(entries, null, lastModified, size, isZip);
     }
 
     private List<String> getImageEntries(Path cbxPath) throws IOException {
