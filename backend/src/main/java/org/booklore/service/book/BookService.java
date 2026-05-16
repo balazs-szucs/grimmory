@@ -25,7 +25,6 @@ import org.booklore.util.FileService;
 import org.booklore.util.FileUtils;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
@@ -379,22 +378,6 @@ public class BookService {
                 .orElse(MediaType.APPLICATION_OCTET_STREAM_VALUE);
 
         fileStreamingService.streamWithRangeSupport(filePath, contentType, request, response);
-    }
-
-    @Deprecated(since = "2.x", forRemoval = true)
-    public ResponseEntity<Resource> getBookContent(long bookId) {
-        BookEntity bookEntity = bookRepository.findByIdWithBookFiles(bookId)
-                .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));
-        Path path = FileUtils.getBookFullPath(bookEntity);
-        if (!Files.exists(path)) {
-            throw ApiError.FILE_NOT_FOUND.createException(path.toString());
-        }
-        return ResponseEntity.ok(new FileSystemResource(path));
-    }
-
-    @Deprecated(since = "2.x", forRemoval = true)
-    public ResponseEntity<Resource> getBookContent(long bookId, String bookType) {
-        throw new UnsupportedOperationException("Use streamBookContent instead");
     }
 
     public void replaceBookContent(long bookId, String bookType, InputStream content) throws IOException {

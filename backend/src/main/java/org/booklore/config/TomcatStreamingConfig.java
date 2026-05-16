@@ -7,13 +7,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
+ * Enables Tomcat's kernel-level sendfile for large file transfers.
  *
  * <ul>
- *   <li><b>sendfile</b> delegates large file transfers to the OS kernel,
- *       bypassing the JVM heap entirely. Tomcat uses this when
- *       {@code org.apache.tomcat.sendfile.support} is set on the request.</li>
- *   <li><b>Socket buffers</b> 128 KB read/write buffers for the non-sendfile
- *       fallback path ({@link org.booklore.service.FileStreamingService} NIO loop).</li>
+ *   <li><b>sendfile</b> delegates large transfers to the OS kernel,
+ *       bypassing the JVM heap. Activated via
+ *       {@code org.apache.tomcat.sendfile.*} request attributes set by
+ *       {@link org.booklore.service.FileStreamingService}.</li>
  *   <li><b>DNS lookups disabled</b> eliminates reverse-DNS overhead per request.</li>
  * </ul>
  */

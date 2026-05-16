@@ -24,6 +24,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -78,7 +79,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(FileStreamingService.class));
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(FileStreamingService.class), Mockito.mock(ExecutorService.class));
             List<Integer> pages = readerService.getAvailablePages(99L);
 
             assertThat(pages).hasSize(3);
@@ -103,7 +104,7 @@ class Rar5IntegrationTest {
             fileUtilsStatic.when(() -> FileUtils.getBookFullPath(book))
                     .thenReturn(cbrCopy);
 
-            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(FileStreamingService.class));
+            CbxReaderService readerService = new CbxReaderService(mockRepo, new ArchiveService(), mockCache, Mockito.mock(FileStreamingService.class), Mockito.mock(ExecutorService.class));
             ByteArrayOutputStream out = new ByteArrayOutputStream();
 
             HttpServletRequest mockRequest = Mockito.mock(HttpServletRequest.class);
