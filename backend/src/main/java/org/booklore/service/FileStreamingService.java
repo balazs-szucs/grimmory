@@ -296,27 +296,49 @@ public class FileStreamingService {
             long count,
             OutputStream out
     ) throws IOException {
-        byte[] bytes = new byte[BUFFER_SIZE];
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        WritableByteChannel outChannel = Channels.newChannel(out);
+        long remaining = count;
+        long offset = position;
 
+        // Try zero-copy first (works on many servlet containers)
+        while (remaining > 0) {
+            long n = source.transferTo(offset, remaining, outChannel);
+            if (n > 0) {
+                offset += n;
+                remaining -= n;
+                continue;
+            }
+            // transferTo returned 0 — fall back to heap copy for the rest
+            copyWithHeapBuffer(source, offset, remaining, out);
+            break;
+        }
+        out.flush();
+    }
+
+    private static void copyWithHeapBuffer(
+            FileChannel source,
+            long position,
+            long count,
+            OutputStream out
+    ) throws IOException {
+        byte[] buf = new byte[BUFFER_SIZE];
+        ByteBuffer bb = ByteBuffer.wrap(buf);
         long remaining = count;
         long offset = position;
 
         while (remaining > 0) {
-            buffer.clear();
-            buffer.limit((int) Math.min(bytes.length, remaining));
+            bb.clear();
+            bb.limit((int) Math.min(buf.length, remaining));
 
-            int read = source.read(buffer, offset);
+            int read = source.read(bb, offset);
             if (read < 0) {
                 throw new EOFException("Unexpected EOF at position " + offset);
             }
 
-            out.write(bytes, 0, read);
+            out.write(buf, 0, read);
             offset += read;
             remaining -= read;
         }
-
-        out.flush();
     }
 
     /**

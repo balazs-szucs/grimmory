@@ -16,7 +16,6 @@ import org.booklore.util.ArchiveUtils;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.booklore.service.FileStreamingService;
@@ -36,9 +35,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.zip.ZipEntry;
@@ -51,9 +48,7 @@ public class CbxReaderService {
 
     private static final String[] SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".gif", ".bmp"};
     private static final int MAX_CACHE_ENTRIES = 50;
-    private static final Pattern NUMERIC_PATTERN = Pattern.compile("(\\d+)|(\\D+)");
     private static final Set<String> SYSTEM_FILES = Set.of(".ds_store", "thumbs.db", "desktop.ini");
-    private static final Pattern DIGIT_PATTERN = Pattern.compile("\\d+");
     /** Bytes to read from a non-ZIP archive entry for image-header dimension detection. */
     private static final int DIMENSION_PREFIX_BYTES = 64 * 1024;
 
@@ -63,21 +58,10 @@ public class CbxReaderService {
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
 
-
-
     private final ArchiveService archiveService;
     private final ChapterCacheService chapterCacheService;
     private final FileStreamingService fileStreamingService;
-
-    /** Dedicated executor for background archive processing. */
-    private final ExecutorService cacheExecutor = Executors.newFixedThreadPool(
-            Math.max(2, Runtime.getRuntime().availableProcessors() / 2)
-    );
-
-    @PreDestroy
-    void shutdown() {
-        cacheExecutor.shutdown();
-    }
+    private final ExecutorService readerCacheExecutor;
 
     /** Tracks books whose async cache init has already been submitted. */
     private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
@@ -125,7 +109,7 @@ public class CbxReaderService {
     private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
         String key = bookId + ":" + bookType + ":" + lastModified;
         if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
-            cacheExecutor.submit(() -> {
+            readerCacheExecutor.submit(() -> {
                 try {
                     initCache(bookId, bookType);
                 } catch (Exception e) {
@@ -411,30 +395,22 @@ public class CbxReaderService {
             }
 
             Files.createDirectories(cached.getParent());
-
-            Path tmp = Files.createTempFile(cached.getParent(), cached.getFileName().toString(), ".tmp");
-            try {
-                try (OutputStream out = Files.newOutputStream(tmp)) {
-                    if (isZipPath(cbxPath)) {
-                        try (ZipFile zip = new ZipFile(cbxPath.toFile())) {
-                            ZipEntry entry = zip.getEntry(entryName);
-                            if (entry != null) {
-                                try (InputStream is = zip.getInputStream(entry)) {
-                                    is.transferTo(out);
-                                }
-                            }
-                        }
-                    } else {
-                        archiveService.transferEntryTo(cbxPath, entryName, out);
-                    }
-                }
-                Files.move(tmp, cached, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } finally {
-                Files.deleteIfExists(tmp);
-            }
+            extractEntryAtomically(cbxPath, entryName, cached);
             return cached;
         } finally {
             lock.unlock();
+        }
+    }
+
+    private void extractEntryAtomically(Path archive, String entryName, Path target) throws IOException {
+        Path tmp = Files.createTempFile(target.getParent(), "cbx-", ".tmp");
+        try {
+            try (OutputStream out = Files.newOutputStream(tmp)) {
+                archiveService.transferEntryTo(archive, entryName, out);
+            }
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            Files.deleteIfExists(tmp);
         }
     }
 

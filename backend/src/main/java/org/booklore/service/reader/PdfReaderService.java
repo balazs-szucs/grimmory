@@ -1,5 +1,7 @@
 package org.booklore.service.reader;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.grimmory.pdfium4j.PdfDocument;
@@ -14,7 +16,6 @@ import org.booklore.repository.BookRepository;
 import org.booklore.util.FileUtils;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.booklore.service.FileStreamingService;
@@ -28,13 +29,8 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 @Slf4j
 @Service
@@ -48,24 +44,6 @@ public class PdfReaderService {
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
     private final FileStreamingService fileStreamingService;
-
-    /** Tracks which books are currently being pre-rendered to disk. */
-    private final Cache<String, Boolean> cacheInitSubmitted = Caffeine.newBuilder()
-            .expireAfterWrite(Duration.ofMinutes(60))
-            .maximumSize(10_000)
-            .build();
-
-    /**
-     * Dedicated executor for background PDF rendering.
-     */
-    private final ExecutorService cacheExecutor = Executors.newFixedThreadPool(
-            Math.max(2, Runtime.getRuntime().availableProcessors() / 2)
-    );
-
-    @PreDestroy
-    void shutdown() {
-        cacheExecutor.shutdown();
-    }
 
     /** Lightweight metadata cache - no native handles, just page count + outline. */
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
@@ -199,20 +177,6 @@ public class PdfReaderService {
             return cached;
         } finally {
             lock.unlock();
-        }
-    }
-
-    private void submitBackgroundCacheInit(Long bookId, String bookType, long lastModified) {
-        String key = bookId + ":" + bookType + ":" + lastModified;
-        if (cacheInitSubmitted.asMap().putIfAbsent(key, Boolean.TRUE) == null) {
-            cacheExecutor.submit(() -> {
-                try {
-                    initCache(bookId, bookType);
-                } catch (Exception e) {
-                    log.warn("Background PDF cache init failed for book {}: {}", bookId, e.getMessage());
-                    // Intentionally NOT removing key - failed PDFs should not be retried indefinitely.
-                }
-            });
         }
     }
 
