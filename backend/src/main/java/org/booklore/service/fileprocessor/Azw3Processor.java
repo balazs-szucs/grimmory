@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,7 +28,7 @@ import static org.booklore.util.FileService.truncate;
 
 @Slf4j
 @Service
-public class Azw3Processor extends AbstractFileProcessor implements BookFileProcessor {
+public class Azw3Processor extends AbstractFileProcessor {
 
     private final Azw3MetadataExtractor azw3MetadataExtractor;
 
@@ -71,21 +70,8 @@ public class Azw3Processor extends AbstractFileProcessor implements BookFileProc
 
     @Override
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
-        try {
-            File azw3File = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
-            try (InputStream coverStream = azw3MetadataExtractor.extractCover(azw3File)) {
-                if (coverStream == null) {
-                    log.warn("No cover image found in AZW3 '{}'", bookFile.getFileName());
-                    return false;
-                }
-
-                return saveCoverImage(coverStream, bookEntity.getId());
-            }
-
-        } catch (Exception e) {
-            log.error("Error generating cover for AZW3 '{}': {}", bookFile.getFileName(), e.getMessage(), e);
-            return false;
-        }
+        File azw3File = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
+        return processAndSaveCover(bookEntity, bookFile.getFileName(), "AZW3", () -> azw3MetadataExtractor.extractCover(azw3File));
     }
 
     @Override
@@ -143,8 +129,5 @@ public class Azw3Processor extends AbstractFileProcessor implements BookFileProc
         }
     }
 
-    private boolean saveCoverImage(InputStream coverStream, long bookId) throws Exception {
-        return fileService.saveCoverImages(coverStream, bookId);
-    }
 }
 

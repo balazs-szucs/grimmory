@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,7 +28,7 @@ import static org.booklore.util.FileService.truncate;
 
 @Slf4j
 @Service
-public class Fb2Processor extends AbstractFileProcessor implements BookFileProcessor {
+public class Fb2Processor extends AbstractFileProcessor {
 
     private final Fb2MetadataExtractor fb2MetadataExtractor;
 
@@ -70,21 +69,8 @@ public class Fb2Processor extends AbstractFileProcessor implements BookFileProce
 
     @Override
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
-        try {
-            File fb2File = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
-            try (InputStream coverStream = fb2MetadataExtractor.extractCover(fb2File)) {
-                if (coverStream == null) {
-                    log.warn("No cover image found in FB2 '{}'", bookFile.getFileName());
-                    return false;
-                }
-
-                return saveCoverImage(coverStream, bookEntity.getId());
-            }
-
-        } catch (Exception e) {
-            log.error("Error generating cover for FB2 '{}': {}", bookFile.getFileName(), e.getMessage(), e);
-            return false;
-        }
+        File fb2File = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
+        return processAndSaveCover(bookEntity, bookFile.getFileName(), "FB2", () -> fb2MetadataExtractor.extractCover(fb2File));
     }
 
     @Override
@@ -138,7 +124,4 @@ public class Fb2Processor extends AbstractFileProcessor implements BookFileProce
         }
     }
 
-    private boolean saveCoverImage(InputStream coverStream, long bookId) throws Exception {
-        return fileService.saveCoverImages(coverStream, bookId);
-    }
 }

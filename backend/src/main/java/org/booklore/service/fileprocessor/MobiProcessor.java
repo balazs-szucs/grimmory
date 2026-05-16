@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,7 +28,7 @@ import static org.booklore.util.FileService.truncate;
 
 @Slf4j
 @Service
-public class MobiProcessor extends AbstractFileProcessor implements BookFileProcessor {
+public class MobiProcessor extends AbstractFileProcessor {
 
     private final MobiMetadataExtractor mobiMetadataExtractor;
 
@@ -71,21 +70,8 @@ public class MobiProcessor extends AbstractFileProcessor implements BookFileProc
 
     @Override
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
-        try {
-            File mobiFile = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
-            try (InputStream coverStream = mobiMetadataExtractor.extractCover(mobiFile)) {
-                if (coverStream == null) {
-                    log.warn("No cover image found in MOBI '{}'", bookFile.getFileName());
-                    return false;
-                }
-
-                return saveCoverImage(coverStream, bookEntity.getId());
-            }
-
-        } catch (Exception e) {
-            log.error("Error generating cover for MOBI '{}': {}", bookFile.getFileName(), e.getMessage(), e);
-            return false;
-        }
+        File mobiFile = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
+        return processAndSaveCover(bookEntity, bookFile.getFileName(), "MOBI", () -> mobiMetadataExtractor.extractCover(mobiFile));
     }
 
     @Override
@@ -94,7 +80,6 @@ public class MobiProcessor extends AbstractFileProcessor implements BookFileProc
     }
 
     private BookFileType determineFileType(String fileName) {
-        String lowerCase = fileName.toLowerCase();
         return BookFileType.MOBI;
     }
 
@@ -144,8 +129,5 @@ public class MobiProcessor extends AbstractFileProcessor implements BookFileProc
         }
     }
 
-    private boolean saveCoverImage(InputStream coverStream, long bookId) throws Exception {
-        return fileService.saveCoverImages(coverStream, bookId);
-    }
 }
 

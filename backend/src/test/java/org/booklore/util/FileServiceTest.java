@@ -3,7 +3,6 @@ package org.booklore.util;
 import org.booklore.config.AppProperties;
 import org.booklore.model.dto.settings.AppSettings;
 import org.booklore.model.dto.settings.CoverCroppingSettings;
-import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.service.appsettings.AppSettingService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,23 +15,18 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -75,9 +69,8 @@ class FileServiceTest {
         lenient().when(vipsImageService.readDimensions(any(byte[].class))).thenReturn(new ImageDimensions(1000, 1500));
         lenient().when(vipsImageService.readDimensionsFromFile(any(Path.class))).thenReturn(new ImageDimensions(1000, 1500));
 
-        RestTemplate mockRestTemplate = mock(RestTemplate.class);
         RestTemplate mockNoRedirectRestTemplate = mock(RestTemplate.class);
-        fileService = new FileService(appProperties, mockRestTemplate, appSettingService, mockNoRedirectRestTemplate, vipsImageService);
+        fileService = new FileService(appProperties, appSettingService, mockNoRedirectRestTemplate, vipsImageService);
     }
 
     @Nested
@@ -641,7 +634,7 @@ class FileServiceTest {
                     .build();
             lenient().when(appSettingServiceForNetwork.getAppSettings()).thenReturn(appSettings);
 
-            fileService = new FileService(appProperties, mock(RestTemplate.class), appSettingServiceForNetwork, noRedirectRestTemplate, vipsImageService);
+            fileService = new FileService(appProperties, appSettingServiceForNetwork, noRedirectRestTemplate, vipsImageService);
         }
 
         @Nested
@@ -654,9 +647,13 @@ class FileServiceTest {
                 String imageUrl = "http://1.1.1.1/image.jpg";
                 byte[] imageBytes = new byte[]{1, 2, 3};
 
-                ResponseEntity<byte[]> response = ResponseEntity.ok(imageBytes);
-                when(noRedirectRestTemplate.exchange(eq(imageUrl), eq(HttpMethod.GET), any(), eq(byte[].class)))
-                        .thenReturn(response);
+                when(noRedirectRestTemplate.execute(eq(imageUrl), eq(HttpMethod.GET), any(), any())).thenAnswer(invocation -> {
+                    org.springframework.web.client.ResponseExtractor<?> extractor = invocation.getArgument(3);
+                    org.springframework.http.client.ClientHttpResponse response = mock(org.springframework.http.client.ClientHttpResponse.class);
+                    when(response.getStatusCode()).thenReturn(HttpStatus.OK);
+                    when(response.getBody()).thenReturn(new ByteArrayInputStream(imageBytes));
+                    return extractor.extractData(response);
+                });
 
                 byte[] result = fileService.downloadImageFromUrl(imageUrl);
 
@@ -667,9 +664,14 @@ class FileServiceTest {
             @DisplayName("throws exception when response body is null")
             void downloadImageFromUrl_nullBody_throwsException() {
                 String imageUrl = "http://1.1.1.1/image.jpg";
-                ResponseEntity<byte[]> response = ResponseEntity.ok(null);
-                when(noRedirectRestTemplate.exchange(eq(imageUrl), eq(HttpMethod.GET), any(), eq(byte[].class)))
-                        .thenReturn(response);
+
+                when(noRedirectRestTemplate.execute(eq(imageUrl), eq(HttpMethod.GET), any(), any())).thenAnswer(invocation -> {
+                    org.springframework.web.client.ResponseExtractor<?> extractor = invocation.getArgument(3);
+                    org.springframework.http.client.ClientHttpResponse response = mock(org.springframework.http.client.ClientHttpResponse.class);
+                    when(response.getStatusCode()).thenReturn(HttpStatus.OK);
+                    when(response.getBody()).thenReturn(null);
+                    return extractor.extractData(response);
+                });
 
                 assertThrows(IOException.class, () -> fileService.downloadImageFromUrl(imageUrl));
             }
@@ -681,22 +683,32 @@ class FileServiceTest {
                 String cdnIpRedirect = "http://3.168.64.124/cover.jpg";
                 byte[] imageBytes = new byte[]{1, 2, 3};
 
-                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(HttpStatus.FOUND)
-                        .header(HttpHeaders.LOCATION, cdnIpRedirect).build();
-                ResponseEntity<byte[]> imageResponse = ResponseEntity.ok(imageBytes);
+                when(noRedirectRestTemplate.execute(anyString(), eq(HttpMethod.GET), any(), any())).thenAnswer(invocation -> {
+                    String url = invocation.getArgument(0);
+                    org.springframework.web.client.ResponseExtractor<?> extractor = invocation.getArgument(3);
+                    org.springframework.http.client.ClientHttpResponse response = mock(org.springframework.http.client.ClientHttpResponse.class);
 
-                when(noRedirectRestTemplate.exchange(anyString(), eq(HttpMethod.GET), any(), eq(byte[].class)))
-                        .thenReturn(redirectResponse, imageResponse);
+                    if (originalUrl.equals(url)) {
+                        when(response.getStatusCode()).thenReturn(HttpStatus.FOUND);
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.set(HttpHeaders.LOCATION, cdnIpRedirect);
+                        when(response.getHeaders()).thenReturn(headers);
+                    } else {
+                        when(response.getStatusCode()).thenReturn(HttpStatus.OK);
+                        when(response.getBody()).thenReturn(new ByteArrayInputStream(imageBytes));
+                    }
+
+                    return extractor.extractData(response);
+                });
 
                 byte[] result = fileService.downloadImageFromUrl(originalUrl);
 
                 assertArrayEquals(imageBytes, result);
                 
                 ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
-                verify(noRedirectRestTemplate, times(2)).exchange(urlCaptor.capture(), eq(HttpMethod.GET), any(), eq(byte[].class));
+                verify(noRedirectRestTemplate, times(2)).execute(urlCaptor.capture(), eq(HttpMethod.GET), any(), any());
                 
                 assertEquals(originalUrl, urlCaptor.getAllValues().get(0));
-                // Verify it was rewritten to use example.com instead of 3.168.64.124
                 assertEquals("http://example.com/cover.jpg", urlCaptor.getAllValues().get(1));
             }
 
@@ -704,11 +716,16 @@ class FileServiceTest {
             @DisplayName("throws exception when redirect exceeds max limit")
             void downloadImageFromUrl_tooManyRedirects_throwsException() {
                 String imageUrl = "http://1.1.1.1/cover.jpg";
-                ResponseEntity<byte[]> redirectResponse = ResponseEntity.status(HttpStatus.FOUND)
-                        .header(HttpHeaders.LOCATION, "http://2.2.2.2/cover.jpg").build();
 
-                when(noRedirectRestTemplate.exchange(anyString(), eq(HttpMethod.GET), any(), eq(byte[].class)))
-                        .thenReturn(redirectResponse);
+                when(noRedirectRestTemplate.execute(anyString(), eq(HttpMethod.GET), any(), any())).thenAnswer(invocation -> {
+                    org.springframework.web.client.ResponseExtractor<?> extractor = invocation.getArgument(3);
+                    org.springframework.http.client.ClientHttpResponse response = mock(org.springframework.http.client.ClientHttpResponse.class);
+                    when(response.getStatusCode()).thenReturn(HttpStatus.FOUND);
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.set(HttpHeaders.LOCATION, "http://2.2.2.2/cover.jpg");
+                    when(response.getHeaders()).thenReturn(headers);
+                    return extractor.extractData(response);
+                });
 
                 IOException ex = assertThrows(IOException.class, () -> fileService.downloadImageFromUrl(imageUrl));
                 assertTrue(ex.getMessage().contains("Too many redirects"));

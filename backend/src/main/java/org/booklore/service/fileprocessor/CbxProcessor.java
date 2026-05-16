@@ -22,9 +22,7 @@ import org.booklore.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -35,7 +33,7 @@ import static org.booklore.util.FileService.truncate;
 
 @Slf4j
 @Service
-public class CbxProcessor extends AbstractFileProcessor implements BookFileProcessor {
+public class CbxProcessor extends AbstractFileProcessor {
 
     private static final Pattern UNDERSCORE_HYPHEN_PATTERN = Pattern.compile("[_\\-]");
     private final CbxMetadataExtractor cbxMetadataExtractor;
@@ -80,21 +78,11 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
         Path bookPath = FileUtils.getBookFullPath(bookEntity, bookFile);
 
-        try (InputStream imageStream = cbxMetadataExtractor.extractCover(bookPath)) {
-            if (imageStream != null) {
-                boolean saved = fileService.saveCoverImages(imageStream, bookEntity.getId());
-                if (saved) {
-                    return true;
-                } else {
-                    log.warn("Could not save image extracted from CBZ as cover for '{}'", bookFile.getFileName());
-                }
-            } else {
-                log.warn("Could not find cover image in '{}' archive", bookFile.getFileName());
-            }
-        } catch (Exception e) {
-            log.error("Error generating cover for '{}': {}", bookFile.getFileName(), e.getMessage());
+        boolean saved = processAndSaveCover(bookEntity, bookFile.getFileName(), "CBX", () -> cbxMetadataExtractor.extractCover(bookPath));
+        if (!saved) {
+            log.warn("Could not save image extracted from CBX as cover for '{}'", bookFile.getFileName());
         }
-        return false;
+        return saved;
     }
 
     @Override

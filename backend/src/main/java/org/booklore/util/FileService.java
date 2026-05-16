@@ -9,10 +9,8 @@ import org.booklore.service.appsettings.AppSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.grimmory.pdfium4j.PdfPage;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,7 +37,6 @@ import java.net.UnknownHostException;
 public class FileService {
 
     private final AppProperties appProperties;
-    private final RestTemplate restTemplate;
     private final AppSettingService appSettingService;
     private final RestTemplate noRedirectRestTemplate;
     private final VipsImageService vipsImageService;
@@ -238,7 +235,13 @@ public class FileService {
             log.warn("Skipping saveImage for {}: image data is null or empty", filePath);
             return;
         }
-        saveImage(new java.io.ByteArrayInputStream(imageData), filePath);
+        File outputFile = new File(filePath);
+        File parentDir = outputFile.getParentFile();
+        if (!parentDir.exists() && !parentDir.mkdirs()) {
+            throw new IOException("Failed to create directory: " + parentDir);
+        }
+        vipsImageService.flattenResizeAndSave(imageData, outputFile.toPath(), MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        log.info("Image saved successfully to: {}", filePath);
     }
 
     public void saveImage(InputStream inputStream, String filePath) throws IOException {
@@ -259,14 +262,18 @@ public class FileService {
     }
 
     public byte[] downloadImageFromUrl(String imageUrl) throws IOException {
+        Path downloadedImage = null;
         try {
-            return downloadImageFromUrlInternal(imageUrl);
+            downloadedImage = downloadImageToTempFile(imageUrl);
+            return Files.readAllBytes(downloadedImage);
+        } catch (IOException e) {
+            log.warn("Failed to download image from {}: {}", imageUrl, e.getMessage());
+            throw e;
         } catch (Exception e) {
             log.warn("Failed to download image from {}: {}", imageUrl, e.getMessage());
-            if (e instanceof IOException ioException) {
-                throw ioException;
-            }
             throw new IOException("Failed to download image from " + imageUrl + ": " + e.getMessage(), e);
+        } finally {
+            deleteTempFileQuietly(downloadedImage);
         }
     }
 
@@ -406,86 +413,6 @@ public class FileService {
             }
             outputStream.write(buffer, 0, read);
         }
-    }
-
-    private byte[] downloadImageFromUrlInternal(String imageUrl) throws IOException {
-        String currentUrl = imageUrl;
-        int redirectCount = 0;
-
-        while (redirectCount <= MAX_REDIRECTS) {
-            URI uri = URI.create(currentUrl);
-            if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-                throw new IOException("Only HTTP and HTTPS protocols are allowed");
-            }
-
-            String host = uri.getHost();
-            if (host == null) {
-                throw new IOException("Invalid URL: no host found in " + currentUrl);
-            }
-
-            // Validate resolved IPs to block SSRF against internal networks
-            InetAddress[] inetAddresses = InetAddress.getAllByName(host);
-            if (inetAddresses.length == 0) {
-                throw new IOException("Could not resolve host: " + host);
-            }
-            for (InetAddress inetAddress : inetAddresses) {
-                if (isInternalAddress(inetAddress)) {
-                    throw new SecurityException("URL points to a local or private internal network address: " + host + " (" + inetAddress.getHostAddress() + ")");
-                }
-            }
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set(HttpHeaders.USER_AGENT, "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)");
-            headers.set(HttpHeaders.ACCEPT, "image/*");
-
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-
-            log.debug("Downloading image from: {}", currentUrl);
-
-            ResponseEntity<byte[]> response = noRedirectRestTemplate.exchange(
-                    currentUrl,
-                    HttpMethod.GET,
-                    entity,
-                    byte[].class
-            );
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
-            } else if (response.getStatusCode().is3xxRedirection()) {
-                String location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
-                if (location == null) {
-                    throw new IOException("Redirection response without Location header");
-                }
-                URI redirectUri = uri.resolve(location);
-
-                // When a CDN redirects to a raw IP (e.g. CloudFront -> 3.168.64.124),
-                // the Host header would become the bare IP, which the CDN rejects with
-                // 400. Rewrite the URL to keep the previous hostname so the JDK
-                // HttpClient sets the correct Host header automatically.
-                if (isRawIpAddress(redirectUri.getHost())) {
-                    try {
-                        redirectUri = new URI(
-                                redirectUri.getScheme(),
-                                redirectUri.getUserInfo(),
-                                host,
-                                redirectUri.getPort(),
-                                redirectUri.getPath(),
-                                redirectUri.getQuery(),
-                                redirectUri.getFragment()
-                        );
-                    } catch (URISyntaxException e) {
-                        throw new IOException("Invalid redirect URI: " + e.getMessage(), e);
-                    }
-                }
-
-                currentUrl = redirectUri.toString();
-                redirectCount++;
-            } else {
-                throw new IOException("Failed to download image. HTTP Status: " + response.getStatusCode());
-            }
-        }
-
-        throw new IOException("Too many redirects (max " + MAX_REDIRECTS + ")");
     }
 
     private boolean isRawIpAddress(String host) {
@@ -803,22 +730,6 @@ public class FileService {
         }
     }
 
-    /**
-     * Streams image data from a writer directly into the cover processing pipeline.
-     * This avoids any intermediate byte[] allocations or temporary files.
-     */
-    public boolean saveCoverImages(long bookId, StreamingWriter writer) throws IOException {
-        Path tempImage = Files.createTempFile("booklore-stream-", ".img");
-        try {
-            try (OutputStream out = Files.newOutputStream(tempImage)) {
-                writer.write(out);
-            }
-            return saveCoverImages(tempImage, bookId);
-        } finally {
-            deleteTempFileQuietly(tempImage);
-        }
-    }
-
     public boolean saveCoverImages(Path imagePath, long bookId) throws IOException {
         String folderPath = getImagesFolder(bookId);
         File folder = new File(folderPath);
@@ -965,11 +876,6 @@ public class FileService {
 
     public String getIconsSvgFolder() {
         return Paths.get(appProperties.getPathConfig(), ICONS_DIR, SVG_DIR).toString();
-    }
-
-    @FunctionalInterface
-    public interface StreamingWriter {
-        void write(OutputStream os) throws IOException;
     }
 
     // ========================================

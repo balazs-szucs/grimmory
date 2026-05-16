@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -110,5 +111,26 @@ public abstract class AbstractFileProcessor implements BookFileProcessor {
             log.debug("Failed to use folder cover image {}: {}", coverImage.get(), e.getMessage());
             return false;
         }
+    }
+
+    protected boolean processAndSaveCover(BookEntity bookEntity,
+                                          String fileName,
+                                          String formatName,
+                                          ThrowingInputStreamSupplier coverExtractor) {
+        try (InputStream coverStream = coverExtractor.get()) {
+            if (coverStream == null) {
+                log.warn("No cover image found in {} '{}'", formatName, fileName);
+                return false;
+            }
+            return fileService.saveCoverImages(coverStream, bookEntity.getId());
+        } catch (Exception e) {
+            log.error("Error generating cover for {} '{}': {}", formatName, fileName, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    @FunctionalInterface
+    protected interface ThrowingInputStreamSupplier {
+        InputStream get() throws Exception;
     }
 }
