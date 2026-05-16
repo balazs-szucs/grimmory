@@ -29,6 +29,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 
@@ -40,10 +41,18 @@ public class PdfReaderService {
     private static final int MAX_CACHE_ENTRIES = 15;
     private static final float DEFAULT_DPI = 200f;
     private static final long MTIME_TOLERANCE_MS = 2000;
+    private static final int PREFETCH_AHEAD = 2;
 
     private final BookRepository bookRepository;
     private final ChapterCacheService chapterCacheService;
     private final FileStreamingService fileStreamingService;
+    private final ExecutorService readerCacheExecutor;
+
+    /** Tracks pages whose async pre-render has already been submitted. */
+    private final Cache<String, Boolean> prefetchInflight = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(5))
+            .maximumSize(50_000)
+            .build();
 
     /** Lightweight metadata cache - no native handles, just page count + outline. */
     private final Cache<String, CachedPdfMetadata> metadataCache = Caffeine.newBuilder()
@@ -60,13 +69,13 @@ public class PdfReaderService {
             .mapToObj(_ -> new ReentrantLock())
             .toArray(ReentrantLock[]::new);
 
-    private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified) {}
-    private record CachedPdfMetadata(int pageCount, long lastModified, List<PdfOutlineItem> outline) {}
+    private record ReaderCacheKey(Long bookId, BookFileType bookType, long lastModified, long size) {}
+    private record CachedPdfMetadata(int pageCount, long lastModified, long size, List<PdfOutlineItem> outline) {}
 
     public void initCache(Long bookId, String bookType) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
         CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
-        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
         String diskKey = getDiskKey(cacheKey);
 
         Path cacheDir = chapterCacheService.getCachedPage(diskKey, 1).getParent();
@@ -137,7 +146,7 @@ public class PdfReaderService {
     public void streamPageImage(Long bookId, String bookType, int page, OutputStream outputStream) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
         CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
-        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
         String diskKey = getDiskKey(cacheKey);
 
         validatePageRequest(bookId, page, metadata.pageCount);
@@ -149,13 +158,38 @@ public class PdfReaderService {
     public void streamPageImage(Long bookId, String bookType, int page, HttpServletRequest request, HttpServletResponse response) throws IOException {
         Path pdfPath = getBookPath(bookId, bookType);
         CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
-        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified);
+        ReaderCacheKey cacheKey = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
         String diskKey = getDiskKey(cacheKey);
 
         validatePageRequest(bookId, page, metadata.pageCount);
 
         Path cached = renderPageToDiskOnce(pdfPath, cacheKey, diskKey, page);
+
+        // Trigger sequential prefetching for better UX
+        prefetchPages(bookId, bookType, page + 1, page + PREFETCH_AHEAD);
+
         fileStreamingService.streamWithRangeSupport(cached, MediaType.IMAGE_JPEG_VALUE, request, response);
+    }
+
+    private void prefetchPages(Long bookId, String bookType, int from, int to) {
+        readerCacheExecutor.submit(() -> {
+            try {
+                Path pdfPath = getBookPath(bookId, bookType);
+                CachedPdfMetadata metadata = getCachedMetadata(pdfPath);
+                ReaderCacheKey key = getCacheKey(bookId, bookType, metadata.lastModified, metadata.size);
+                String diskKey = getDiskKey(key);
+
+                int end = Math.min(to, metadata.pageCount);
+                for (int page = from; page <= end; page++) {
+                    String prefetchKey = diskKey + ":" + page;
+                    if (prefetchInflight.asMap().putIfAbsent(prefetchKey, Boolean.TRUE) == null) {
+                        renderPageToDiskOnce(pdfPath, key, diskKey, page);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("PDF prefetch failed for book {}: {}", bookId, e.getMessage());
+            }
+        });
     }
 
     private Path renderPageToDiskOnce(Path pdfPath, ReaderCacheKey key, String diskKey, int page) throws IOException {
@@ -180,17 +214,17 @@ public class PdfReaderService {
         }
     }
 
-    private ReaderCacheKey getCacheKey(Long bookId, String bookType, long lastModified) {
+    private ReaderCacheKey getCacheKey(Long bookId, String bookType, long lastModified, long size) {
         BookFileType type = null;
         if (bookType != null) {
             type = BookFileType.fromName(bookType)
                     .orElseThrow(() -> ApiError.INVALID_INPUT.createException("Invalid book type: " + bookType));
         }
-        return new ReaderCacheKey(bookId, type, lastModified);
+        return new ReaderCacheKey(bookId, type, lastModified, size);
     }
 
     private String getDiskKey(ReaderCacheKey key) {
-        return key.bookId() + "_" + (key.bookType() != null ? key.bookType().name() : "DEFAULT") + "_" + key.lastModified();
+        return key.bookId() + "_" + (key.bookType() != null ? key.bookType().name() : "DEFAULT") + "_" + key.size() + "_" + key.lastModified();
     }
 
     private Path getBookPath(Long bookId, String bookType) {
@@ -234,11 +268,12 @@ public class PdfReaderService {
             throw new FileNotFoundException("PDF file is not readable: " + pdfPath);
         }
         long lastModified = Files.getLastModifiedTime(pdfPath).toMillis();
+        long size = Files.size(pdfPath);
 
         try (PdfDocument doc = PdfDocument.open(pdfPath)) {
             int pageCount = doc.pageCount();
             List<PdfOutlineItem> outline = extractOutline(doc);
-            return new CachedPdfMetadata(pageCount, lastModified, outline);
+            return new CachedPdfMetadata(pageCount, lastModified, size, outline);
         }
     }
 

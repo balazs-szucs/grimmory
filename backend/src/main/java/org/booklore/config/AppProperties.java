@@ -13,6 +13,7 @@ public class AppProperties {
     private String version;
     private RemoteAuth remoteAuth;
     private Boolean forceDisableOidc = false;
+    private Reader reader = new Reader();
 
     /**
      * Type of disk storage where library files are stored.
@@ -37,5 +38,18 @@ public class AppProperties {
         private String headerGroups;
         private String adminGroup;
         private String groupsDelimiter = "\\s+";  // Default to whitespace for backward compatibility
+    }
+
+    @Getter
+    @Setter
+    public static class Reader {
+        private Cache cache = new Cache();
+    }
+
+    @Getter
+    @Setter
+    public static class Cache {
+        private Integer maxSizeGb = 5;
+        private Integer maxAgeDays = 14;
     }
 }

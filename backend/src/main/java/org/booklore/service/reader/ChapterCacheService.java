@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.booklore.config.AppProperties;
 import org.booklore.exception.ApiError;
 import org.booklore.service.ArchiveService;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,9 +14,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Stream;
 
 /**
  * Service for managing the on-disk extraction cache for reader chapters.
@@ -30,6 +36,89 @@ public class ChapterCacheService {
     private final AppProperties appProperties;
     private final ArchiveService archiveService;
     private final ConcurrentHashMap<String, ReentrantLock> cacheLocks = new ConcurrentHashMap<>();
+
+    @Scheduled(fixedDelay = 1, initialDelay = 1, timeUnit = TimeUnit.HOURS)
+    public void cleanupCache() {
+        AppProperties.Cache config = appProperties.getReader().getCache();
+        long maxBytes = (long) config.getMaxSizeGb() * 1024 * 1024 * 1024;
+        long maxAgeMillis = Duration.ofDays(config.getMaxAgeDays()).toMillis();
+        Instant cutoff = Instant.now().minusMillis(maxAgeMillis);
+
+        Path cacheRoot = Paths.get(appProperties.getPathConfig(), "cache", "chapters");
+        if (!Files.exists(cacheRoot)) return;
+
+        try {
+            // 1. Delete stale/expired caches
+            try (Stream<Path> books = Files.list(cacheRoot)) {
+                books.forEach(bookDir -> {
+                    try {
+                        if (Files.getLastModifiedTime(bookDir).toInstant().isBefore(cutoff)) {
+                            log.info("Deleting expired reader cache: {}", bookDir.getFileName());
+                            deleteDirectoryRecursively(bookDir);
+                        }
+                    } catch (IOException e) {
+                        log.warn("Failed to check expiry for cache {}: {}", bookDir, e.getMessage());
+                    }
+                });
+            }
+
+            // 2. Bounded size cleanup (LRU-ish based on mtime)
+            long currentSize = calculateDirectorySize(cacheRoot);
+            if (currentSize > maxBytes) {
+                log.info("Reader cache exceeds {} GB (current: {} GB), cleaning up...",
+                        config.getMaxSizeGb(), String.format("%.2f", currentSize / 1024.0 / 1024.0 / 1024.0));
+
+                try (Stream<Path> books = Files.list(cacheRoot)) {
+                    List<Path> sortedBooks = books
+                            .sorted(Comparator.comparingLong(p -> {
+                                try {
+                                    return Files.getLastModifiedTime(p).toMillis();
+                                } catch (IOException e) {
+                                    return Long.MAX_VALUE;
+                                }
+                            }))
+                            .toList();
+
+                    for (Path bookDir : sortedBooks) {
+                        long dirSize = calculateDirectorySize(bookDir);
+                        deleteDirectoryRecursively(bookDir);
+                        currentSize -= dirSize;
+                        if (currentSize <= maxBytes * 0.8) break; // Clean down to 80%
+                    }
+                }
+            }
+        } catch (IOException e) {
+            log.error("Failed to cleanup reader cache", e);
+        }
+    }
+
+    private long calculateDirectorySize(Path path) throws IOException {
+        try (Stream<Path> walk = Files.walk(path)) {
+            return walk.filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return Files.size(p);
+                        } catch (IOException e) {
+                            return 0;
+                        }
+                    })
+                    .sum();
+        }
+    }
+
+    private void deleteDirectoryRecursively(Path path) throws IOException {
+        if (!Files.exists(path)) return;
+        try (Stream<Path> walk = Files.walk(path)) {
+            walk.sorted(Comparator.reverseOrder())
+                    .forEach(p -> {
+                        try {
+                            Files.delete(p);
+                        } catch (IOException e) {
+                            log.warn("Failed to delete cache file {}: {}", p, e.getMessage());
+                        }
+                    });
+        }
+    }
 
     /**
      * Ensures all pages of a CBX archive are extracted to the disk cache.
@@ -70,6 +159,10 @@ public class ChapterCacheService {
         return getCacheDir(cacheKey).resolve("page_" + pageNumber + ".jpg");
     }
 
+    public Path getCachedAsset(String cacheKey, String fileName) {
+        return getCacheDir(cacheKey).resolve(fileName);
+    }
+
     public boolean hasPage(String cacheKey, int pageNumber) {
         Path pagePath = getCachedPage(cacheKey, pageNumber);
         try {
@@ -102,7 +195,7 @@ public class ChapterCacheService {
     }
 
     private Path getCacheDir(String cacheKey) {
-        if (cacheKey == null || cacheKey.contains("..") || cacheKey.contains("/") || cacheKey.contains("\\")) {
+        if (cacheKey == null || cacheKey.contains("..")) {
             throw ApiError.INVALID_INPUT.createException("Invalid cache key: " + cacheKey);
         }
         return Paths.get(appProperties.getPathConfig(), "cache", "chapters", cacheKey);

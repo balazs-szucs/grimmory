@@ -7,6 +7,7 @@ import org.booklore.model.dto.response.EpubSpineItem;
 import org.booklore.model.dto.response.EpubTocItem;
 import org.booklore.model.entity.BookEntity;
 import org.booklore.repository.BookRepository;
+import org.booklore.service.FileStreamingService;
 import org.booklore.util.FileUtils;
 import org.grimmory.epub4j.domain.*;
 import org.grimmory.epub4j.epub.EpubWriter;
@@ -39,6 +40,12 @@ class EpubReaderServiceTest {
 
     @Mock
     BookRepository bookRepository;
+
+    @Mock
+    ChapterCacheService chapterCacheService;
+
+    @Mock
+    FileStreamingService fileStreamingService;
 
     @InjectMocks
     EpubReaderService epubReaderService;
@@ -158,7 +165,11 @@ class EpubReaderServiceTest {
                     .orElseThrow();
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            epubReaderService.streamFile(1L, chapter1Href, outputStream);
+
+            // Mock ChapterCacheService behavior for the asset extraction
+            when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(tempDir.resolve("mock-cached-asset"));
+
+            epubReaderService.streamFile(1L, null, chapter1Href, outputStream);
 
             String content = outputStream.toString(StandardCharsets.UTF_8);
             assertTrue(content.contains("Chapter 1 content"));
@@ -179,7 +190,7 @@ class EpubReaderServiceTest {
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             assertThrows(FileNotFoundException.class,
-                    () -> epubReaderService.streamFile(1L, "nonexistent.xhtml", outputStream));
+                    () -> epubReaderService.streamFile(1L, null, "nonexistent.xhtml", outputStream));
         }
     }
 
@@ -197,7 +208,7 @@ class EpubReaderServiceTest {
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             assertThrows(FileNotFoundException.class,
-                    () -> epubReaderService.streamFile(1L, "../../../etc/passwd", outputStream));
+                    () -> epubReaderService.streamFile(1L, null, "../../../etc/passwd", outputStream));
         }
     }
 
@@ -214,7 +225,10 @@ class EpubReaderServiceTest {
             epubReaderService.getBookInfo(1L);
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            epubReaderService.streamFile(1L, "META-INF/container.xml", outputStream);
+            // Mock ChapterCacheService behavior for the asset extraction
+            when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(tempDir.resolve("mock-cached-container"));
+
+            epubReaderService.streamFile(1L, null, "META-INF/container.xml", outputStream);
 
             String content = outputStream.toString(StandardCharsets.UTF_8);
             assertTrue(content.contains("rootfile"));
@@ -390,7 +404,10 @@ class EpubReaderServiceTest {
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // Path with leading slash should work
-            epubReaderService.streamFile(1L, "/" + relativePath, outputStream);
+            // Mock ChapterCacheService behavior for the asset extraction
+            when(chapterCacheService.getCachedPage(anyString(), anyInt())).thenReturn(tempDir.resolve("mock-cached-slash"));
+
+            epubReaderService.streamFile(1L, null, "/" + relativePath, outputStream);
 
             String content = outputStream.toString(StandardCharsets.UTF_8);
             assertTrue(content.contains("Chapter 1 content"));

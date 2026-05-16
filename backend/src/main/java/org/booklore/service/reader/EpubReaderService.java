@@ -18,9 +18,15 @@ import org.grimmory.epub4j.epub.EpubReader;
 import org.grimmory.epub4j.native_parsing.NativeArchive;
 import org.springframework.stereotype.Service;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.booklore.service.FileStreamingService;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.*;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -69,16 +75,19 @@ public class EpubReaderService {
     );
 
     private final BookRepository bookRepository;
+    private final ChapterCacheService chapterCacheService;
+    private final FileStreamingService fileStreamingService;
+
     private final Cache<String, CachedEpubMetadata> metadataCache = Caffeine.newBuilder()
             .maximumSize(MAX_CACHE_ENTRIES)
             .expireAfterAccess(Duration.ofMinutes(30))
             .build();
 
-    private record CachedEpubMetadata(EpubBookInfo bookInfo, long lastModified,
+    private record CachedEpubMetadata(EpubBookInfo bookInfo, long lastModified, long size,
                                       Set<String> validPaths,
                                       Map<String, EpubManifestItem> manifestByHref) {
-        CachedEpubMetadata(EpubBookInfo bookInfo, long lastModified) {
-            this(bookInfo, lastModified, buildValidPaths(bookInfo), buildManifestByHref(bookInfo));
+        CachedEpubMetadata(EpubBookInfo bookInfo, long lastModified, long size) {
+            this(bookInfo, lastModified, size, buildValidPaths(bookInfo), buildManifestByHref(bookInfo));
         }
 
         private static Set<String> buildValidPaths(EpubBookInfo bookInfo) {
@@ -117,14 +126,37 @@ public class EpubReaderService {
         }
     }
 
-    public void streamFile(Long bookId, String filePath, OutputStream outputStream) throws IOException {
-        streamFile(bookId, null, filePath, outputStream);
-    }
-
     public void streamFile(Long bookId, String bookType, String filePath, OutputStream outputStream) throws IOException {
         Path epubPath = getBookPath(bookId, bookType);
         CachedEpubMetadata metadata = getCachedMetadata(epubPath);
 
+        String actualPath = resolveActualPath(filePath, metadata);
+        if (actualPath == null) {
+            throw new FileNotFoundException("File not found in EPUB: " + filePath);
+        }
+
+        String diskKey = getDiskKey(bookId, bookType, metadata.lastModified(), metadata.size());
+        Path cached = getOrExtractAssetToCache(epubPath, diskKey, actualPath);
+        Files.copy(cached, outputStream);
+    }
+
+    public void streamFile(Long bookId, String bookType, String filePath, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        Path epubPath = getBookPath(bookId, bookType);
+        CachedEpubMetadata metadata = getCachedMetadata(epubPath);
+
+        String actualPath = resolveActualPath(filePath, metadata);
+        if (actualPath == null) {
+            throw new FileNotFoundException("File not found in EPUB: " + filePath);
+        }
+
+        String diskKey = getDiskKey(bookId, bookType, metadata.lastModified(), metadata.size());
+        Path cached = getOrExtractAssetToCache(epubPath, diskKey, actualPath);
+
+        String contentType = getContentType(bookId, bookType, filePath);
+        fileStreamingService.streamWithRangeSupport(cached, contentType, request, response);
+    }
+
+    private String resolveActualPath(String filePath, CachedEpubMetadata metadata) {
         String cleanPath = filePath.startsWith("/") ? filePath.substring(1) : filePath;
         String actualPath;
         if (CONTAINER_PATH.equals(cleanPath) || cleanPath.equals(metadata.bookInfo.getContainerPath())) {
@@ -133,15 +165,35 @@ public class EpubReaderService {
             actualPath = normalizePath(filePath, metadata.bookInfo.getRootPath());
         }
 
-        if (!isValidPath(actualPath, metadata)) {
-            throw new FileNotFoundException("File not found in EPUB: " + filePath);
+        return isValidPath(actualPath, metadata) ? actualPath : null;
+    }
+
+    private Path getOrExtractAssetToCache(Path epubPath, String diskKey, String entryName) throws IOException {
+        // Use a sub-key for the specific asset to avoid flat namespace collisions in cache dir
+        String assetCacheKey = diskKey + "/" + Base64.getUrlEncoder().withoutPadding().encodeToString(entryName.getBytes());
+        String fileName = entryName.contains("/") ? entryName.substring(entryName.lastIndexOf('/') + 1) : entryName;
+        Path cached = chapterCacheService.getCachedAsset(assetCacheKey, fileName);
+
+        if (Files.exists(cached) && Files.size(cached) > 0) {
+            return cached;
         }
 
-        // Scoped open/close - no handle caching, no eviction race.
-        // EPUB assets are small; this is safe and correct for a self-hosted reader.
-        try (NativeArchive archive = NativeArchive.open(epubPath)) {
-            archive.streamEntry(actualPath, outputStream);
+        Files.createDirectories(cached.getParent());
+        Path tmp = Files.createTempFile(cached.getParent(), "epub-", ".tmp");
+        try {
+            try (OutputStream out = Files.newOutputStream(tmp);
+                 NativeArchive archive = NativeArchive.open(epubPath)) {
+                archive.streamEntry(entryName, out);
+            }
+            Files.move(tmp, cached, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            Files.deleteIfExists(tmp);
         }
+        return cached;
+    }
+
+    private String getDiskKey(Long bookId, String bookType, long lastModified, long size) {
+        return "epub_" + bookId + "_" + (bookType != null ? bookType : "DEFAULT") + "_" + size + "_" + lastModified;
     }
 
     public String getContentType(Long bookId, String filePath) {
@@ -196,24 +248,25 @@ public class EpubReaderService {
     private CachedEpubMetadata getCachedMetadata(Path epubPath) throws IOException {
         String cacheKey = epubPath.toString();
         long currentModified = Files.getLastModifiedTime(epubPath).toMillis();
+        long currentSize = Files.size(epubPath);
         CachedEpubMetadata cached = metadataCache.getIfPresent(cacheKey);
 
-        if (cached != null && cached.lastModified() == currentModified) {
+        if (cached != null && cached.lastModified() == currentModified && cached.size() == currentSize) {
             log.debug("Cache hit for EPUB: {}", epubPath.getFileName());
             return cached;
         }
 
         log.debug("Cache miss for EPUB: {}, parsing...", epubPath.getFileName());
-        CachedEpubMetadata newMetadata = parseEpubMetadata(epubPath, currentModified);
+        CachedEpubMetadata newMetadata = parseEpubMetadata(epubPath, currentModified, currentSize);
         metadataCache.put(cacheKey, newMetadata);
         return newMetadata;
     }
 
-    private CachedEpubMetadata parseEpubMetadata(Path epubPath, long lastModified) throws IOException {
+    private CachedEpubMetadata parseEpubMetadata(Path epubPath, long lastModified, long size) throws IOException {
         try {
             Book book = new EpubReader().readEpubLazy(epubPath, "UTF-8");
             EpubBookInfo bookInfo = mapBookToInfo(book);
-            return new CachedEpubMetadata(bookInfo, lastModified);
+            return new CachedEpubMetadata(bookInfo, lastModified, size);
         } catch (Exception e) {
             throw new IOException("Unable to parse EPUB", e);
         }

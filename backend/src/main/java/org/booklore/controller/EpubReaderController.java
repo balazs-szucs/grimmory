@@ -59,19 +59,19 @@ public class EpubReaderController {
             response.setContentLengthLong(fileSize);
         }
 
+        // Defense in depth for untrusted EPUB resources. See Foliate's security guidance:
+        // https://github.com/johnfactotum/foliate-js#security
+        response.setHeader("Content-Security-Policy", "script-src 'none'");
+
         if (contentType.startsWith("font/") ||
                 "application/font-woff".equals(contentType) ||
                 "application/font-woff2".equals(contentType) ||
                 "application/vnd.ms-fontobject".equals(contentType)) {
             response.setHeader("Access-Control-Allow-Origin", "*");
         }
-        // Defense in depth for untrusted EPUB resources. See Foliate's security guidance:
-        // https://github.com/johnfactotum/foliate-js#security
-        response.setHeader("Content-Security-Policy", "script-src 'none'");
-        response.setHeader("Cache-Control", "private, max-age=3600");
 
         try {
-            epubReaderService.streamFile(bookId, bookType, cleanPath, response.getOutputStream());
+            epubReaderService.streamFile(bookId, bookType, cleanPath, request, response);
         } catch (FileNotFoundException e) {
             response.reset();
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
