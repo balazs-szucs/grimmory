@@ -31,6 +31,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
@@ -40,6 +41,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 public class EpubReaderService {
 
     private static final String CONTAINER_PATH = "META-INF/container.xml";
+    private static final Pattern SAFE_EXTENSION = Pattern.compile("\\.[a-z0-9]{1,12}");
 
     private static final int MAX_CACHE_ENTRIES = 50;
 
@@ -210,7 +212,7 @@ public class EpubReaderService {
         }
 
         String ext = name.substring(dot).toLowerCase(Locale.ROOT);
-        return ext.matches("\\.[a-z0-9]{1,12}") ? ext : ".bin";
+        return SAFE_EXTENSION.matcher(ext).matches() ? ext : ".bin";
     }
 
     private static String sha256Hex(String value) {

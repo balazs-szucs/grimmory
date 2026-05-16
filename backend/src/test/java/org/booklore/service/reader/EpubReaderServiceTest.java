@@ -171,6 +171,7 @@ class EpubReaderServiceTest {
             // Mock ChapterCacheService behavior for the asset extraction
             when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-asset"));
 
+
             epubReaderService.streamFile(1L, null, chapter1Href, outputStream);
 
             String content = outputStream.toString(StandardCharsets.UTF_8);
@@ -228,7 +229,8 @@ class EpubReaderServiceTest {
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // Mock ChapterCacheService behavior for the asset extraction
-            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-container"));
+            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-asset"));
+
 
             epubReaderService.streamFile(1L, null, "META-INF/container.xml", outputStream);
 
@@ -407,7 +409,8 @@ class EpubReaderServiceTest {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // Path with leading slash should work
             // Mock ChapterCacheService behavior for the asset extraction
-            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-slash"));
+            when(chapterCacheService.getCachedAsset(anyString(), anyString())).thenReturn(tempDir.resolve("mock-cached-asset"));
+
 
             epubReaderService.streamFile(1L, null, "/" + relativePath, outputStream);
 
