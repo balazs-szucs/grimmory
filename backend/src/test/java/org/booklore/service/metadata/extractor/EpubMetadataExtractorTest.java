@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -950,9 +951,10 @@ class EpubMetadataExtractorTest {
                     <item id="cover" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>
                     """);
             File epub = createEpub(opf, "OEBPS/content.opf", coverBytes);
-            byte[] result = extractor.extractCover(epub);
-
-            assertThat(result).isEqualTo(coverBytes);
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(coverBytes);
+            }
         }
 
         @Test
@@ -962,9 +964,10 @@ class EpubMetadataExtractorTest {
                     <item id="cover-img" href="images/cover.jpg" media-type="image/jpeg"/>
                     """);
             File epub = createEpub(opf, "OEBPS/content.opf", coverBytes);
-            byte[] result = extractor.extractCover(epub);
-
-            assertThat(result).isEqualTo(coverBytes);
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(coverBytes);
+            }
         }
 
         @Test
@@ -1004,8 +1007,10 @@ class EpubMetadataExtractorTest {
                 zos.closeEntry();
             }
 
-            byte[] result = extractor.extractCover(epub);
-            assertThat(result).isEqualTo(coverBytes);
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(coverBytes);
+            }
         }
 
         @Test
@@ -1042,8 +1047,9 @@ class EpubMetadataExtractorTest {
                 zos.closeEntry();
             }
 
-            byte[] result = extractor.extractCover(epub);
-            assertThat(result).isNull();
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNull();
+            }
         }
     }
 
@@ -1089,8 +1095,10 @@ class EpubMetadataExtractorTest {
                 zos.closeEntry();
             }
 
-            byte[] result = extractor.extractCover(epub);
-            assertThat(result).isEqualTo(coverBytes);
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(coverBytes);
+            }
         }
 
         @Test
@@ -1132,8 +1140,10 @@ class EpubMetadataExtractorTest {
                 zos.closeEntry();
             }
 
-            byte[] result = extractor.extractCover(epub);
-            assertThat(result).isEqualTo(coverBytes);
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(coverBytes);
+            }
         }
 
         @Test
@@ -1175,8 +1185,10 @@ class EpubMetadataExtractorTest {
                 zos.closeEntry();
             }
 
-            byte[] result = extractor.extractCover(epub);
-            assertThat(result).isEqualTo(coverBytes);
+            try (InputStream coverStream = extractor.extractCover(epub)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(coverBytes);
+            }
         }
     }
 
@@ -1305,10 +1317,12 @@ class EpubMetadataExtractorTest {
     class EdgeCases {
 
         @Test
-        void nonExistentFileReturnsNull() {
+        void nonExistentFileReturnsNull() throws IOException {
             File nonExistent = new File(tempDir.toFile(), "nonexistent.epub");
             assertThat(extractor.extractMetadata(nonExistent)).isNull();
-            assertThat(extractor.extractCover(nonExistent)).isNull();
+            try (InputStream coverStream = extractor.extractCover(nonExistent)) {
+                assertThat(coverStream).isNull();
+            }
         }
 
         @Test
@@ -1318,7 +1332,9 @@ class EpubMetadataExtractorTest {
                 fos.write(new byte[]{0x00, 0x01, 0x02, 0x03});
             }
             assertThat(extractor.extractMetadata(corrupt)).isNull();
-            assertThat(extractor.extractCover(corrupt)).isNull();
+            try (InputStream coverStream = extractor.extractCover(corrupt)) {
+                assertThat(coverStream).isNull();
+            }
         }
 
         @Test

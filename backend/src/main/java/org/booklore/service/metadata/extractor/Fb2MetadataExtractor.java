@@ -11,8 +11,10 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -36,51 +38,31 @@ public class Fb2MetadataExtractor implements FileMetadataExtractor {
     private static final Pattern ISO_DATE_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
 
     @Override
-    public byte[] extractCover(File file) {
+    public InputStream extractCover(File file) throws IOException {
         try (InputStream inputStream = getInputStream(file)) {
-            DocumentBuilder builder = SecureXmlUtils.createSecureDocumentBuilder(true);
-            Document doc = builder.parse(inputStream);
+            javax.xml.stream.XMLInputFactory factory = javax.xml.stream.XMLInputFactory.newInstance();
+            factory.setProperty(javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+            factory.setProperty(javax.xml.stream.XMLInputFactory.SUPPORT_DTD, false);
+            javax.xml.stream.XMLStreamReader reader = factory.createXMLStreamReader(inputStream);
 
-            // Look for cover image in binary elements
-            NodeList binaries = doc.getElementsByTagNameNS(FB2_NAMESPACE, "binary");
-            for (int i = 0; i < binaries.getLength(); i++) {
-                Element binary = (Element) binaries.item(i);
-                String id = binary.getAttribute("id");
-
-                if (id != null && id.toLowerCase().contains("cover")) {
-                    String contentType = binary.getAttribute("content-type");
-                    if (contentType != null && contentType.startsWith("image/")) {
-                        String base64Data = binary.getTextContent().trim();
-                        return Base64.getDecoder().decode(base64Data);
-                    }
-                }
-            }
-
-            // If no cover found by name, try to find the first referenced image in title-info
-            Element titleInfo = getFirstElementByTagNameNS(doc, FB2_NAMESPACE, "title-info");
-            if (titleInfo != null) {
-                NodeList coverPages = titleInfo.getElementsByTagNameNS(FB2_NAMESPACE, "coverpage");
-                if (coverPages.getLength() > 0) {
-                    Element coverPage = (Element) coverPages.item(0);
-                    NodeList images = coverPage.getElementsByTagNameNS(FB2_NAMESPACE, "image");
-                    if (images.getLength() > 0) {
-                        Element image = (Element) images.item(0);
-                        String href = image.getAttributeNS("http://www.w3.org/1999/xlink", "href");
-                        if (href != null && href.startsWith("#")) {
-                            String imageId = href.substring(1);
-                            // Find the binary with this ID
-                            for (int i = 0; i < binaries.getLength(); i++) {
-                                Element binary = (Element) binaries.item(i);
-                                if (imageId.equals(binary.getAttribute("id"))) {
-                                    String base64Data = binary.getTextContent().trim();
-                                    return Base64.getDecoder().decode(base64Data);
-                                }
-                            }
+            String coverId = null;
+            while (reader.hasNext()) {
+                int event = reader.next();
+                if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                    String localName = reader.getLocalName();
+                    if ("coverpage".equals(localName)) {
+                        coverId = findCoverId(reader);
+                    } else if ("binary".equals(localName)) {
+                        String id = reader.getAttributeValue(null, "id");
+                        String contentType = reader.getAttributeValue(null, "content-type");
+                        if (id != null && (id.equals(coverId) || id.toLowerCase().contains("cover")) &&
+                                contentType != null && contentType.startsWith("image/")) {
+                            String base64Data = reader.getElementText().trim();
+                            return new ByteArrayInputStream(Base64.getDecoder().decode(base64Data));
                         }
                     }
                 }
             }
-
             return null;
         } catch (Exception e) {
             log.warn("Failed to extract cover from FB2: {}", file.getName(), e);
@@ -88,32 +70,43 @@ public class Fb2MetadataExtractor implements FileMetadataExtractor {
         }
     }
 
+    private String findCoverId(javax.xml.stream.XMLStreamReader reader) throws javax.xml.stream.XMLStreamException {
+        while (reader.hasNext()) {
+            int event = reader.next();
+            if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT && "image".equals(reader.getLocalName())) {
+                String href = reader.getAttributeValue("http://www.w3.org/1999/xlink", "href");
+                if (href != null && href.startsWith("#")) {
+                    return href.substring(1);
+                }
+            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "coverpage".equals(reader.getLocalName())) {
+                break;
+            }
+        }
+        return null;
+    }
+
     @Override
     public BookMetadata extractMetadata(File file) {
         try (InputStream inputStream = getInputStream(file)) {
-            DocumentBuilder builder = SecureXmlUtils.createSecureDocumentBuilder(true);
-            Document doc = builder.parse(inputStream);
+            javax.xml.stream.XMLInputFactory factory = javax.xml.stream.XMLInputFactory.newInstance();
+            factory.setProperty(javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+            factory.setProperty(javax.xml.stream.XMLInputFactory.SUPPORT_DTD, false);
+            javax.xml.stream.XMLStreamReader reader = factory.createXMLStreamReader(inputStream);
 
             BookMetadata.BookMetadataBuilder metadataBuilder = BookMetadata.builder();
             List<String> authors = new ArrayList<>();
             Set<String> categories = new HashSet<>();
 
-            // Extract title-info (main metadata section)
-            Element titleInfo = getFirstElementByTagNameNS(doc, FB2_NAMESPACE, "title-info");
-            if (titleInfo != null) {
-                extractTitleInfo(titleInfo, metadataBuilder, authors, categories);
-            }
-
-            // Extract publish-info (publisher, year, ISBN)
-            Element publishInfo = getFirstElementByTagNameNS(doc, FB2_NAMESPACE, "publish-info");
-            if (publishInfo != null) {
-                extractPublishInfo(publishInfo, metadataBuilder);
-            }
-
-            // Extract document-info (optional metadata)
-            Element documentInfo = getFirstElementByTagNameNS(doc, FB2_NAMESPACE, "document-info");
-            if (documentInfo != null) {
-                extractDocumentInfo(documentInfo, metadataBuilder);
+            while (reader.hasNext()) {
+                int event = reader.next();
+                if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                    String localName = reader.getLocalName();
+                    switch (localName) {
+                        case "title-info" -> extractTitleInfo(reader, metadataBuilder, authors, categories);
+                        case "publish-info" -> extractPublishInfo(reader, metadataBuilder);
+                        case "document-info" -> extractDocumentInfo(reader, metadataBuilder);
+                    }
+                }
             }
 
             metadataBuilder.authors(authors);
@@ -126,188 +119,153 @@ public class Fb2MetadataExtractor implements FileMetadataExtractor {
         }
     }
 
-    private void extractTitleInfo(Element titleInfo, BookMetadata.BookMetadataBuilder builder,
-                                   List<String> authors, Set<String> categories) {
-        // Extract genres (categories)
-        NodeList genres = titleInfo.getElementsByTagNameNS(FB2_NAMESPACE, "genre");
-        for (int i = 0; i < genres.getLength(); i++) {
-            String genre = genres.item(i).getTextContent().trim();
-            if (StringUtils.isNotBlank(genre)) {
-                categories.add(genre);
-            }
-        }
-
-        // Extract authors
-        NodeList authorNodes = titleInfo.getElementsByTagNameNS(FB2_NAMESPACE, "author");
-        for (int i = 0; i < authorNodes.getLength(); i++) {
-            Element author = (Element) authorNodes.item(i);
-            String authorName = extractPersonName(author);
-            if (StringUtils.isNotBlank(authorName)) {
-                authors.add(authorName);
-            }
-        }
-
-        // Extract book title
-        Element bookTitle = getFirstElementByTagNameNS(titleInfo, FB2_NAMESPACE, "book-title");
-        if (bookTitle != null) {
-            builder.title(bookTitle.getTextContent().trim());
-        }
-
-        // Extract annotation (description)
-        Element annotation = getFirstElementByTagNameNS(titleInfo, FB2_NAMESPACE, "annotation");
-        if (annotation != null) {
-            String description = extractTextFromElement(annotation);
-            if (StringUtils.isNotBlank(description)) {
-                builder.description(description);
-            }
-        }
-
-        // Extract keywords (additional categories/tags)
-        Element keywords = getFirstElementByTagNameNS(titleInfo, FB2_NAMESPACE, "keywords");
-        if (keywords != null) {
-            String keywordsText = keywords.getTextContent().trim();
-            if (StringUtils.isNotBlank(keywordsText)) {
-                for (String keyword : KEYWORD_SEPARATOR_PATTERN.split(keywordsText)) {
-                    String trimmed = keyword.trim();
-                    if (StringUtils.isNotBlank(trimmed)) {
-                        categories.add(trimmed);
+    private void extractTitleInfo(javax.xml.stream.XMLStreamReader reader, BookMetadata.BookMetadataBuilder builder,
+                                   List<String> authors, Set<String> categories) throws javax.xml.stream.XMLStreamException {
+        while (reader.hasNext()) {
+            int event = reader.next();
+            if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                String localName = reader.getLocalName();
+                switch (localName) {
+                    case "genre" -> {
+                        String genre = reader.getElementText().trim();
+                        if (StringUtils.isNotBlank(genre)) categories.add(genre);
+                    }
+                    case "author" -> {
+                        String authorName = extractPersonName(reader);
+                        if (StringUtils.isNotBlank(authorName)) authors.add(authorName);
+                    }
+                    case "book-title" -> builder.title(reader.getElementText().trim());
+                    case "annotation" -> {
+                        String description = extractTextFromReader(reader);
+                        if (StringUtils.isNotBlank(description)) builder.description(description);
+                    }
+                    case "keywords" -> {
+                        String keywordsText = reader.getElementText().trim();
+                        if (StringUtils.isNotBlank(keywordsText)) {
+                            for (String keyword : KEYWORD_SEPARATOR_PATTERN.split(keywordsText)) {
+                                String trimmed = keyword.trim();
+                                if (StringUtils.isNotBlank(trimmed)) categories.add(trimmed);
+                            }
+                        }
+                    }
+                    case "date" -> {
+                        String dateValue = reader.getAttributeValue(null, "value");
+                        if (StringUtils.isBlank(dateValue)) {
+                            dateValue = reader.getElementText().trim();
+                        }
+                        LocalDate publishedDate = parseDate(dateValue);
+                        if (publishedDate != null) builder.publishedDate(publishedDate);
+                    }
+                    case "lang" -> builder.language(reader.getElementText().trim());
+                    case "sequence" -> {
+                        String seriesName = reader.getAttributeValue(null, "name");
+                        if (StringUtils.isNotBlank(seriesName)) builder.seriesName(seriesName.trim());
+                        String seriesNumber = reader.getAttributeValue(null, "number");
+                        if (StringUtils.isNotBlank(seriesNumber)) {
+                            try {
+                                builder.seriesNumber(Float.parseFloat(seriesNumber));
+                            } catch (NumberFormatException e) {
+                                log.debug("Failed to parse series number: {}", seriesNumber);
+                            }
+                        }
                     }
                 }
-            }
-        }
-
-        // Extract date
-        Element date = getFirstElementByTagNameNS(titleInfo, FB2_NAMESPACE, "date");
-        if (date != null) {
-            String dateValue = date.getAttribute("value");
-            if (StringUtils.isBlank(dateValue)) {
-                dateValue = date.getTextContent().trim();
-            }
-            LocalDate publishedDate = parseDate(dateValue);
-            if (publishedDate != null) {
-                builder.publishedDate(publishedDate);
-            }
-        }
-
-        // Extract language
-        Element lang = getFirstElementByTagNameNS(titleInfo, FB2_NAMESPACE, "lang");
-        if (lang != null) {
-            builder.language(lang.getTextContent().trim());
-        }
-
-        // Extract sequence (series information)
-        Element sequence = getFirstElementByTagNameNS(titleInfo, FB2_NAMESPACE, "sequence");
-        if (sequence != null) {
-            String seriesName = sequence.getAttribute("name");
-            if (StringUtils.isNotBlank(seriesName)) {
-                builder.seriesName(seriesName.trim());
-            }
-            String seriesNumber = sequence.getAttribute("number");
-            if (StringUtils.isNotBlank(seriesNumber)) {
-                try {
-                    builder.seriesNumber(Float.parseFloat(seriesNumber));
-                } catch (NumberFormatException e) {
-                    log.debug("Failed to parse series number: {}", seriesNumber);
-                }
+            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "title-info".equals(reader.getLocalName())) {
+                break;
             }
         }
     }
 
-    private void extractPublishInfo(Element publishInfo, BookMetadata.BookMetadataBuilder builder) {
-        // Extract publisher
-        Element publisher = getFirstElementByTagNameNS(publishInfo, FB2_NAMESPACE, "publisher");
-        if (publisher != null) {
-            builder.publisher(publisher.getTextContent().trim());
-        }
-
-        // Extract publication year
-        Element year = getFirstElementByTagNameNS(publishInfo, FB2_NAMESPACE, "year");
-        if (year != null) {
-            String yearText = year.getTextContent().trim();
-            Matcher matcher = YEAR_PATTERN.matcher(yearText);
-            if (matcher.find()) {
-                try {
-                    int yearValue = Integer.parseInt(matcher.group());
-                    builder.publishedDate(LocalDate.of(yearValue, 1, 1));
-                } catch (NumberFormatException e) {
-                    log.debug("Failed to parse year: {}", yearText);
+    private void extractPublishInfo(javax.xml.stream.XMLStreamReader reader, BookMetadata.BookMetadataBuilder builder) throws javax.xml.stream.XMLStreamException {
+        while (reader.hasNext()) {
+            int event = reader.next();
+            if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                String localName = reader.getLocalName();
+                switch (localName) {
+                    case "publisher" -> builder.publisher(reader.getElementText().trim());
+                    case "year" -> {
+                        String yearText = reader.getElementText().trim();
+                        Matcher matcher = YEAR_PATTERN.matcher(yearText);
+                        if (matcher.find()) {
+                            try {
+                                int yearValue = Integer.parseInt(matcher.group());
+                                builder.publishedDate(LocalDate.of(yearValue, 1, 1));
+                            } catch (NumberFormatException e) {
+                                log.debug("Failed to parse year: {}", yearText);
+                            }
+                        }
+                    }
+                    case "isbn" -> {
+                        String isbnText = ISBN_CLEANER_PATTERN.matcher(reader.getElementText().trim()).replaceAll("");
+                        if (isbnText.length() == 13) {
+                            builder.isbn13(isbnText);
+                        } else if (isbnText.length() == 10) {
+                            builder.isbn10(isbnText);
+                        } else {
+                            Matcher matcher = ISBN_PATTERN.matcher(isbnText);
+                            if (matcher.find()) {
+                                builder.isbn10(matcher.group());
+                            }
+                        }
+                    }
                 }
-            }
-        }
-
-        // Extract ISBN
-        Element isbn = getFirstElementByTagNameNS(publishInfo, FB2_NAMESPACE, "isbn");
-        if (isbn != null) {
-            String isbnText = ISBN_CLEANER_PATTERN.matcher(isbn.getTextContent().trim()).replaceAll("");
-            if (isbnText.length() == 13) {
-                builder.isbn13(isbnText);
-            } else if (isbnText.length() == 10) {
-                builder.isbn10(isbnText);
-            } else if (ISBN_PATTERN.matcher(isbnText).find()) {
-                // Extract the first valid ISBN pattern found
-                Matcher matcher = ISBN_PATTERN.matcher(isbnText);
-                if (matcher.find()) {
-                    builder.isbn10(matcher.group());
-                }
+            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "publish-info".equals(reader.getLocalName())) {
+                break;
             }
         }
     }
 
-    private void extractDocumentInfo(Element documentInfo, BookMetadata.BookMetadataBuilder builder) {
-        // Extract document ID (can be used as an identifier)
-        Element id = getFirstElementByTagNameNS(documentInfo, FB2_NAMESPACE, "id");
-        if (id != null) {
-            // Could potentially map this to a custom identifier field if needed
-            log.debug("FB2 document ID: {}", id.getTextContent().trim());
+    private void extractDocumentInfo(javax.xml.stream.XMLStreamReader reader, BookMetadata.BookMetadataBuilder builder) throws javax.xml.stream.XMLStreamException {
+        while (reader.hasNext()) {
+            int event = reader.next();
+            if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                if ("id".equals(reader.getLocalName())) {
+                    log.debug("FB2 document ID: {}", reader.getElementText().trim());
+                }
+            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "document-info".equals(reader.getLocalName())) {
+                break;
+            }
         }
     }
 
-    private String extractPersonName(Element personElement) {
-        Element firstName = getFirstElementByTagNameNS(personElement, FB2_NAMESPACE, "first-name");
-        Element middleName = getFirstElementByTagNameNS(personElement, FB2_NAMESPACE, "middle-name");
-        Element lastName = getFirstElementByTagNameNS(personElement, FB2_NAMESPACE, "last-name");
-        Element nickname = getFirstElementByTagNameNS(personElement, FB2_NAMESPACE, "nickname");
-
+    private String extractPersonName(javax.xml.stream.XMLStreamReader reader) throws javax.xml.stream.XMLStreamException {
         StringBuilder name = new StringBuilder(64);
-
-        if (firstName != null) {
-            name.append(firstName.getTextContent().trim());
-        }
-        if (middleName != null) {
-            if (!name.isEmpty()) name.append(" ");
-            name.append(middleName.getTextContent().trim());
-        }
-        if (lastName != null) {
-            if (!name.isEmpty()) name.append(" ");
-            name.append(lastName.getTextContent().trim());
-        }
-
-        // If no name parts found, try nickname
-        if (name.isEmpty() && nickname != null) {
-            name.append(nickname.getTextContent().trim());
-        }
-
-        return name.toString();
-    }
-
-    private String extractTextFromElement(Element element) {
-        StringBuilder text = new StringBuilder();
-        NodeList children = element.getChildNodes();
-
-        for (int i = 0; i < children.getLength(); i++) {
-            Node child = children.item(i);
-            if (child.getNodeType() == Node.TEXT_NODE) {
-                text.append(child.getTextContent().trim()).append(" ");
-            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
-                Element childElement = (Element) child;
-                if ("p".equals(childElement.getLocalName())) {
-                    text.append(childElement.getTextContent().trim()).append("\n\n");
-                } else {
-                    text.append(extractTextFromElement(childElement));
+        String nickname = null;
+        while (reader.hasNext()) {
+            int event = reader.next();
+            if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                String localName = reader.getLocalName();
+                String text = reader.getElementText().trim();
+                if (StringUtils.isNotBlank(text)) {
+                    if ("nickname".equals(localName)) {
+                        nickname = text;
+                    } else if ("first-name".equals(localName) || "middle-name".equals(localName) || "last-name".equals(localName)) {
+                        if (!name.isEmpty()) name.append(" ");
+                        name.append(text);
+                    }
                 }
+            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && "author".equals(reader.getLocalName())) {
+                break;
             }
         }
+        return name.isEmpty() ? (nickname != null ? nickname : "") : name.toString();
+    }
 
+    private String extractTextFromReader(javax.xml.stream.XMLStreamReader reader) throws javax.xml.stream.XMLStreamException {
+        StringBuilder text = new StringBuilder();
+        String startTag = reader.getLocalName();
+        while (reader.hasNext()) {
+            int event = reader.next();
+            if (event == javax.xml.stream.XMLStreamConstants.CHARACTERS) {
+                text.append(reader.getText().trim()).append(" ");
+            } else if (event == javax.xml.stream.XMLStreamConstants.START_ELEMENT) {
+                if ("p".equals(reader.getLocalName())) {
+                    text.append(reader.getElementText().trim()).append("\n\n");
+                }
+            } else if (event == javax.xml.stream.XMLStreamConstants.END_ELEMENT && startTag.equals(reader.getLocalName())) {
+                break;
+            }
+        }
         return text.toString().trim();
     }
 
@@ -335,17 +293,6 @@ public class Fb2MetadataExtractor implements FileMetadataExtractor {
         return null;
     }
 
-    private Element getFirstElementByTagNameNS(Node parent, String namespace, String localName) {
-        NodeList nodes;
-        if (parent instanceof Document document) {
-            nodes = document.getElementsByTagNameNS(namespace, localName);
-        } else if (parent instanceof Element element) {
-            nodes = element.getElementsByTagNameNS(namespace, localName);
-        } else {
-            return null;
-        }
-        return nodes.getLength() > 0 ? (Element) nodes.item(0) : null;
-    }
 
     private InputStream getInputStream(File file) throws Exception {
         FileInputStream fis = new FileInputStream(file);

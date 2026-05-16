@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -246,6 +247,23 @@ public class FileService {
         log.info("Image saved successfully to: {}", filePath);
     }
 
+    public void saveImage(InputStream inputStream, String filePath) throws IOException {
+        if (inputStream == null) {
+            log.warn("Skipping saveImage for {}: input stream is null", filePath);
+            return;
+        }
+        File outputFile = new File(filePath);
+        File parentDir = outputFile.getParentFile();
+        if (!parentDir.exists() && !parentDir.mkdirs()) {
+            throw new IOException("Failed to create directory: " + parentDir);
+        }
+        try (var out = Files.newOutputStream(outputFile.toPath())) {
+            vipsImageService.processStreamToJpeg(inputStream, out,
+                    MAX_ORIGINAL_WIDTH, MAX_ORIGINAL_HEIGHT);
+        }
+        log.info("Image saved successfully to: {}", filePath);
+    }
+
     public byte[] downloadImageFromUrl(String imageUrl) throws IOException {
         try {
             return downloadImageFromUrlInternal(imageUrl);
@@ -383,7 +401,7 @@ public class FileService {
         }
     }
 
-    private void transferWithLimit(InputStream inputStream, java.io.OutputStream outputStream, long maxBytes) throws IOException {
+    private void transferWithLimit(InputStream inputStream, OutputStream outputStream, long maxBytes) throws IOException {
         byte[] buffer = new byte[8192];
         long total = 0;
         int read;

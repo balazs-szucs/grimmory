@@ -22,7 +22,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -462,7 +465,7 @@ public class AudiobookMetadataExtractor implements FileMetadataExtractor {
     }
 
     @Override
-    public byte[] extractCover(File audioFile) {
+    public InputStream extractCover(File audioFile) throws IOException {
         try {
             AudioFile f = AudioFileIO.read(audioFile);
             Tag tag = f.getTag();
@@ -473,7 +476,8 @@ public class AudiobookMetadataExtractor implements FileMetadataExtractor {
 
             Artwork artwork = tag.getFirstArtwork();
             if (artwork != null) {
-                return artwork.getBinaryData();
+                byte[] jpeg = artwork.getBinaryData();
+                return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
             }
 
             return null;

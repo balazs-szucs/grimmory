@@ -12,7 +12,10 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -180,40 +183,43 @@ class MetadataExtractorFactoryTest {
     class ExtractCoverByBookFileExtension {
 
         @Test
-        void routesEpubCover() {
-            byte[] coverData = {1, 2, 3};
-            when(epubMetadataExtractor.extractCover(dummyFile)).thenReturn(coverData);
-            assertThat(factory.extractCover(BookFileExtension.EPUB, dummyFile)).isEqualTo(coverData);
+        void routesEpubCover() throws IOException {
+            InputStream coverStream = new ByteArrayInputStream(new byte[]{1, 2, 3});
+            when(epubMetadataExtractor.extractCover(dummyFile)).thenReturn(coverStream);
+            assertThat(factory.extractCover(BookFileExtension.EPUB, dummyFile)).isSameAs(coverStream);
         }
 
         @Test
-        void routesPdfCover() {
-            byte[] coverData = {4, 5, 6};
-            when(pdfMetadataExtractor.extractCover(dummyFile)).thenReturn(coverData);
-            assertThat(factory.extractCover(BookFileExtension.PDF, dummyFile)).isEqualTo(coverData);
+        void routesPdfCover() throws IOException {
+            InputStream coverStream = new ByteArrayInputStream(new byte[]{4, 5, 6});
+            when(pdfMetadataExtractor.extractCover(dummyFile)).thenReturn(coverStream);
+            assertThat(factory.extractCover(BookFileExtension.PDF, dummyFile)).isSameAs(coverStream);
         }
 
         @Test
-        void routesCbzCover() {
-            when(cbxMetadataExtractor.extractCover(dummyFile)).thenReturn(new byte[]{1});
-            assertThat(factory.extractCover(BookFileExtension.CBZ, dummyFile)).isEqualTo(new byte[]{1});
+        void routesCbzCover() throws IOException {
+            InputStream coverStream = new ByteArrayInputStream(new byte[]{1});
+            when(cbxMetadataExtractor.extractCover(dummyFile)).thenReturn(coverStream);
+            assertThat(factory.extractCover(BookFileExtension.CBZ, dummyFile)).isSameAs(coverStream);
         }
 
         @Test
-        void routesFb2Cover() {
-            when(fb2MetadataExtractor.extractCover(dummyFile)).thenReturn(new byte[]{1});
-            assertThat(factory.extractCover(BookFileExtension.FB2, dummyFile)).isEqualTo(new byte[]{1});
+        void routesFb2Cover() throws IOException {
+            InputStream coverStream = new ByteArrayInputStream(new byte[]{1});
+            when(fb2MetadataExtractor.extractCover(dummyFile)).thenReturn(coverStream);
+            assertThat(factory.extractCover(BookFileExtension.FB2, dummyFile)).isSameAs(coverStream);
         }
 
         @Test
-        void routesAudiobookCover() {
-            when(audiobookMetadataExtractor.extractCover(dummyFile)).thenReturn(new byte[]{1});
-            assertThat(factory.extractCover(BookFileExtension.M4B, dummyFile)).isEqualTo(new byte[]{1});
+        void routesAudiobookCover() throws IOException {
+            InputStream coverStream = new ByteArrayInputStream(new byte[]{1});
+            when(audiobookMetadataExtractor.extractCover(dummyFile)).thenReturn(coverStream);
+            assertThat(factory.extractCover(BookFileExtension.M4B, dummyFile)).isSameAs(coverStream);
         }
 
         @ParameterizedTest
         @EnumSource(BookFileExtension.class)
-        void allExtensionsCoverHandled(BookFileExtension ext) {
+        void allExtensionsCoverHandled(BookFileExtension ext) throws IOException {
             factory.extractCover(ext, dummyFile);
         }
     }

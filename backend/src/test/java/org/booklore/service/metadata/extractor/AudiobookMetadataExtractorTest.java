@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.jaudiotagger.audio.AudioFileIO;
 
 import java.io.File;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
@@ -618,7 +619,7 @@ class AudiobookMetadataExtractorTest {
     class ExtractCoverTests {
 
         @Test
-        void coverFromArtworkTag() {
+        void coverFromArtworkTag() throws Exception {
             try (MockedStatic<AudioFileIO> mocked = mockStatic(AudioFileIO.class)) {
                 byte[] imageData = {0x01, 0x02, 0x03};
                 Artwork artwork = mock(Artwork.class);
@@ -633,14 +634,15 @@ class AudiobookMetadataExtractorTest {
                 File file = new File(tempDir.toFile(), "test.mp3");
                 mocked.when(() -> AudioFileIO.read(file)).thenReturn(audioFile);
 
-                byte[] cover = extractor.extractCover(file);
-
-                assertThat(cover).isEqualTo(imageData);
+                try (InputStream coverStream = extractor.extractCover(file)) {
+                    assertThat(coverStream).isNotNull();
+                    assertThat(coverStream.readAllBytes()).isEqualTo(imageData);
+                }
             }
         }
 
         @Test
-        void noCoverReturnsNull() {
+        void noCoverReturnsNull() throws Exception {
             try (MockedStatic<AudioFileIO> mocked = mockStatic(AudioFileIO.class)) {
                 Tag tag = mock(Tag.class);
                 when(tag.getFirstArtwork()).thenReturn(null);
@@ -651,14 +653,14 @@ class AudiobookMetadataExtractorTest {
                 File file = new File(tempDir.toFile(), "test.mp3");
                 mocked.when(() -> AudioFileIO.read(file)).thenReturn(audioFile);
 
-                byte[] cover = extractor.extractCover(file);
-
-                assertThat(cover).isNull();
+                try (InputStream coverStream = extractor.extractCover(file)) {
+                    assertThat(coverStream).isNull();
+                }
             }
         }
 
         @Test
-        void noTagReturnsNull() {
+        void noTagReturnsNull() throws Exception {
             try (MockedStatic<AudioFileIO> mocked = mockStatic(AudioFileIO.class)) {
                 AudioFile audioFile = mock(AudioFile.class);
                 when(audioFile.getTag()).thenReturn(null);
@@ -666,21 +668,21 @@ class AudiobookMetadataExtractorTest {
                 File file = new File(tempDir.toFile(), "test.mp3");
                 mocked.when(() -> AudioFileIO.read(file)).thenReturn(audioFile);
 
-                byte[] cover = extractor.extractCover(file);
-
-                assertThat(cover).isNull();
+                try (InputStream coverStream = extractor.extractCover(file)) {
+                    assertThat(coverStream).isNull();
+                }
             }
         }
 
         @Test
-        void exceptionReturnsNull() {
+        void exceptionReturnsNull() throws Exception {
             try (MockedStatic<AudioFileIO> mocked = mockStatic(AudioFileIO.class)) {
                 File file = new File(tempDir.toFile(), "corrupt.mp3");
                 mocked.when(() -> AudioFileIO.read(file)).thenThrow(new RuntimeException("bad file"));
 
-                byte[] cover = extractor.extractCover(file);
-
-                assertThat(cover).isNull();
+                try (InputStream coverStream = extractor.extractCover(file)) {
+                    assertThat(coverStream).isNull();
+                }
             }
         }
     }

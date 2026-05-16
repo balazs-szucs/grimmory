@@ -4,8 +4,10 @@ import org.booklore.model.dto.BookMetadata;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +38,7 @@ public abstract class MobiBaseMetadataExtractor implements FileMetadataExtractor
     protected abstract String getFormatName();
 
     @Override
-    public byte[] extractCover(File file) {
+    public InputStream extractCover(File file) throws IOException {
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             PalmDB palmDB = readPalmDB(raf);
             if (palmDB == null) {
@@ -57,13 +59,15 @@ public abstract class MobiBaseMetadataExtractor implements FileMetadataExtractor
             if (coverIndex != null) {
                 int imageRecordIndex = mobiHeader.firstImageIndex + coverIndex;
                 if (imageRecordIndex < palmDB.records.size()) {
-                    return extractImageFromRecord(raf, palmDB.records.get(imageRecordIndex));
+                    byte[] jpeg = extractImageFromRecord(raf, palmDB.records.get(imageRecordIndex));
+                    return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
                 }
             }
 
             // Try first image
             if (mobiHeader.firstImageIndex > 0 && mobiHeader.firstImageIndex < palmDB.records.size()) {
-                return extractImageFromRecord(raf, palmDB.records.get(mobiHeader.firstImageIndex));
+                byte[] jpeg = extractImageFromRecord(raf, palmDB.records.get(mobiHeader.firstImageIndex));
+                return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
             }
 
             return null;

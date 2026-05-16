@@ -23,6 +23,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -457,9 +458,7 @@ class FileServiceTest {
             @Test
             void nullImageData_doesNotCallVips() throws IOException {
                 Path outputPath = tempDir.resolve("null.jpg");
-
-                fileService.saveImage(null, outputPath.toString());
-
+                fileService.saveImage((byte[]) null, outputPath.toString());
                 verify(vipsImageService, never()).flattenResizeAndSave(any(byte[].class), any(Path.class), anyInt(), anyInt());
             }
         }
@@ -754,7 +753,7 @@ class FileServiceTest {
                     org.springframework.web.client.ResponseExtractor<?> extractor = invocation.getArgument(3);
                     org.springframework.http.client.ClientHttpResponse response = mock(org.springframework.http.client.ClientHttpResponse.class);
                     when(response.getStatusCode()).thenReturn(org.springframework.http.HttpStatus.OK);
-                    when(response.getBody()).thenReturn(new java.io.ByteArrayInputStream(imageBytes));
+                    when(response.getBody()).thenReturn(new ByteArrayInputStream(imageBytes));
                     extractor.extractData(response);
                     return null;
                 });

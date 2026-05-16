@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -72,14 +73,14 @@ public class MobiProcessor extends AbstractFileProcessor implements BookFileProc
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
         try {
             File mobiFile = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
-            byte[] coverData = mobiMetadataExtractor.extractCover(mobiFile);
+            try (InputStream coverStream = mobiMetadataExtractor.extractCover(mobiFile)) {
+                if (coverStream == null) {
+                    log.warn("No cover image found in MOBI '{}'", bookFile.getFileName());
+                    return false;
+                }
 
-            if (coverData == null || coverData.length == 0) {
-                log.warn("No cover image found in MOBI '{}'", bookFile.getFileName());
-                return false;
+                return saveCoverImage(coverStream, bookEntity.getId());
             }
-
-            return saveCoverImage(coverData, bookEntity.getId());
 
         } catch (Exception e) {
             log.error("Error generating cover for MOBI '{}': {}", bookFile.getFileName(), e.getMessage(), e);
@@ -143,8 +144,8 @@ public class MobiProcessor extends AbstractFileProcessor implements BookFileProc
         }
     }
 
-    private boolean saveCoverImage(byte[] coverData, long bookId) throws Exception {
-        return fileService.saveCoverImages(coverData, bookId);
+    private boolean saveCoverImage(InputStream coverStream, long bookId) throws Exception {
+        return fileService.saveCoverImages(coverStream, bookId);
     }
 }
 

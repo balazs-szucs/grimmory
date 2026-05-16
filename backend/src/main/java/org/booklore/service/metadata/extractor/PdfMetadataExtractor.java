@@ -20,6 +20,8 @@ import org.w3c.dom.NodeList;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,10 +58,11 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
     private static final Pattern YEAR_PATTERN = Pattern.compile("\\d{4}");
 
     @Override
-    public byte[] extractCover(File file) {
+    public InputStream extractCover(File file) throws IOException {
         try (PdfDocument doc = PdfDocument.open(file.toPath());
              PdfPage page = doc.page(0)) {
-            return vipsImageService.renderPageToJpeg(page, 300, 85);
+            byte[] jpeg = vipsImageService.renderPageToJpeg(page, 300, 85);
+            return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
         } catch (Exception e) {
             log.warn("Failed to extract cover from PDF: {}", file.getAbsolutePath(), e);
             return null;

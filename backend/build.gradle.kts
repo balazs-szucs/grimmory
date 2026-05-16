@@ -12,6 +12,7 @@ plugins {
     id("org.hibernate.orm") version "7.3.4.Final"
     id("com.github.ben-manes.versions") version "0.54.0"
     jacoco
+    id("me.champeau.jmh") version "0.7.3"
 }
 
 group = "org.booklore"
@@ -258,8 +259,16 @@ hibernate {
 tasks.named<Test>("test") {
     useJUnitPlatform()
     maxHeapSize = "2560m"
-    jvmArgs("-XX:+EnableDynamicAgentLoading", "--enable-native-access=ALL-UNNAMED", "--enable-preview")
+    jvmArgs("-XX:+EnableDynamicAgentLoading", "--enable-native-access=ALL-UNNAMED", "--enable-preview", "--add-modules", "jdk.management", "-Djava.library.path=/opt/homebrew/lib")
+    environment("DYLD_LIBRARY_PATH", "/opt/homebrew/lib")
     finalizedBy(tasks.named("jacocoTestReport"))
+}
+
+jmh {
+    includes.add(".*Benchmark.*")
+    profilers.add("gc")
+    jvmArgs.addAll(listOf("--enable-preview", "--enable-native-access=ALL-UNNAMED", "-Djava.library.path=/opt/homebrew/lib"))
+    duplicateClassesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {

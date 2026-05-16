@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -71,14 +72,14 @@ public class EpubProcessor extends AbstractFileProcessor implements BookFileProc
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
         try {
             File epubFile = FileUtils.getBookFullPath(bookEntity, bookFile).toFile();
-            byte[] coverData = epubMetadataExtractor.extractCover(epubFile);
+            try (InputStream coverStream = epubMetadataExtractor.extractCover(epubFile)) {
+                if (coverStream == null) {
+                    log.warn("No cover image found in EPUB '{}'", bookFile.getFileName());
+                    return false;
+                }
 
-            if (coverData == null) {
-                log.warn("No cover image found in EPUB '{}'", bookFile.getFileName());
-                return false;
+                return fileService.saveCoverImages(coverStream, bookEntity.getId());
             }
-
-            return fileService.saveCoverImages(coverData, bookEntity.getId());
 
         } catch (Exception e) {
             log.error("Error generating cover for EPUB '{}': {}", bookFile.getFileName(), e.getMessage(), e);

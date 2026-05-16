@@ -7,6 +7,7 @@ import org.booklore.model.dto.ComicMetadata;
 import org.booklore.service.ArchiveService;
 import org.springframework.stereotype.Component;
 import org.booklore.util.SecureXmlUtils;
+import org.booklore.util.VipsImageService;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
@@ -45,9 +46,9 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     private static final Pattern ISBN_CLEANER_PATTERN = Pattern.compile("[- ]");
 
     private final ArchiveService archiveService;
-    private final org.booklore.util.VipsImageService vipsImageService;
+    private final VipsImageService vipsImageService;
 
-    public CbxMetadataExtractor(ArchiveService archiveService, org.booklore.util.VipsImageService vipsImageService) {
+    public CbxMetadataExtractor(ArchiveService archiveService, VipsImageService vipsImageService) {
         this.archiveService = archiveService;
         this.vipsImageService = vipsImageService;
     }
@@ -481,19 +482,25 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
     }
 
     @Override
-    public byte[] extractCover(File file) {
+    public InputStream extractCover(File file) throws IOException {
         return extractCover(file.toPath());
     }
 
-    public byte[] extractCover(Path path) {
+    public InputStream extractCover(Path path) {
         return Stream.<Supplier<Stream<String>>>of(
                         () -> extractCoverEntryNameFromComicInfo(path),
                         () -> extractCoverEntryNameFallback(path)
                 )
                 .flatMap(Supplier::get)
-                .map(coverEntry -> readArchiveEntryBytes(path, coverEntry))
+                .map(coverEntry -> {
+                    try {
+                        byte[] bytes = archiveService.getEntryBytes(path, coverEntry);
+                        return new ByteArrayInputStream(bytes);
+                    } catch (IOException e) {
+                        return null;
+                    }
+                })
                 .filter(Objects::nonNull)
-                .filter(this::canDecode)
                 .findFirst()
                 .orElse(null);
     }
@@ -614,13 +621,13 @@ public class CbxMetadataExtractor implements FileMetadataExtractor {
             return null;
         }
 
-        byte[] xmlBytes = readArchiveEntryBytes(cbxPath, comicInfoEntry);
-
-        if (xmlBytes == null) {
+        try {
+            byte[] bytes = archiveService.getEntryBytes(cbxPath, comicInfoEntry);
+            return new ByteArrayInputStream(bytes);
+        } catch (IOException e) {
+            log.warn("Failed to read comic info entry {} from archive: {}", comicInfoEntry, e.getMessage());
             return null;
         }
-
-        return new ByteArrayInputStream(xmlBytes);
     }
 
     private byte[] readArchiveEntryBytes(Path cbxPath, String entryName) {

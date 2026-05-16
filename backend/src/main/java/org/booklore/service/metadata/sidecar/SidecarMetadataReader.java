@@ -10,6 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -50,7 +51,7 @@ public class SidecarMetadataReader {
         }
     }
 
-    public byte[] readSidecarCover(Path bookPath) {
+    public InputStream getSidecarCoverInputStream(Path bookPath) {
         if (bookPath == null) {
             return null;
         }
@@ -62,9 +63,9 @@ public class SidecarMetadataReader {
         }
 
         try {
-            return Files.readAllBytes(coverPath);
+            return Files.newInputStream(coverPath);
         } catch (IOException e) {
-            log.warn("Failed to read sidecar cover from {}: {}", coverPath, e.getMessage());
+            log.warn("Failed to open sidecar cover stream from {}: {}", coverPath, e.getMessage());
             return null;
         }
     }

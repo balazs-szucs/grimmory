@@ -11,7 +11,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -847,18 +849,21 @@ class PdfMetadataExtractorTest {
                 // With PDFium4j we don't have easy drawing commands in this test,
                 // but a blank page should still render to a valid JPEG.
             });
-            byte[] cover = extractor.extractCover(pdf);
-            assertThat(cover).isNotNull();
-            assertThat(cover.length).isGreaterThan(0);
-            assertThat(cover[0]).isEqualTo((byte) 0xFF);
-            assertThat(cover[1]).isEqualTo((byte) 0xD8);
+            try (InputStream coverStream = extractor.extractCover(pdf)) {
+                assertThat(coverStream).isNotNull();
+                byte[] cover = coverStream.readAllBytes();
+                assertThat(cover.length).isGreaterThan(0);
+                assertThat(cover[0]).isEqualTo((byte) 0xFF);
+                assertThat(cover[1]).isEqualTo((byte) 0xD8);
+            }
         }
 
         @Test
-        void extractCover_nonExistentFile_returnsNull() {
+        void extractCover_nonExistentFile_returnsNull() throws Exception {
             File nonExistent = new File("/tmp/no_such_file_ever.pdf");
-            byte[] cover = extractor.extractCover(nonExistent);
-            assertThat(cover).isNull();
+            try (InputStream coverStream = extractor.extractCover(nonExistent)) {
+                assertThat(coverStream).isNull();
+            }
         }
     }
 
@@ -1105,7 +1110,7 @@ class PdfMetadataExtractorTest {
         );
         assertThat(meta.getPublisher()).isEqualTo("Orbit");
         assertThat(meta.getLanguage()).isEqualTo("en");
-        assertThat(meta.getPublishedDate()).isEqualTo(java.time.LocalDate.of(2013, 11, 6));
+        assertThat(meta.getPublishedDate()).isEqualTo(LocalDate.of(2013, 11, 6));
         assertThat(meta.getSeriesName()).isEqualTo("The Witcher");
         assertThat(meta.getSeriesNumber()).isEqualTo(0.6f);
         assertThat(meta.getSeriesTotal()).isEqualTo(5);

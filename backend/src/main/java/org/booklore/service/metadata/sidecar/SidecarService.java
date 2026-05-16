@@ -17,6 +17,7 @@ import org.booklore.service.metadata.BookMetadataUpdater;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -93,9 +94,12 @@ public class SidecarService {
             bookMetadataUpdater.setBookMetadata(context);
         }
 
-        byte[] coverBytes = sidecarReader.readSidecarCover(bookPath);
-        if (coverBytes != null) {
-            log.info("Sidecar cover found for book ID {} - cover import is a separate operation", bookId);
+        try (InputStream coverStream = sidecarReader.getSidecarCoverInputStream(bookPath)) {
+            if (coverStream != null) {
+                log.info("Sidecar cover found for book ID {} - cover import is a separate operation", bookId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to check sidecar cover for book ID {}: {}", bookId, e.getMessage());
         }
     }
 

@@ -7,6 +7,8 @@ import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 
 @Component
 @AllArgsConstructor
@@ -44,7 +46,7 @@ public class MetadataExtractorFactory {
         };
     }
 
-    public byte[] extractCover(BookFileExtension fileExt, File file) {
+    public InputStream extractCover(BookFileExtension fileExt, File file) throws IOException {
         return switch (fileExt) {
             case EPUB -> epubMetadataExtractor.extractCover(file);
             case PDF -> pdfMetadataExtractor.extractCover(file);

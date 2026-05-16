@@ -493,9 +493,10 @@ class Fb2MetadataExtractorTest {
                 <binary id="cover.jpg" content-type="image/jpeg">%s</binary>
                 """.formatted(base64));
 
-        byte[] cover = extractor.extractCover(file);
-
-        assertThat(cover).isEqualTo(imageData);
+        try (InputStream coverStream = extractor.extractCover(file)) {
+            assertThat(coverStream).isNotNull();
+            assertThat(coverStream.readAllBytes()).isEqualTo(imageData);
+        }
     }
 
     @Test
@@ -513,9 +514,10 @@ class Fb2MetadataExtractorTest {
                 <binary id="img1" content-type="image/png">%s</binary>
                 """.formatted(base64));
 
-        byte[] cover = extractor.extractCover(file);
-
-        assertThat(cover).isEqualTo(imageData);
+        try (InputStream coverStream = extractor.extractCover(file)) {
+            assertThat(coverStream).isNotNull();
+            assertThat(coverStream.readAllBytes()).isEqualTo(imageData);
+        }
     }
 
     @Test
@@ -524,9 +526,9 @@ class Fb2MetadataExtractorTest {
                 <description><title-info/></description>
                 """);
 
-        byte[] cover = extractor.extractCover(file);
-
-        assertThat(cover).isNull();
+        try (InputStream coverStream = extractor.extractCover(file)) {
+            assertThat(coverStream).isNull();
+        }
     }
 
     @Test
@@ -537,9 +539,9 @@ class Fb2MetadataExtractorTest {
                 <binary id="cover.dat" content-type="application/octet-stream">%s</binary>
                 """.formatted(base64));
 
-        byte[] cover = extractor.extractCover(file);
-
-        assertThat(cover).isNull();
+        try (InputStream coverStream = extractor.extractCover(file)) {
+            assertThat(coverStream).isNull();
+        }
     }
 
     @Test
@@ -551,9 +553,10 @@ class Fb2MetadataExtractorTest {
                 <binary id="cover.png" content-type="image/png">%s</binary>
                 """.formatted(base64));
 
-        byte[] cover = extractor.extractCover(file);
-
-        assertThat(cover).isEqualTo(imageData);
+        try (InputStream coverStream = extractor.extractCover(file)) {
+            assertThat(coverStream).isNotNull();
+            assertThat(coverStream.readAllBytes()).isEqualTo(imageData);
+        }
     }
 
     @Test
@@ -561,9 +564,9 @@ class Fb2MetadataExtractorTest {
         Path file = tempDir.resolve("bad.fb2");
         Files.writeString(file, "not xml");
 
-        byte[] cover = extractor.extractCover(file.toFile());
-
-        assertThat(cover).isNull();
+        try (InputStream coverStream = extractor.extractCover(file.toFile())) {
+            assertThat(coverStream).isNull();
+        }
     }
 
     @Test

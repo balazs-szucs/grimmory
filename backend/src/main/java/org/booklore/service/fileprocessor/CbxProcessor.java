@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -79,11 +80,9 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
     public boolean generateCover(BookEntity bookEntity, BookFileEntity bookFile) {
         Path bookPath = FileUtils.getBookFullPath(bookEntity, bookFile);
 
-        try {
-            Optional<byte[]> imageOptional = extractCoverBytesFromArchive(bookPath);
-            if (imageOptional.isPresent()) {
-                byte[] imageBytes = imageOptional.get();
-                boolean saved = fileService.saveCoverImages(imageBytes, bookEntity.getId());
+        try (InputStream imageStream = cbxMetadataExtractor.extractCover(bookPath)) {
+            if (imageStream != null) {
+                boolean saved = fileService.saveCoverImages(imageStream, bookEntity.getId());
                 if (saved) {
                     return true;
                 } else {
@@ -103,14 +102,8 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
         return List.of(BookFileType.CBX);
     }
 
+    // Deprecated in favor of streaming extraction
     private Optional<byte[]> extractCoverBytesFromArchive(Path path) {
-        try{
-            byte[] coverBytes = cbxMetadataExtractor.extractCover(path);
-            return Optional.ofNullable(coverBytes);
-        } catch (Exception e) {
-            log.warn("Error reading archive cover {}: {}", path.getFileName(), e.getMessage());
-        }
-
         return Optional.empty();
     }
 

@@ -50,17 +50,27 @@ public class VipsImageService {
     }
 
     public ImageDimensions readDimensions(byte[] data) throws IOException {
-        return runWithArena(arena -> {
+        ensureAvailable();
+        try (Arena arena = Arena.ofConfined()) {
             VImage img = VImage.newFromBytes(arena, data).autorot();
             return new ImageDimensions(img.getWidth(), img.getHeight());
-        });
+        } catch (VipsError e) {
+            throw new IOException(e.getMessage(), e);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
 
     public ImageDimensions readDimensions(InputStream is) throws IOException {
-        return runWithArena(arena -> {
+        ensureAvailable();
+        try (Arena arena = Arena.ofConfined()) {
             VImage img = VImage.newFromSource(arena, VSource.newFromInputStream(arena, is)).autorot();
             return new ImageDimensions(img.getWidth(), img.getHeight());
-        });
+        } catch (VipsError e) {
+            throw new IOException(e.getMessage(), e);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
 
     public ImageDimensions readDimensionsFromFile(Path path) throws IOException {

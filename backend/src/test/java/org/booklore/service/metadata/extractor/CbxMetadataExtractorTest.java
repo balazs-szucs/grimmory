@@ -3,6 +3,7 @@ package org.booklore.service.metadata.extractor;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.ComicMetadata;
 import org.booklore.service.ArchiveService;
+import org.booklore.util.VipsImageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -31,12 +32,12 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class CbxMetadataExtractorTest {
     @Mock private ArchiveService archiveService;
-    @Mock private org.booklore.util.VipsImageService vipsImageService;
+    @Mock private VipsImageService vipsImageService;
     private CbxMetadataExtractor extractor;
 
     @BeforeEach
     void setUp() {
-        vipsImageService = Mockito.mock(org.booklore.util.VipsImageService.class);
+        vipsImageService = Mockito.mock(VipsImageService.class);
         when(vipsImageService.canDecode(any(byte[].class))).thenReturn(true);
         extractor = new CbxMetadataExtractor(archiveService, vipsImageService);
     }
@@ -71,7 +72,9 @@ class CbxMetadataExtractorTest {
         when(archiveService.streamEntryNames(path)).then((i) -> keys.stream());
 
         for (String key : keys) {
-            when(archiveService.getEntryBytes(path, key)).thenReturn(contents.get(key));
+            byte[] data = contents.get(key);
+            when(archiveService.getEntryBytes(path, key)).thenReturn(data);
+            when(archiveService.getEntryInputStream(path, key)).thenAnswer(_ -> new ByteArrayInputStream(data));
         }
 
         return path;
@@ -94,7 +97,9 @@ class CbxMetadataExtractorTest {
     private Path mockComicInfo(String innerXml) throws IOException {
         Path path = Path.of("test.cbz");
         String xml = wrapInComicInfo(innerXml);
-        when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(xml.getBytes());
+        byte[] bytes = xml.getBytes();
+        when(archiveService.getEntryBytes(path, "ComicInfo.xml")).thenReturn(bytes);
+        when(archiveService.getEntryInputStream(path, "ComicInfo.xml")).thenAnswer(_ -> new ByteArrayInputStream(bytes));
         when(archiveService.streamEntryNames(path)).then((i) -> Stream.of("ComicInfo.xml"));
 
         return path;
@@ -918,9 +923,10 @@ class CbxMetadataExtractorTest {
                     "path_001.jpg", expected
             ));
 
-            byte[] actual = extractor.extractCover(cbz);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbz)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -929,9 +935,9 @@ class CbxMetadataExtractorTest {
                     "readme.txt", "no images here".getBytes()
             ));
 
-            byte[] cover = extractor.extractCover(cbzPath);
-
-            assertThat(cover).isNull();
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNull();
+            }
         }
 
         @Test
@@ -943,9 +949,10 @@ class CbxMetadataExtractorTest {
                     "page002.jpg", createMinimalJpeg(3)
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -956,9 +963,10 @@ class CbxMetadataExtractorTest {
                     "cover.jpg", expected
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -981,9 +989,10 @@ class CbxMetadataExtractorTest {
                     "page003.jpg", createMinimalJpeg(3)
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -1001,9 +1010,10 @@ class CbxMetadataExtractorTest {
                     "page001.jpg", expected
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -1014,9 +1024,10 @@ class CbxMetadataExtractorTest {
                     "page001.jpg", expected
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -1028,18 +1039,19 @@ class CbxMetadataExtractorTest {
                     "actual_page.jpg", expected
             ));
 
-            byte[] cover = extractor.extractCover(cbzPath);
-
-            assertThat(cover).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
         void returnsPlaceholderForCorruptFile() throws IOException {
             Path path = mockRaisesException();
 
-            byte[] cover = extractor.extractCover(path);
-
-            assertThat(cover).isNull();
+            try (InputStream coverStream = extractor.extractCover(path)) {
+                assertThat(coverStream).isNull();
+            }
         }
     }
 
@@ -1160,9 +1172,10 @@ class CbxMetadataExtractorTest {
                     "image.jpg", expected
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
 
         @Test
@@ -1172,9 +1185,10 @@ class CbxMetadataExtractorTest {
                     "image.png", expected
             ));
 
-            byte[] actual = extractor.extractCover(cbzPath);
-
-            assertThat(actual).isEqualTo(expected);
+            try (InputStream coverStream = extractor.extractCover(cbzPath)) {
+                assertThat(coverStream).isNotNull();
+                assertThat(coverStream.readAllBytes()).isEqualTo(expected);
+            }
         }
     }
 
@@ -1194,9 +1208,9 @@ class CbxMetadataExtractorTest {
         void returnsPlaceholderCoverForNonArchiveFile() throws IOException {
             Path path = mockRaisesException();
 
-            byte[] cover = extractor.extractCover(path);
-
-            assertThat(cover).isNull();
+            try (InputStream coverStream = extractor.extractCover(path)) {
+                assertThat(coverStream).isNull();
+            }
         }
     }
 }

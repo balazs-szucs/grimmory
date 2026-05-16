@@ -23,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FilenameUtils;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
@@ -179,13 +180,16 @@ public class BookdropMetadataService {
         File file = new File(entity.getFilePath());
         BookFileExtension fileExt = BookFileExtension.fromFileName(file.getName())
             .orElseThrow(() -> ApiError.INVALID_FILE_FORMAT.createException("Unsupported file extension"));
-        byte[] coverBytes = metadataExtractorFactory.extractCover(fileExt, file);
-        if (coverBytes != null) {
-            try {
-                fileService.saveImage(coverBytes, fileService.getTempBookdropCoverImagePath(entity.getId()));
-            } catch (IOException e) {
-                log.warn("Failed to save extracted cover for file: {}", entity.getFilePath(), e);
+        try (InputStream coverStream = metadataExtractorFactory.extractCover(fileExt, file)) {
+            if (coverStream != null) {
+                try {
+                    fileService.saveImage(coverStream, fileService.getTempBookdropCoverImagePath(entity.getId()));
+                } catch (IOException e) {
+                    log.warn("Failed to save extracted cover for file: {}", entity.getFilePath(), e);
+                }
             }
+        } catch (IOException e) {
+            log.warn("Failed to extract cover for file: {}", entity.getFilePath(), e);
         }
     }
 }

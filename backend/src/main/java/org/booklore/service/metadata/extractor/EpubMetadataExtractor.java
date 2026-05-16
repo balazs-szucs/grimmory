@@ -30,6 +30,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -97,7 +98,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
             }));
 
     @Override
-    public byte[] extractCover(File epubFile) {
+    public InputStream extractCover(File epubFile) throws IOException {
         // Primary: use epub4j's CoverDetector with native lazy loading
         try {
             Book book = new EpubReader().readEpubLazy(epubFile.toPath(), "UTF-8");
@@ -106,12 +107,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                 CoverDetectionResult result = detection.get();
                 log.debug("Cover detected for {} via {}: {}",
                         epubFile.getName(), result.method(), result.resource().getHref());
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                result.resource().writeTo(baos);
-                byte[] data = baos.toByteArray();
-                if (data.length > 0) {
-                    return data;
-                }
+                return getInputStream(result.resource());
             }
         } catch (Exception e) {
             log.debug("epub4j cover detection failed for {}: {}", epubFile.getName(), e.getMessage());
@@ -133,9 +129,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                     String href = URLDecoder.decode(item.getAttribute("href"), StandardCharsets.UTF_8);
                     String fullPath = resolvePath(opfName, href);
                     if (container.exists(fullPath)) {
-                        ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
-                        container.streamTo(fullPath, baos);
-                        return baos.toByteArray();
+                        return getInputStream(container, fullPath);
                     }
                 }
             }
@@ -152,9 +146,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                         String decodedHref = URLDecoder.decode(href, StandardCharsets.UTF_8);
                         String fullPath = resolvePath(opfName, decodedHref);
                         if (container.exists(fullPath)) {
-                            ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
-                            container.streamTo(fullPath, baos);
-                            return baos.toByteArray();
+                            return getInputStream(container, fullPath);
                         }
                     }
                 }
@@ -165,9 +157,7 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
                 String lower = name.toLowerCase();
                 if (lower.contains("cover") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
                         lower.endsWith(".png") || lower.endsWith(".webp"))) {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
-                    container.streamTo(name, baos);
-                    return baos.toByteArray();
+                    return getInputStream(container, name);
                 }
             }
         } catch (Exception e) {
@@ -643,6 +633,16 @@ public class EpubMetadataExtractor implements FileMetadataExtractor {
         }
 
         return String.join("/", parts);
+    }
+
+    private InputStream getInputStream(Resource resource) throws IOException {
+        return resource.getInputStream();
+    }
+
+    private InputStream getInputStream(EpubContainer container, String path) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        container.streamTo(path, baos);
+        return new ByteArrayInputStream(baos.toByteArray());
     }
 
 }

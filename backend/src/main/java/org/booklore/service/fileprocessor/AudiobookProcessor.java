@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -127,20 +128,19 @@ public class AudiobookProcessor extends AbstractFileProcessor implements BookFil
     }
 
     private boolean extractAndSaveCover(BookEntity bookEntity, File audioFile, boolean throwOnNoCover) throws Exception {
-        byte[] coverData = audiobookMetadataExtractor.extractCover(audioFile);
-
-        if (coverData == null) {
-            log.warn("No embedded cover image found in audiobook file '{}' (bookId: {})", audioFile.getAbsolutePath(), bookEntity.getId());
-            if (throwOnNoCover) {
-                throw ApiError.NO_COVER_IN_FILE.createException();
+        try (InputStream coverStream = audiobookMetadataExtractor.extractCover(audioFile)) {
+            if (coverStream == null) {
+                log.warn("No embedded cover image found in audiobook file '{}' (bookId: {})", audioFile.getAbsolutePath(), bookEntity.getId());
+                if (throwOnNoCover) {
+                    throw ApiError.NO_COVER_IN_FILE.createException();
+                }
+                return false;
             }
-            return false;
-        }
 
-        log.debug("Found cover data ({} bytes) in audiobook file '{}'", coverData.length, audioFile.getName());
-
-        return fileService.saveAudiobookCoverImages(coverData, bookEntity.getId());
+            log.debug("Found cover data in audiobook file '{}'", audioFile.getName());
+            return fileService.saveAudiobookCoverImages(coverStream, bookEntity.getId());
         }
+    }
 
 
     private File getAudioFileForMetadata(BookEntity bookEntity, boolean isFolderBased) {
