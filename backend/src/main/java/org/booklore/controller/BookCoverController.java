@@ -13,7 +13,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -22,8 +21,9 @@ import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
-import java.util.List;
 import java.util.Map;
+import jakarta.validation.constraints.NotEmpty;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/v1/books")
@@ -144,7 +144,7 @@ public class BookCoverController {
     @PreAuthorize("@securityUtil.canBulkEditMetadata() or @securityUtil.isAdmin()")
     public void bulkUploadCover(
             @Parameter(description = "Cover image file") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "Comma-separated book IDs") @RequestParam("bookIds") @jakarta.validation.constraints.NotEmpty java.util.Set<Long> bookIds) {
+            @Parameter(description = "Comma-separated book IDs") @RequestParam("bookIds") @NotEmpty Set<Long> bookIds) {
         bookCoverService.updateCoverFromFileForBooks(bookIds, file);
     }
 

@@ -9,16 +9,15 @@ import java.util.Objects;
 
 @Embeddable
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED, force = true)
 @AllArgsConstructor
 public class BookMetadataAuthorKey implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private Long bookId;
-    private Long authorId;
+    private final Long bookId;
+    private final Long authorId;
 
     @Override
     public boolean equals(Object o) {

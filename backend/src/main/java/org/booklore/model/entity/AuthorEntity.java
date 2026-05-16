@@ -2,6 +2,7 @@ package org.booklore.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.Hibernate;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
@@ -58,14 +59,15 @@ public class AuthorEntity {
     private Set<BookMetadataEntity> bookMetadataEntityList = new HashSet<>();
 
     @Override
-    public boolean equals(Object o) {
+    public final boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof AuthorEntity that)) return false;
-        return Objects.equals(name, that.name);
+        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
+        AuthorEntity that = (AuthorEntity) o;
+        return getId() != null && Objects.equals(getId(), that.getId());
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(name);
+    public final int hashCode() {
+        return Hibernate.getClass(this).hashCode();
     }
 }

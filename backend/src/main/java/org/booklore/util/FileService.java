@@ -12,7 +12,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,11 +25,9 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -39,6 +36,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.stream.Stream;
+import java.net.UnknownHostException;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -427,7 +425,7 @@ public class FileService {
                 System.arraycopy(addr, 12, ipv4Bytes, 0, 4);
                 InetAddress ipv4Addr = InetAddress.getByAddress(ipv4Bytes);
                 return isInternalAddress(ipv4Addr);
-            } catch (java.net.UnknownHostException e) {
+            } catch (UnknownHostException e) {
                 return false;
             }
         }

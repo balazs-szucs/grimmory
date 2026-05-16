@@ -5,6 +5,7 @@ import lombok.*;
 import org.booklore.convertor.BookRecommendationIdsListConverter;
 import org.booklore.model.dto.BookRecommendationLite;
 import org.booklore.model.enums.BookFileType;
+import org.hibernate.Hibernate;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Entity
@@ -139,12 +141,13 @@ public class BookEntity {
     @Override
     public final boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof BookEntity that)) return false;
-        return id != null && id.equals(that.getId());
+        if (o == null || !Hibernate.getClass(this).equals(Hibernate.getClass(o))) return false;
+        BookEntity that = (BookEntity) o;
+        return getId() != null && Objects.equals(getId(), that.getId());
     }
 
     @Override
     public final int hashCode() {
-        return getClass().hashCode();
+        return Hibernate.getClass(this).hashCode();
     }
 }

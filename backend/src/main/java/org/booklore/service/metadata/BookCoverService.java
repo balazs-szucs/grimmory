@@ -34,7 +34,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -76,9 +75,6 @@ public class BookCoverService {
     }
 
     private record BookCoverInfo(Long id, String title) {
-    }
-
-    private record BookRegenerationInfo(Long id, String title, BookFileType bookType, boolean coverLocked) {
     }
 
     // =========================
@@ -304,7 +300,7 @@ public class BookCoverService {
      * Regenerate covers for a set of books.
      */
     public void regenerateCoversForBooks(Set<Long> bookIds) {
-        List<BookRegenerationInfo> unlockedBooks = getUnlockedBookRegenerationInfos(bookIds);
+        List<BookCoverInfo> unlockedBooks = getUnlockedBookRegenerationInfos(bookIds);
         String username = getCurrentUsername();
         taskExecutor.execute(() -> processBulkCoverRegeneration(unlockedBooks, username));
     }
@@ -325,11 +321,12 @@ public class BookCoverService {
         String username = getCurrentUsername();
         taskExecutor.execute(() -> {
             try {
-                List<BookRegenerationInfo> books = bookQueryService.getAllFullBookEntities().stream()
+                List<BookCoverInfo> books = bookQueryService.getAllFullBookEntitiesWithFiles().stream()
+                        .filter(book -> book.getMetadata() != null)
                         .filter(book -> !isCoverLocked(book))
                         .filter(book -> book.getPrimaryBookFile() != null)
                         .filter(book -> !missingOnly || book.getBookCoverHash() == null)
-                        .map(book -> new BookRegenerationInfo(book.getId(), book.getMetadata().getTitle(), book.getPrimaryBookFile().getBookType(), false))
+                        .map(book -> new BookCoverInfo(book.getId(), book.getMetadata().getTitle()))
                         .toList();
                 int total = books.size();
                 String label = missingOnly ? "missing" : "all";
@@ -337,7 +334,7 @@ public class BookCoverService {
 
                 int current = 1;
 
-                for (BookRegenerationInfo bookInfo : books) {
+                for (BookCoverInfo bookInfo : books) {
                     try {
                         String progress = "(" + current + "/" + total + ") ";
                         sendNotification(username, Topic.LOG, LogNotification.info(progress + "Regenerating cover for: " + bookInfo.title()));
@@ -418,21 +415,26 @@ public class BookCoverService {
         }
     }
 
-    private void processBulkCoverRegeneration(List<BookRegenerationInfo> books, String username) {
+    private void processBulkCoverRegeneration(List<BookCoverInfo> books, String username) {
         try {
             int total = books.size();
             sendNotification(username, Topic.LOG, LogNotification.info("Started regenerating covers for " + total + " selected book(s)"));
 
             int current = 1;
 
-            for (BookRegenerationInfo bookInfo : books) {
+            for (BookCoverInfo bookInfo : books) {
                 try {
                     String progress = "(" + current + "/" + total + ") ";
                     sendNotification(username, Topic.LOG, LogNotification.info(progress + "Regenerating cover for: " + bookInfo.title()));
 
                     transactionTemplate.execute(status -> {
                         bookRepository.findByIdWithBookFiles(bookInfo.id()).ifPresent(book -> {
-                            BookFileProcessor processor = processorRegistry.getProcessorOrThrow(bookInfo.bookType());
+                            var primaryFile = book.getPrimaryBookFile();
+                            if (primaryFile == null) {
+                                log.warn("{}Skipping book ID {} ({}) - no primary file", progress, book.getId(), bookInfo.title());
+                                return;
+                            }
+                            BookFileProcessor processor = processorRegistry.getProcessorOrThrow(primaryFile.getBookType());
                             boolean success = processor.generateCover(book);
 
                             if (success) {
@@ -547,25 +549,27 @@ public class BookCoverService {
 
     private List<BookCoverInfo> getUnlockedBookCoverInfos(Set<Long> bookIds) {
         return bookQueryService.findAllWithMetadataByIds(bookIds).stream()
+                .filter(book -> book.getMetadata() != null)
                 .filter(book -> !isCoverLocked(book))
                 .map(book -> new BookCoverInfo(book.getId(), book.getMetadata().getTitle()))
                 .toList();
     }
 
-    private List<BookRegenerationInfo> getUnlockedBookRegenerationInfos(Set<Long> bookIds) {
+    private List<BookCoverInfo> getUnlockedBookRegenerationInfos(Set<Long> bookIds) {
         return bookQueryService.findAllWithMetadataByIds(bookIds).stream()
+                .filter(book -> book.getMetadata() != null)
                 .filter(book -> !isCoverLocked(book))
                 .filter(book -> book.getPrimaryBookFile() != null)
-                .map(book -> new BookRegenerationInfo(book.getId(), book.getMetadata().getTitle(), book.getPrimaryBookFile().getBookType(), false))
+                .map(book -> new BookCoverInfo(book.getId(), book.getMetadata().getTitle()))
                 .toList();
     }
 
     private boolean isCoverLocked(BookEntity book) {
-        return book.getMetadata().getCoverLocked() != null && book.getMetadata().getCoverLocked();
+        return book.getMetadata() != null && Boolean.TRUE.equals(book.getMetadata().getCoverLocked());
     }
 
     private boolean isAudiobookCoverLocked(BookEntity book) {
-        return book.getMetadata().getAudiobookCoverLocked() != null && book.getMetadata().getAudiobookCoverLocked();
+        return book.getMetadata() != null && Boolean.TRUE.equals(book.getMetadata().getAudiobookCoverLocked());
     }
 
     private String getAuthorNames(BookEntity bookEntity) {

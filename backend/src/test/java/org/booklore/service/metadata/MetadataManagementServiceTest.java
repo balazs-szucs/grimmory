@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import java.nio.file.Files;
 
 @ExtendWith(MockitoExtension.class)
 class MetadataManagementServiceTest {
@@ -212,11 +213,11 @@ class MetadataManagementServiceTest {
         when(authorRepository.findByNameIgnoreCase("Target")).thenReturn(Optional.of(targetAuthor));
         when(authorRepository.findByNameIgnoreCase("Old")).thenReturn(Optional.of(oldAuthor));
 
-        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-metadata-");
-        java.nio.file.Path subDir = tempDir.resolve("sub");
-        java.nio.file.Files.createDirectories(subDir);
-        java.nio.file.Path tempFile = subDir.resolve("test.epub");
-        java.nio.file.Files.createFile(tempFile);
+        Path tempDir = Files.createTempDirectory("test-metadata-");
+        Path subDir = tempDir.resolve("sub");
+        Files.createDirectories(subDir);
+        Path tempFile = subDir.resolve("test.epub");
+        Files.createFile(tempFile);
 
         BookFileEntity bookFile = BookFileEntity.builder()
                 .fileName("test.epub")
@@ -251,9 +252,9 @@ class MetadataManagementServiceTest {
         verify(writer).saveMetadataToFile(any(), eq(metadata), isNull(), isNull());
         verify(bookRepository).saveAndFlush(book);
 
-        java.nio.file.Files.deleteIfExists(tempFile);
-        java.nio.file.Files.deleteIfExists(subDir);
-        java.nio.file.Files.deleteIfExists(tempDir);
+        Files.deleteIfExists(tempFile);
+        Files.deleteIfExists(subDir);
+        Files.deleteIfExists(tempDir);
     }
 
     @Test
@@ -272,11 +273,11 @@ class MetadataManagementServiceTest {
         when(authorRepository.findByNameIgnoreCase("Target")).thenReturn(Optional.of(targetAuthor));
         when(authorRepository.findByNameIgnoreCase("Old")).thenReturn(Optional.of(oldAuthor));
 
-        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-metadata-move-");
-        java.nio.file.Path subDir = tempDir.resolve("sub");
-        java.nio.file.Files.createDirectories(subDir);
-        java.nio.file.Path tempFile = subDir.resolve("test.epub");
-        java.nio.file.Files.createFile(tempFile);
+        Path tempDir = Files.createTempDirectory("test-metadata-move-");
+        Path subDir = tempDir.resolve("sub");
+        Files.createDirectories(subDir);
+        Path tempFile = subDir.resolve("test.epub");
+        Files.createFile(tempFile);
 
         BookFileEntity bookFile = BookFileEntity.builder()
                 .fileName("test.epub")
@@ -309,9 +310,9 @@ class MetadataManagementServiceTest {
         assertThat(bookFile.getFileSubPath()).isEqualTo("new/sub");
         verify(bookRepository).saveAndFlush(book);
 
-        java.nio.file.Files.deleteIfExists(tempFile);
-        java.nio.file.Files.deleteIfExists(subDir);
-        java.nio.file.Files.deleteIfExists(tempDir);
+        Files.deleteIfExists(tempFile);
+        Files.deleteIfExists(subDir);
+        Files.deleteIfExists(tempDir);
     }
 
     @Test
@@ -453,11 +454,11 @@ class MetadataManagementServiceTest {
 
     @Test
     void writeMetadataToFile_skipsWriterWhenNoneAvailable() throws Exception {
-        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-metadata-skip-");
-        java.nio.file.Path subDir = tempDir.resolve("sub");
-        java.nio.file.Files.createDirectories(subDir);
-        java.nio.file.Path tempFile = subDir.resolve("test.epub");
-        java.nio.file.Files.createFile(tempFile);
+        Path tempDir = Files.createTempDirectory("test-metadata-skip-");
+        Path subDir = tempDir.resolve("sub");
+        Files.createDirectories(subDir);
+        Path tempFile = subDir.resolve("test.epub");
+        Files.createFile(tempFile);
 
         BookFileEntity bookFile = BookFileEntity.builder()
                 .fileName("test.epub")
@@ -485,9 +486,9 @@ class MetadataManagementServiceTest {
 
         verify(bookRepository, never()).saveAndFlush(any());
 
-        java.nio.file.Files.deleteIfExists(tempFile);
-        java.nio.file.Files.deleteIfExists(subDir);
-        java.nio.file.Files.deleteIfExists(tempDir);
+        Files.deleteIfExists(tempFile);
+        Files.deleteIfExists(subDir);
+        Files.deleteIfExists(tempDir);
     }
 
     @Test
@@ -506,11 +507,11 @@ class MetadataManagementServiceTest {
         when(authorRepository.findByNameIgnoreCase("Target")).thenReturn(Optional.of(targetAuthor));
         when(authorRepository.findByNameIgnoreCase("Old")).thenReturn(Optional.of(oldAuthor));
 
-        java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("test-metadata-nomove-");
-        java.nio.file.Path subDir = tempDir.resolve("sub");
-        java.nio.file.Files.createDirectories(subDir);
-        java.nio.file.Path tempFile = subDir.resolve("original.epub");
-        java.nio.file.Files.createFile(tempFile);
+        Path tempDir = Files.createTempDirectory("test-metadata-nomove-");
+        Path subDir = tempDir.resolve("sub");
+        Files.createDirectories(subDir);
+        Path tempFile = subDir.resolve("original.epub");
+        Files.createFile(tempFile);
 
         BookFileEntity bookFile = BookFileEntity.builder()
                 .fileName("original.epub")
@@ -542,9 +543,9 @@ class MetadataManagementServiceTest {
         assertThat(bookFile.getFileName()).isEqualTo("original.epub");
         verify(bookRepository, never()).saveAndFlush(any());
 
-        java.nio.file.Files.deleteIfExists(tempFile);
-        java.nio.file.Files.deleteIfExists(subDir);
-        java.nio.file.Files.deleteIfExists(tempDir);
+        Files.deleteIfExists(tempFile);
+        Files.deleteIfExists(subDir);
+        Files.deleteIfExists(tempDir);
     }
 
     @Test
