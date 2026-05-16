@@ -12,14 +12,19 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 @Slf4j
 @Service
@@ -33,13 +38,14 @@ public class ArchiveService {
     private final boolean available = NativeLibraries.get().isLibArchiveAvailable();
 
     private ReentrantLock getFileLock(Path path) {
-        int hash = path.toAbsolutePath().normalize().toString().hashCode();
+        // Normalize to absolute path for consistent hashing across callers
+        int hash = path.toAbsolutePath().normalize().hashCode();
         return lockStripes[Math.floorMod(hash, LOCK_STRIPE_COUNT)];
     }
 
     private void requireAvailable() throws IOException {
         if (!available) {
-            throw new IOException("LibArchive is not available – cannot process archive");
+            throw new IOException("LibArchive is not available - cannot process archive");
         }
     }
 
@@ -54,6 +60,13 @@ public class ArchiveService {
     }
 
     public List<Entry> getEntries(Path path) throws IOException {
+        if (isZipPath(path)) {
+            try (ZipFile zip = new ZipFile(path.toFile())) {
+                return zip.stream()
+                        .map(ze -> new Entry(ze.getName(), ze.getSize()))
+                        .toList();
+            }
+        }
         return streamEntries(path).toList();
     }
 
@@ -90,6 +103,18 @@ public class ArchiveService {
     }
 
     public long transferEntryTo(Path path, String entryName, OutputStream outputStream) throws IOException {
+        if (isZipPath(path)) {
+            try (ZipFile zip = new ZipFile(path.toFile())) {
+                ZipEntry entry = zip.getEntry(entryName);
+                if (entry != null) {
+                    try (InputStream is = zip.getInputStream(entry)) {
+                        return is.transferTo(outputStream);
+                    }
+                }
+            }
+            throw new IOException("Entry not found in ZIP: " + entryName);
+        }
+
         requireAvailable();
         // We cannot directly use the NightCompress `InputStream` as it is limited
         // in its implementation and will cause fatal errors.  Instead, we can use
@@ -151,10 +176,26 @@ public class ArchiveService {
         return bounded.toByteArray();
     }
 
-    /**
-     * OutputStream that captures at most {@code limit} bytes, then throws
-     * {@link LimitReachedException} to short-circuit the transfer.
-     */
+    private static final Set<String> ZIP_EXTENSIONS = Set.of("cbz", "zip", "epub");
+
+    private static boolean isZipPath(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0 && ZIP_EXTENSIONS.contains(name.substring(dot + 1))) {
+            return true;
+        }
+
+        // Fast magic number check fallback: ZIP/CBZ/EPUB start with "PK\03\04" (0x50 4B 03 04)
+        try (InputStream is = Files.newInputStream(path)) {
+            byte[] header = is.readNBytes(4);
+            return header.length == 4
+                    && header[0] == 0x50 && header[1] == 0x4B
+                    && header[2] == 0x03 && header[3] == 0x04;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     static final class BoundedOutputStream extends OutputStream {
         private final byte[] buf;
         private int count;

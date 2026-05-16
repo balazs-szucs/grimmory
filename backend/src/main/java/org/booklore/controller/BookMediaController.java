@@ -5,10 +5,12 @@ import org.booklore.config.security.annotation.CheckBookAccess;
 import org.booklore.service.book.BookService;
 import org.booklore.service.bookdrop.BookDropService;
 import org.booklore.service.reader.CbxReaderService;
+import org.booklore.service.reader.PdfReaderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -27,6 +29,7 @@ public class BookMediaController {
 
     private final BookService bookService;
     private final CbxReaderService cbxReaderService;
+    private final PdfReaderService pdfReaderService;
     private final BookDropService bookDropService;
     private final AuthorMetadataService authorMetadataService;
 
@@ -70,9 +73,22 @@ public class BookMediaController {
             @Parameter(description = "ID of the book") @PathVariable Long bookId,
             @Parameter(description = "Page number to retrieve") @PathVariable int pageNumber,
             @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
+            HttpServletRequest request,
             HttpServletResponse response) throws IOException {
-        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
-        cbxReaderService.streamPageImage(bookId, bookType, pageNumber, response.getOutputStream());
+        cbxReaderService.streamPageImage(bookId, bookType, pageNumber, request, response);
+    }
+
+    @Operation(summary = "Get PDF page as image", description = "Retrieve a specific page from a PDF book rendered as an image.")
+    @ApiResponse(responseCode = "200", description = "PDF page image returned successfully")
+    @GetMapping("/book/{bookId}/pdf/pages/{pageNumber}")
+    @CheckBookAccess(bookIdParam = "bookId")
+    public void getPdfPage(
+            @Parameter(description = "ID of the book") @PathVariable Long bookId,
+            @Parameter(description = "Page number to retrieve") @PathVariable int pageNumber,
+            @Parameter(description = "Optional book type for alternative format (e.g., PDF, CBX)") @RequestParam(required = false) String bookType,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        pdfReaderService.streamPageImage(bookId, bookType, pageNumber, request, response);
     }
 
     @Operation(summary = "Get author photo", description = "Retrieve the photo for a specific author.")

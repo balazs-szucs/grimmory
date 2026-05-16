@@ -41,9 +41,6 @@ class CbxReaderServiceTest {
     @InjectMocks
     CbxReaderService cbxReaderService;
 
-    @Mock
-    Cache<String, ZipFile> mockZipCache;
-
     @Captor
     ArgumentCaptor<Long> longCaptor;
 
@@ -55,10 +52,6 @@ class CbxReaderServiceTest {
         bookEntity = new BookEntity();
         bookEntity.setId(1L);
         cbzPath = Path.of("/tmp/test.cbz");
-        // Manually inject the mock cache
-        cbxReaderService.setZipHandleCache(mockZipCache);
-        // Ensure zipHandleCache is mocked to return null on any key access
-        lenient().when(mockZipCache.get(anyString(), any())).thenReturn(null);
     }
 
     @Test

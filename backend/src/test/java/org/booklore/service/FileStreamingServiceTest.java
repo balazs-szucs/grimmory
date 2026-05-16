@@ -189,7 +189,7 @@ class FileStreamingServiceTest {
 
         String expectedETag = computeExpectedETag(testFile);
         verify(response).setHeader("ETag", expectedETag);
-        verify(response).setHeader("Cache-Control", "no-cache");
+        verify(response).setHeader("Cache-Control", "no-cache, must-revalidate");
         verify(response, never()).setHeader(eq("Pragma"), any());
     }
 
@@ -533,8 +533,8 @@ class FileStreamingServiceTest {
 
     private String computeExpectedETag(Path file) throws IOException {
         var attrs = Files.readAttributes(file, BasicFileAttributes.class);
-        return fileStreamingService.generateETag(
-                attrs.size(), attrs.lastModifiedTime().toInstant());
+        return FileStreamingService.generateETag(
+                attrs.size(), attrs.lastModifiedTime().toMillis());
     }
 
     private ServletOutputStream createServletOutputStream(ByteArrayOutputStream outputStream) {
