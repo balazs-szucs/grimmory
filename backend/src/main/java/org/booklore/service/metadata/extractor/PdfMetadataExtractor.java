@@ -59,14 +59,10 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     @Override
     public InputStream extractCover(File file) throws IOException {
-        try (PdfDocument doc = PdfDocument.open(file.toPath());
-             PdfPage page = doc.page(0)) {
-            byte[] jpeg = vipsImageService.renderPageToJpeg(page, 300, 85);
-            return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
-        } catch (Exception e) {
-            log.warn("Failed to extract cover from PDF: {}", file.getAbsolutePath(), e);
-            return null;
-        }
+        // Native VIPS pdfload is the most performant path as it avoids intermediate Java-side 
+        // rasterization and uses streaming native memory. 150 DPI provides optimal speed/quality.
+        byte[] jpeg = vipsImageService.renderPdfPageToJpeg(file.toPath(), 0, 150, 85);
+        return jpeg != null ? new ByteArrayInputStream(jpeg) : null;
     }
 
     @Override

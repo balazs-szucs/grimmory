@@ -258,6 +258,22 @@ public class VipsImageService {
         });
     }
 
+    public byte[] renderPdfPageToJpeg(Path path, int page, int dpi, int quality) throws IOException {
+        return runWithArena(arena -> {
+            // Using VIPS native pdfload via path specifier is much faster than
+            // manual rasterization as it allows for internal streaming and optimizations.
+            String vipsPath = path.toAbsolutePath().toString() + "[page=" + page + ",dpi=" + dpi + "]";
+            VImage img = VImage.newFromFile(arena, vipsPath);
+            img = img.colourspace(VipsInterpretation.INTERPRETATION_sRGB);
+            img = flattenIfHasAlpha(img);
+            return img.jpegsaveBuffer(
+                    VipsOption.Int("Q", quality),
+                    VipsOption.Boolean("strip", true),
+                    VipsOption.Boolean("optimize_coding", true)
+            ).getBytes();
+        });
+    }
+
     public void renderPageToJpeg(PdfPage page, int dpi, int quality, OutputStream outputStream) throws IOException {
         runWithArena(arena -> {
             VImage vimg = flattenIfHasAlpha(renderPdfPageAsVipsImage(arena, page, dpi));
