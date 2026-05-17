@@ -19,7 +19,6 @@ import org.booklore.model.dto.BookLoreUser;
 import org.booklore.model.dto.Library;
 import org.booklore.model.dto.request.ReadProgressRequest;
 import org.booklore.model.entity.*;
-import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.ComicCreatorRole;
 import org.booklore.model.enums.ReadStatus;
 import org.booklore.repository.BookRepository;
@@ -46,6 +45,8 @@ import java.util.stream.Collectors;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import jakarta.persistence.Query;
+import java.time.Duration;
 
 @Service
 @Transactional(readOnly = true)
@@ -66,7 +67,7 @@ public class AppBookService {
     private final EntityManager entityManager;
 
     private final Cache<String, AppFilterOptions> filterOptionsCache = Caffeine.newBuilder()
-            .expireAfterWrite(java.time.Duration.ofSeconds(30))
+            .expireAfterWrite(Duration.ofSeconds(30))
             .maximumSize(50)
             .build();
 
@@ -1175,7 +1176,7 @@ public class AppBookService {
         return sb.toString();
     }
 
-    private void setFilterQueryParams(jakarta.persistence.Query query, Set<Long> accessibleLibraryIds, Long libraryId, Long shelfId, Set<Long> magicBookIds) {
+    private void setFilterQueryParams(Query query, Set<Long> accessibleLibraryIds, Long libraryId, Long shelfId, Set<Long> magicBookIds) {
         if (libraryId != null) {
             query.setParameter("libraryId", libraryId);
         } else if (accessibleLibraryIds != null) {
