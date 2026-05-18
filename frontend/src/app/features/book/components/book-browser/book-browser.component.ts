@@ -1,4 +1,4 @@
-import {AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild} from '@angular/core';
+import {AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {ActivatedRoute} from '@angular/router';
 import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
@@ -87,7 +87,7 @@ const MOBILE_COLUMNS_STORAGE_KEY = 'mobileColumnsPreference';
   ],
   providers: [SeriesCollapseFilter],
 })
-export class BookBrowserComponent implements AfterViewInit {
+export class BookBrowserComponent implements AfterViewInit, AfterViewChecked {
   protected userService = inject(UserService);
   protected coverScalePreferenceService = inject(CoverScalePreferenceService);
   protected columnPreferenceService = inject(TableColumnPreferenceService);
@@ -159,6 +159,7 @@ export class BookBrowserComponent implements AfterViewInit {
   private readonly selectedFilter = signal<Record<string, string[]> | null>(null);
   private readonly selectedFilterMode = signal<BookFilterMode>('and');
   private readonly sortCriteria = signal<SortOption[]>(this.defaultSortCriteria);
+  protected readonly isFirstRender = signal(true);
 
   readonly screenWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1024);
   readonly currentViewMode = signal<string | undefined>(undefined);
@@ -537,6 +538,10 @@ export class BookBrowserComponent implements AfterViewInit {
       bookFilterComponent.setFilters(this.parsedFilters);
       bookFilterComponent.onFilterModeChange(this.selectedFilterMode());
     }
+  }
+
+  ngAfterViewChecked(): void {
+    this.isFirstRender.set(false);
   }
 
   private setupRouteChangeHandlers(): void {

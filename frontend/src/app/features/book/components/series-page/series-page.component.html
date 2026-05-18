@@ -295,7 +295,7 @@
                       [seriesViewEnabled]="seriesViewEnabled"
                       [onBookSelect]="onSeriesBookCardSelect"
                       [isSeriesCollapsed]="seriesCardsCollapsed"
-                      [priorityImage]="isFirstRender() && i === 0"
+                      [priorityImage]="isFirstRender() && index === 0"
                           (checkboxClick)="onCheckboxClicked($event)"
                           [isSelected]="isBookSelected(book)"
                       [useSquareCovers]="seriesCardsUseSquareCovers"

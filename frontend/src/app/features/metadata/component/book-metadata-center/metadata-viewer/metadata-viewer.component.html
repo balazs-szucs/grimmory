@@ -960,7 +960,7 @@
     <app-metadata-tabs
       [book]="book"
       [bookInSeries]="bookInSeries"
-      [recommendedBooks]="recommendedBooksFiltered"
+      [recommendedBooks]="recommendedBooksFiltered()"
       (readBook)="onReadBook($event)"
       (downloadBook)="onDownloadBook($event)"
       (downloadFile)="onDownloadFile($event)"

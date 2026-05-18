@@ -122,6 +122,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   private readonly descriptionContentRef = viewChild<ElementRef<HTMLElement>>('descriptionContent');
   private readonly seriesGridElement = viewChild<ElementRef<HTMLElement>>('seriesGrid');
   private readonly seriesGridWidth = signal(0);
+  protected readonly isFirstRender = signal(true);
   tab: string = "view";
   readonly isExpanded = signal(false);
   readonly isOverflowing = signal(false);
@@ -487,6 +488,7 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   ngAfterViewChecked(): void {
+    this.isFirstRender.set(false);
     if (!this.isExpanded()) {
       const el = this.descriptionContentRef()?.nativeElement;
       if (!el) return;
