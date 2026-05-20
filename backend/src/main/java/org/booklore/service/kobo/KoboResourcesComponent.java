@@ -2,9 +2,9 @@ package org.booklore.service.kobo;
 
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.node.ObjectNode;
 
 @AllArgsConstructor
 @Component
@@ -12,7 +12,7 @@ public class KoboResourcesComponent {
 
     private final ObjectMapper objectMapper;
 
-    public ObjectNode getResources() throws JacksonException {
+    public ObjectNode getResources() throws JsonException {
         return (ObjectNode) objectMapper.readTree(
                 """
                          {

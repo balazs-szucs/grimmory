@@ -1,9 +1,9 @@
 package org.booklore.service.metadata.parser;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ObjectNode;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.JsonMapper;
+import org.booklore.util.json.node.ObjectNode;
 import org.booklore.model.dto.Book;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.BookReview;

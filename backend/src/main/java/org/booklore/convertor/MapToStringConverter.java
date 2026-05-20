@@ -3,9 +3,9 @@ package org.booklore.convertor;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import lombok.extern.slf4j.Slf4j;
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.type.TypeReference;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.Map;
 
@@ -23,7 +23,7 @@ public class MapToStringConverter implements AttributeConverter<Map<String, Obje
         }
         try {
             return objectMapper.writeValueAsString(attribute);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Failed to convert map to JSON string: {}", attribute, e);
             throw new IllegalArgumentException("Error converting Map to String", e);
         }
@@ -36,7 +36,7 @@ public class MapToStringConverter implements AttributeConverter<Map<String, Obje
         }
         try {
             return objectMapper.readValue(dbData, MAP_TYPE_REF);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Failed to convert JSON string to map: {}", dbData, e);
             throw new IllegalArgumentException("Error converting String to Map", e);
         }

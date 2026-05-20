@@ -14,7 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;

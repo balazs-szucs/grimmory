@@ -26,8 +26,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.JsonNode;
 
 import java.util.List;
 import java.util.Set;
@@ -65,7 +65,7 @@ public class KoboController {
     @Operation(summary = "Initialize Kobo resources", description = "Initialize Kobo resources for the device.")
     @ApiResponse(responseCode = "200", description = "Initialization successful")
     @GetMapping("/v1/initialization")
-    public ResponseEntity<KoboResources> initialization() throws JacksonException {
+    public ResponseEntity<KoboResources> initialization() throws JsonException {
         return koboInitializationService.initialize(token);
     }
 

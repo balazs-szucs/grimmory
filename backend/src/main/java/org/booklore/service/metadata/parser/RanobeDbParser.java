@@ -12,7 +12,7 @@ import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.BookUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.io.IOException;
 import java.net.URI;

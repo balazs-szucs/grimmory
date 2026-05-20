@@ -1,8 +1,8 @@
 package org.booklore.service.metadata.parser.hardcover;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dslplatform.json.JsonAttribute;
 import lombok.*;
+import com.dslplatform.json.CompiledJson;
 
 import java.util.List;
 import java.util.Map;
@@ -12,7 +12,7 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
+@CompiledJson
 public class GraphQLResponse {
     private Data data;
 
@@ -20,7 +20,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Data {
         private Search search;
         private List<BookWithEditions> books;
@@ -30,7 +30,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Search {
         private Results results;
     }
@@ -39,26 +39,26 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Results {
-        @JsonProperty("facet_counts")
+        @JsonAttribute(name = "facet_counts")
         private List<Object> facetCounts;
 
         private Integer found;
         private List<Hit> hits;
 
-        @JsonProperty("out_of")
+        @JsonAttribute(name = "out_of")
         private Integer outOf;
 
         private Integer page;
 
-        @JsonProperty("request_params")
+        @JsonAttribute(name = "request_params")
         private Map<String, Object> requestParams;
 
-        @JsonProperty("search_cutoff")
+        @JsonAttribute(name = "search_cutoff")
         private Boolean searchCutoff;
 
-        @JsonProperty("search_time_ms")
+        @JsonAttribute(name = "search_time_ms")
         private Integer searchTimeMs;
     }
 
@@ -66,16 +66,16 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Hit {
         private Document document;
         private Map<String, Object> highlight;
         private List<Map<String, Object>> highlights;
 
-        @JsonProperty("text_match")
+        @JsonAttribute(name = "text_match")
         private Long textMatch;
 
-        @JsonProperty("text_match_info")
+        @JsonAttribute(name = "text_match_info")
         private Map<String, Object> textMatchInfo;
     }
 
@@ -83,81 +83,81 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Document {
         private String id;
         private String slug;
         private String title;
         private String subtitle;
 
-        @JsonProperty("author_names")
+        @JsonAttribute(name = "author_names")
         private Set<String> authorNames;
 
         private String description;
         private List<String> isbns;
         private Double rating;
 
-        @JsonProperty("ratings_count")
+        @JsonAttribute(name = "ratings_count")
         private Integer ratingsCount;
 
-        @JsonProperty("reviews_count")
+        @JsonAttribute(name = "reviews_count")
         private Integer reviewsCount;
 
         private Integer pages;
 
-        @JsonProperty("release_date")
+        @JsonAttribute(name = "release_date")
         private String releaseDate;
 
-        @JsonProperty("release_year")
+        @JsonAttribute(name = "release_year")
         private Integer releaseYear;
 
         private List<String> genres;
         private List<String> moods;
         private List<String> tags;
 
-        @JsonProperty("featured_series")
+        @JsonAttribute(name = "featured_series")
         private FeaturedSeries featuredSeries;
 
         private Image image;
 
-        @JsonProperty("alternative_titles")
+        @JsonAttribute(name = "alternative_titles")
         private List<String> alternativeTitles;
 
-        @JsonProperty("activities_count")
+        @JsonAttribute(name = "activities_count")
         private Integer activitiesCount;
 
         private Boolean compilation;
 
-        @JsonProperty("content_warnings")
+        @JsonAttribute(name = "content_warnings")
         private List<String> contentWarnings;
 
-        @JsonProperty("contribution_types")
+        @JsonAttribute(name = "contribution_types")
         private List<String> contributionTypes;
 
         private List<Map<String, Object>> contributions;
 
-        @JsonProperty("cover_color")
+        @JsonAttribute(name = "cover_color")
         private String coverColor;
 
-        @JsonProperty("has_audiobook")
+        @JsonAttribute(name = "has_audiobook")
         private Boolean hasAudiobook;
 
-        @JsonProperty("has_ebook")
+        @JsonAttribute(name = "has_ebook")
         private Boolean hasEbook;
 
-        @JsonProperty("lists_count")
+        @JsonAttribute(name = "lists_count")
         private Integer listsCount;
 
-        @JsonProperty("prompts_count")
+        @JsonAttribute(name = "prompts_count")
         private Integer promptsCount;
 
-        @JsonProperty("series_names")
+        @JsonAttribute(name = "series_names")
         private List<String> seriesNames;
 
-        @JsonProperty("users_count")
+        @JsonAttribute(name = "users_count")
         private Integer usersCount;
 
-        @JsonProperty("users_read_count")
+        @JsonAttribute(name = "users_read_count")
         private Integer usersReadCount;
     }
 
@@ -165,7 +165,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class BookWithEditions {
         private Integer id;
         private String slug;
@@ -173,31 +173,31 @@ public class GraphQLResponse {
         private String subtitle;
         private String description;
 
-        @JsonProperty("cached_contributors")
+        @JsonAttribute(name = "cached_contributors")
         private List<Contributor> cachedContributors;
 
-        @JsonProperty("featured_book_series")
+        @JsonAttribute(name = "featured_book_series")
         private FeaturedSeries featuredBookSeries;
 
         private Double rating;
 
-        @JsonProperty("ratings_count")
+        @JsonAttribute(name = "ratings_count")
         private Integer ratingsCount;
 
-        @JsonProperty("reviews_count")
+        @JsonAttribute(name = "reviews_count")
         private Integer reviewsCount;
 
         private Integer pages;
 
-        @JsonProperty("release_date")
+        @JsonAttribute(name = "release_date")
         private String releaseDate;
 
-        @JsonProperty("release_year")
+        @JsonAttribute(name = "release_year")
         private Integer releaseYear;
 
         private Image image;
 
-        @JsonProperty("cached_tags")
+        @JsonAttribute(name = "cached_tags")
         private CachedTags cachedTags;
 
         private List<Edition> editions;
@@ -207,31 +207,31 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Edition {
         private Integer id;
         private String title;
         private String subtitle;
 
-        @JsonProperty("cached_contributors")
+        @JsonAttribute(name = "cached_contributors")
         private List<Contributor> cachedContributors;
 
         private Integer pages;
 
-        @JsonProperty("release_date")
+        @JsonAttribute(name = "release_date")
         private String releaseDate;
 
-        @JsonProperty("release_year")
+        @JsonAttribute(name = "release_year")
         private Integer releaseYear;
 
         private Image image;
 
         private Publisher publisher;
 
-        @JsonProperty("isbn_10")
+        @JsonAttribute(name = "isbn_10")
         private String isbn10;
 
-        @JsonProperty("isbn_13")
+        @JsonAttribute(name = "isbn_13")
         private String isbn13;
 
         private Language language;
@@ -241,7 +241,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Image {
         private String url;
     }
@@ -250,7 +250,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class FeaturedSeries {
         private Float position;
         private Series series;
@@ -260,12 +260,12 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Series {
         private String name;
-        @JsonProperty("books_count")
+        @JsonAttribute(name = "books_count")
         private Integer booksCount;
-        @JsonProperty("primary_books_count")
+        @JsonAttribute(name = "primary_books_count")
         private Integer primaryBooksCount;
     }
 
@@ -273,7 +273,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Contributor {
         private Author author;
         private String contribution;
@@ -283,7 +283,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Author {
         private Integer id;
         private String slug;
@@ -295,15 +295,15 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class CachedTags {
-        @JsonProperty("Genre")
+        @JsonAttribute(name = "Genre")
         private List<HardcoverCachedTag> genre;
 
-        @JsonProperty("Mood")
+        @JsonAttribute(name = "Mood")
         private List<HardcoverCachedTag> mood;
 
-        @JsonProperty("Tag")
+        @JsonAttribute(name = "Tag")
         private List<HardcoverCachedTag> tag;
     }
 
@@ -311,7 +311,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Publisher {
         private String name;
     }
@@ -320,7 +320,7 @@ public class GraphQLResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Language {
         private String code2;
     }

@@ -17,10 +17,10 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ObjectNode;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.JsonMapper;
+import org.booklore.util.json.node.ObjectNode;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;

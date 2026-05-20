@@ -1,6 +1,5 @@
 package org.booklore.model.dto.kobo;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,7 +12,6 @@ import tools.jackson.databind.annotation.JsonNaming;
 @AllArgsConstructor
 @Builder
 @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ChangedProductMetadata implements Entitlement {
     private BookEntitlementContainer changedProductMetadata;
 }

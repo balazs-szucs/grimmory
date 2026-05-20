@@ -5,7 +5,7 @@ import org.booklore.model.dto.komga.KomgaSeriesMetadataDto;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.ArrayList;
 

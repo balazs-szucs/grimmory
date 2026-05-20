@@ -1,7 +1,7 @@
 package org.booklore.model.entity;
 
+import com.dslplatform.json.JsonAttribute;
 import org.booklore.util.BookUtils;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
@@ -365,7 +365,7 @@ public class BookMetadataEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
     @JoinColumn(name = "book_id")
-    @JsonIgnore
+    @JsonAttribute(ignore = true)
     private BookEntity book;
 
     @OneToOne(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)

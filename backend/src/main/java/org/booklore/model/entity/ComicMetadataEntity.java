@@ -1,6 +1,6 @@
 package org.booklore.model.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.dslplatform.json.JsonAttribute;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
@@ -25,7 +25,7 @@ public class ComicMetadataEntity {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "book_id", insertable = false, updatable = false)
-    @JsonIgnore
+    @JsonAttribute(ignore = true)
     private BookMetadataEntity bookMetadata;
 
     @Column(name = "issue_number")

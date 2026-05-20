@@ -6,7 +6,7 @@ import org.booklore.model.dto.response.audnexus.AudnexusAuthorResponse;
 import org.booklore.model.enums.AuthorMetadataSource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;

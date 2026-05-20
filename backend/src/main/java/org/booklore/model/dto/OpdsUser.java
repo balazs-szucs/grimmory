@@ -1,13 +1,13 @@
 package org.booklore.model.dto;
 
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.dslplatform.json.JsonAttribute;
 import lombok.Data;
 
 @Data
 public class OpdsUser {
     private Long id;
     private String username;
-    @JsonIgnore
+    @JsonAttribute(ignore = true)
     private String password;
 }

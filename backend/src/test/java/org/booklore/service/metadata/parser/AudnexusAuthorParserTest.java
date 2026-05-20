@@ -8,8 +8,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.JsonMapper;
 
 import java.io.IOException;
 import java.net.http.HttpClient;

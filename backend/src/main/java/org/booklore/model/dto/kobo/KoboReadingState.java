@@ -1,6 +1,5 @@
 package org.booklore.model.dto.kobo;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,7 +13,6 @@ import tools.jackson.databind.annotation.JsonNaming;
 @AllArgsConstructor
 @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
 @Builder
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class KoboReadingState {
     private String entitlementId;
     private String created;
@@ -29,7 +27,6 @@ public class KoboReadingState {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class StatusInfo {
         private String lastModified;
         private KoboReadStatus status;
@@ -43,7 +40,6 @@ public class KoboReadingState {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Statistics {
         private String lastModified;
         private Integer spentReadingMinutes;
@@ -55,7 +51,6 @@ public class KoboReadingState {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class CurrentBookmark {
         private String lastModified;
         private Integer progressPercent;
@@ -67,7 +62,6 @@ public class KoboReadingState {
         @AllArgsConstructor
         @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
         @Builder
-        @JsonInclude(JsonInclude.Include.NON_NULL)
         public static class Location {
             private String value;
             private String type;

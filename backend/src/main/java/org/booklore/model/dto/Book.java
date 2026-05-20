@@ -1,6 +1,5 @@
 package org.booklore.model.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Data;
 import org.booklore.model.dto.progress.*;
@@ -11,7 +10,6 @@ import java.util.Set;
 
 @Builder
 @Data
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class Book {
     private Long id;
     private Long libraryId;

@@ -19,8 +19,8 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.type.TypeReference;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.type.TypeReference;
 
 import java.net.URI;
 import java.util.LinkedHashSet;
@@ -57,7 +57,7 @@ public class AppSettingService {
             @CacheEvict(value = "publicSettings", allEntries = true)
     })
     @Transactional
-    public void updateSetting(AppSettingKey key, Object val) throws JacksonException {
+    public void updateSetting(AppSettingKey key, Object val) throws JsonException {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
 
         validatePermission(key, user);

@@ -3,9 +3,9 @@ package org.booklore.service.audit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.JsonMapper;
 
 import java.net.InetAddress;
 import java.net.URI;

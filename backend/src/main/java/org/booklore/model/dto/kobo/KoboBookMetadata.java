@@ -1,7 +1,6 @@
 package org.booklore.model.dto.kobo;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dslplatform.json.JsonAttribute;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -33,7 +32,7 @@ public class KoboBookMetadata {
     private String slug;
     private String coverImageId;
 
-    @JsonProperty("IsSocialEnabled")
+    @JsonAttribute(name = "IsSocialEnabled")
     @Builder.Default
     private boolean socialEnabled = true;
 
@@ -42,14 +41,14 @@ public class KoboBookMetadata {
     @Builder.Default
     private List<Object> externalIds = new ArrayList<>();
 
-    @JsonProperty("IsPreOrder")
+    @JsonAttribute(name = "IsPreOrder")
     @Builder.Default
     private boolean preOrder = false;
 
     @Builder.Default
     private List<ContributorRole> contributorRoles = new ArrayList<>();
 
-    @JsonProperty("IsInternetArchive")
+    @JsonAttribute(name = "IsInternetArchive")
     @Builder.Default
     private boolean internetArchive = false;
 
@@ -79,7 +78,7 @@ public class KoboBookMetadata {
             .totalAmount(0)
             .build();
 
-    @JsonProperty("IsEligibleForKoboLove")
+    @JsonAttribute(name = "IsEligibleForKoboLove")
     @Builder.Default
     private boolean eligibleForKoboLove = false;
 
@@ -91,7 +90,6 @@ public class KoboBookMetadata {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Publisher {
         private String name;
         private String imprint;
@@ -102,7 +100,6 @@ public class KoboBookMetadata {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ContributorRole {
         private String name;
     }
@@ -112,7 +109,6 @@ public class KoboBookMetadata {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class DownloadUrl {
         @Builder.Default
         private String drmType = "None";
@@ -128,7 +124,6 @@ public class KoboBookMetadata {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Series {
         private String id;
         private String name;
@@ -141,7 +136,6 @@ public class KoboBookMetadata {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class CurrentDisplayPrice {
         private double totalAmount;
         private String currencyCode;
@@ -152,7 +146,6 @@ public class KoboBookMetadata {
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class CurrentLoveDisplayPrice {
         private double totalAmount;
     }

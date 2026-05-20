@@ -1,6 +1,5 @@
 package org.booklore.app.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 
 import java.time.Instant;
@@ -10,7 +9,6 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class AppSeriesSummary {
     private String seriesName;
     private int bookCount;

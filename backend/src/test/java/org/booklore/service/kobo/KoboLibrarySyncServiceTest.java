@@ -19,7 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;

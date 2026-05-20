@@ -4,9 +4,9 @@ import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.model.entity.BookFileEntity.AudioFileChapter;
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.type.TypeReference;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.List;
 
@@ -24,7 +24,7 @@ public class AudioFileChapterListConverter implements AttributeConverter<List<Au
         }
         try {
             return objectMapper.writeValueAsString(attribute);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Error converting chapter list to JSON", e);
             return null;
         }
@@ -37,7 +37,7 @@ public class AudioFileChapterListConverter implements AttributeConverter<List<Au
         }
         try {
             return objectMapper.readValue(dbData, LIST_TYPE_REF);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Error converting JSON to chapter list", e);
             return null;
         }

@@ -1,6 +1,6 @@
 package org.booklore.service.user;
 
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.model.entity.ShelfEntity;
 import org.booklore.model.enums.IconType;

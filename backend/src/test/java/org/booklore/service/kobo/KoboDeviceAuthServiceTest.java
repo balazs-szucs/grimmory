@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ObjectNode;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.JsonMapper;
+import org.booklore.util.json.node.ObjectNode;
 
 import static org.junit.jupiter.api.Assertions.*;
 

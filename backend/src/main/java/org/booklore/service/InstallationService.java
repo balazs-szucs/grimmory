@@ -5,8 +5,8 @@ import org.booklore.model.dto.Installation;
 import org.booklore.model.entity.AppSettingEntity;
 import org.booklore.repository.AppSettingsRepository;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

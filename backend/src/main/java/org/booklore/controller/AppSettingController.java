@@ -16,7 +16,7 @@ import org.booklore.service.audit.AuditService;
 import org.booklore.service.oidc.OidcDiagnosticService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import tools.jackson.core.JacksonException;
+import org.booklore.util.json.exception.JsonException;
 
 import java.util.List;
 
@@ -44,7 +44,7 @@ public class AppSettingController {
     })
     @PreAuthorize("@securityUtil.isAdmin()")
     @PutMapping
-    public void updateSettings(@Parameter(description = "List of settings to update") @RequestBody List<SettingRequest> settingRequests) throws JacksonException {
+    public void updateSettings(@Parameter(description = "List of settings to update") @RequestBody List<SettingRequest> settingRequests) throws JsonException {
         for (SettingRequest settingRequest : settingRequests) {
             AppSettingKey key = AppSettingKey.valueOf(settingRequest.getName());
             appSettingService.updateSetting(key, settingRequest.getValue());

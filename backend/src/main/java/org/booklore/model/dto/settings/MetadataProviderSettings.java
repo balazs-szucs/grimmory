@@ -1,6 +1,6 @@
 package org.booklore.model.dto.settings;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dslplatform.json.JsonAttribute;
 import lombok.Data;
 
 @Data
@@ -12,7 +12,7 @@ public class MetadataProviderSettings {
     private Comicvine comicvine;
     private Ranobedb ranobedb;
     private Douban douban;
-    @JsonProperty("lubimyczytac")
+    @JsonAttribute(name = "lubimyczytac")
     private Lubimyczytac lubimyczytac;
     private Audible audible;
 

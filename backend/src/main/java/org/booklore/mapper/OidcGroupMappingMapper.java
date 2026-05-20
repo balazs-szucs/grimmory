@@ -5,7 +5,7 @@ import org.booklore.model.entity.OidcGroupMappingEntity;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.List;
 

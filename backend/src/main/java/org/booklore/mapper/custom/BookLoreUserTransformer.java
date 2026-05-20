@@ -10,8 +10,8 @@ import org.booklore.model.entity.BookLoreUserEntity;
 import org.booklore.model.entity.UserSettingEntity;
 import org.booklore.model.enums.UserPermission;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.type.TypeReference;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.Collections;
 

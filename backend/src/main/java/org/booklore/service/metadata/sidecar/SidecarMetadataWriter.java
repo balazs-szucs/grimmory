@@ -10,9 +10,9 @@ import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.FileService;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.SerializationFeature;
-import tools.jackson.databind.json.JsonMapper;
+import org.booklore.util.json.ObjectMapper;
+import org.booklore.util.json.SerializationFeature;
+import org.booklore.util.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;

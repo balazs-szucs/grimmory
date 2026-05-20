@@ -9,8 +9,8 @@ import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
 
 import reactor.core.publisher.Flux;
 

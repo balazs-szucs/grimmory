@@ -1,6 +1,6 @@
 package org.booklore.service.user;
 
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.model.dto.settings.UserSettingKey;

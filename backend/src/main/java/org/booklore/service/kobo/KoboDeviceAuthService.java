@@ -6,9 +6,9 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.booklore.model.dto.kobo.KoboAuthentication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -42,7 +42,7 @@ public class KoboDeviceAuthService {
     public byte[] toJsonBytes(KoboAuthentication KoboAuthentication) {
         try {
             return objectMapper.writeValueAsString(KoboAuthentication).getBytes(StandardCharsets.UTF_8);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Failed to serialize AuthDto to JSON", e);
             throw new RuntimeException("Failed to serialize AuthDto", e);
         }

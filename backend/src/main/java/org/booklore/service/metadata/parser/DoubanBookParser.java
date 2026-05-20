@@ -17,8 +17,8 @@ import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
 
 import java.io.IOException;
 import java.time.Instant;

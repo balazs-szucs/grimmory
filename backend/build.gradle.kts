@@ -28,7 +28,7 @@ java {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.compilerArgs.add("--enable-preview")
+    options.compilerArgs.addAll(listOf("--enable-preview", "-Adsljson.unknown=ALLOW"))
 }
 
 val useLocalLibs = providers.gradleProperty("useLocalLibs").isPresent
@@ -225,15 +225,10 @@ dependencies {
     // --- Template Engine ---
     implementation("org.freemarker:freemarker:2.3.34")
 
-    // --- Jackson 3 ---
-    implementation(platform("tools.jackson:jackson-bom:3.1.3"))
-    implementation("tools.jackson.core:jackson-core")
-    implementation("tools.jackson.core:jackson-databind")
-    implementation("tools.jackson.module:jackson-module-blackbird")
-
-    // --- Jackson 2 (Compatibility) ---
-    // jackson-annotations version is managed by Jackson 3 BOM (requires 2.20+)
-    implementation("com.fasterxml.jackson.core:jackson-annotations")
+    // --- DSL-JSON ---
+    implementation("com.dslplatform:dsl-json:2.0.2")
+    annotationProcessor("com.dslplatform:dsl-json:2.0.2")
+    testAnnotationProcessor("com.dslplatform:dsl-json:2.0.2")
 
     // --- Caching ---
     implementation("org.springframework.boot:spring-boot-starter-cache")
@@ -338,3 +333,6 @@ tasks.register("buildOpenApiArtifacts") {
     description = "Build the backend jar and export build/openapi/grimmory-openapi.json from the openapi-export profile."
     dependsOn(tasks.named("bootJar"), tasks.named("exportOpenApi"))
 }
+
+// Global exclusions removed to preserve Spring WebMVC autoconfig runtime stability
+

@@ -1,11 +1,10 @@
 package org.booklore.model.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
+import com.dslplatform.json.JsonAttribute;
 public enum JoinType {
-    @JsonProperty("and")
+    @JsonAttribute(name = "and")
     AND,
-    @JsonProperty("or")
+    @JsonAttribute(name = "or")
     OR
 }
 

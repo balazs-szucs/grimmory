@@ -5,7 +5,7 @@ import org.booklore.model.dto.komga.KomgaBookMetadataDto;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,6 +142,6 @@ class KomgaCleanFilterTest {
         assertThat(result).containsKey("titleLock");
         assertThat(result).containsKey("summaryLock");
         assertThat(result).containsKey("authors");
-        // Note: null values are excluded by @JsonInclude(JsonInclude.Include.NON_NULL) regardless
+        // Note: null values are excluded by regardless
     }
 }

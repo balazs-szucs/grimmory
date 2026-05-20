@@ -1,8 +1,8 @@
 package org.booklore.model.dto;
 
+import com.dslplatform.json.JsonAttribute;
 import org.booklore.model.enums.EventTaskType;
 import org.booklore.model.enums.TaskStatus;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,12 +24,12 @@ public class TaskMessage {
     private EventTaskType taskType;
     private TaskStatus status;
 
-    @JsonProperty
+    @JsonAttribute
     public String getTitle() {
         return taskType != null ? taskType.getTitle() : null;
     }
 
-    @JsonProperty
+    @JsonAttribute
     public boolean isCancellable() {
         return taskType != null && taskType.isCancellable();
     }

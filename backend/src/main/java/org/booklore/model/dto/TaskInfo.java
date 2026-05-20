@@ -2,7 +2,6 @@ package org.booklore.model.dto;
 
 import org.booklore.model.dto.response.CronConfig;
 import org.booklore.model.enums.TaskType;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,7 +11,6 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class TaskInfo {
     private TaskType taskType;
     private String name;

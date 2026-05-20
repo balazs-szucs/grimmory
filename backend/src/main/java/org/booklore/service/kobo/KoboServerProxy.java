@@ -13,8 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;

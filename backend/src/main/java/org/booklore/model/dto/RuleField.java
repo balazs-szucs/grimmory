@@ -1,109 +1,108 @@
 package org.booklore.model.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
+import com.dslplatform.json.JsonAttribute;
 public enum RuleField {
-    @JsonProperty("library")
+    @JsonAttribute(name = "library")
     LIBRARY,
-    @JsonProperty("shelf")
+    @JsonAttribute(name = "shelf")
     SHELF,
-    @JsonProperty("title")
+    @JsonAttribute(name = "title")
     TITLE,
-    @JsonProperty("subtitle")
+    @JsonAttribute(name = "subtitle")
     SUBTITLE,
-    @JsonProperty("authors")
+    @JsonAttribute(name = "authors")
     AUTHORS,
-    @JsonProperty("categories")
+    @JsonAttribute(name = "categories")
     CATEGORIES,
-    @JsonProperty("publisher")
+    @JsonAttribute(name = "publisher")
     PUBLISHER,
-    @JsonProperty("publishedDate")
+    @JsonAttribute(name = "publishedDate")
     PUBLISHED_DATE,
-    @JsonProperty("seriesName")
+    @JsonAttribute(name = "seriesName")
     SERIES_NAME,
-    @JsonProperty("seriesNumber")
+    @JsonAttribute(name = "seriesNumber")
     SERIES_NUMBER,
-    @JsonProperty("seriesTotal")
+    @JsonAttribute(name = "seriesTotal")
     SERIES_TOTAL,
-    @JsonProperty("pageCount")
+    @JsonAttribute(name = "pageCount")
     PAGE_COUNT,
-    @JsonProperty("language")
+    @JsonAttribute(name = "language")
     LANGUAGE,
-    @JsonProperty("isbn13")
+    @JsonAttribute(name = "isbn13")
     ISBN13,
-    @JsonProperty("isbn10")
+    @JsonAttribute(name = "isbn10")
     ISBN10,
-    @JsonProperty("amazonRating")
+    @JsonAttribute(name = "amazonRating")
     AMAZON_RATING,
-    @JsonProperty("amazonReviewCount")
+    @JsonAttribute(name = "amazonReviewCount")
     AMAZON_REVIEW_COUNT,
-    @JsonProperty("goodreadsRating")
+    @JsonAttribute(name = "goodreadsRating")
     GOODREADS_RATING,
-    @JsonProperty("goodreadsReviewCount")
+    @JsonAttribute(name = "goodreadsReviewCount")
     GOODREADS_REVIEW_COUNT,
-    @JsonProperty("hardcoverRating")
+    @JsonAttribute(name = "hardcoverRating")
     HARDCOVER_RATING,
-    @JsonProperty("hardcoverReviewCount")
+    @JsonAttribute(name = "hardcoverReviewCount")
     HARDCOVER_REVIEW_COUNT,
-    @JsonProperty("ranobedbRating")
+    @JsonAttribute(name = "ranobedbRating")
     RANOBEDB_RATING,
-    @JsonProperty("personalRating")
+    @JsonAttribute(name = "personalRating")
     PERSONAL_RATING,
-    @JsonProperty("fileType")
+    @JsonAttribute(name = "fileType")
     FILE_TYPE,
-    @JsonProperty("fileSize")
+    @JsonAttribute(name = "fileSize")
     FILE_SIZE,
-    @JsonProperty("readStatus")
+    @JsonAttribute(name = "readStatus")
     READ_STATUS,
-    @JsonProperty("dateFinished")
+    @JsonAttribute(name = "dateFinished")
     DATE_FINISHED,
-    @JsonProperty("lastReadTime")
+    @JsonAttribute(name = "lastReadTime")
     LAST_READ_TIME,
-    @JsonProperty("metadataScore")
+    @JsonAttribute(name = "metadataScore")
     METADATA_SCORE,
-    @JsonProperty("moods")
+    @JsonAttribute(name = "moods")
     MOODS,
-    @JsonProperty("tags")
+    @JsonAttribute(name = "tags")
     TAGS,
-    @JsonProperty("genre")
+    @JsonAttribute(name = "genre")
     GENRE,
-    @JsonProperty("ageRating")
+    @JsonAttribute(name = "ageRating")
     AGE_RATING,
-    @JsonProperty("contentRating")
+    @JsonAttribute(name = "contentRating")
     CONTENT_RATING,
-    @JsonProperty("addedOn")
+    @JsonAttribute(name = "addedOn")
     ADDED_ON,
-    @JsonProperty("lubimyczytacRating")
+    @JsonAttribute(name = "lubimyczytacRating")
     LUBIMYCZYTAC_RATING,
-    @JsonProperty("description")
+    @JsonAttribute(name = "description")
     DESCRIPTION,
-    @JsonProperty("narrator")
+    @JsonAttribute(name = "narrator")
     NARRATOR,
-    @JsonProperty("audibleRating")
+    @JsonAttribute(name = "audibleRating")
     AUDIBLE_RATING,
-    @JsonProperty("audibleReviewCount")
+    @JsonAttribute(name = "audibleReviewCount")
     AUDIBLE_REVIEW_COUNT,
-    @JsonProperty("abridged")
+    @JsonAttribute(name = "abridged")
     ABRIDGED,
-    @JsonProperty("audiobookDuration")
+    @JsonAttribute(name = "audiobookDuration")
     AUDIOBOOK_DURATION,
-    @JsonProperty("audiobookCodec")
+    @JsonAttribute(name = "audiobookCodec")
     AUDIOBOOK_CODEC,
-    @JsonProperty("audiobookChapterCount")
+    @JsonAttribute(name = "audiobookChapterCount")
     AUDIOBOOK_CHAPTER_COUNT,
-    @JsonProperty("audiobookBitrate")
+    @JsonAttribute(name = "audiobookBitrate")
     AUDIOBOOK_BITRATE,
-    @JsonProperty("isPhysical")
+    @JsonAttribute(name = "isPhysical")
     IS_PHYSICAL,
-    @JsonProperty("seriesStatus")
+    @JsonAttribute(name = "seriesStatus")
     SERIES_STATUS,
-    @JsonProperty("seriesGaps")
+    @JsonAttribute(name = "seriesGaps")
     SERIES_GAPS,
-    @JsonProperty("seriesPosition")
+    @JsonAttribute(name = "seriesPosition")
     SERIES_POSITION,
-    @JsonProperty("readingProgress")
+    @JsonAttribute(name = "readingProgress")
     READING_PROGRESS,
-    @JsonProperty("metadataPresence")
+    @JsonAttribute(name = "metadataPresence")
     METADATA_PRESENCE
 }
 

@@ -1,45 +1,43 @@
 package org.booklore.model.dto.response.ranobedbapi;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
+import com.dslplatform.json.JsonAttribute;
 import lombok.Data;
+import com.dslplatform.json.CompiledJson;
 import java.util.List;
 
 @Data
-@JsonIgnoreProperties(ignoreUnknown = true)
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@CompiledJson
 public class RanobedbBookResponse {
     private Book book;
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Book {
         private String description;
         private String lang;
         private Long id;
         private String romaji;
         
-        @JsonProperty("description_ja")
+        @JsonAttribute(name = "description_ja")
         private String descriptionJa;
         
         private Boolean hidden;
         
-        @JsonProperty("image_id")
+        @JsonAttribute(name = "image_id")
         private Long imageId;
         
         private String olang;
         private Boolean locked;
         
-        @JsonProperty("c_release_date")
+        @JsonAttribute(name = "c_release_date")
         private Long cReleaseDate;
         
         private String title;
         
-        @JsonProperty("title_orig")
+        @JsonAttribute(name = "title_orig")
         private String titleOrig;
         
-        @JsonProperty("romaji_orig")
+        @JsonAttribute(name = "romaji_orig")
         private String romajiOrig;
 
         private Image image;
@@ -52,14 +50,14 @@ public class RanobedbBookResponse {
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Rating {
         private Double score;
         private Integer count;
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Image {
         private Long id;
         private String filename;
@@ -70,20 +68,20 @@ public class RanobedbBookResponse {
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class TitleEntry {
         private String lang;
         private String romaji;
-        @JsonProperty("book_id")
+        @JsonAttribute(name = "book_id")
         private Long bookId;
         private Boolean official;
         private String title;
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Edition {
-        @JsonProperty("book_id")
+        @JsonAttribute(name = "book_id")
         private Long bookId;
         private String lang;
         private String title;
@@ -92,21 +90,21 @@ public class RanobedbBookResponse {
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Staff {
         private String note;
-        @JsonProperty("role_type")
+        @JsonAttribute(name = "role_type")
         private RoleType roleType;
         private String romaji;
         private String name;
-        @JsonProperty("staff_id")
+        @JsonAttribute(name = "staff_id")
         private Long staffId;
-        @JsonProperty("staff_alias_id")
+        @JsonAttribute(name = "staff_alias_id")
         private Long staffAliasId;
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Release {
         private String lang;
         private Long id;
@@ -114,7 +112,7 @@ public class RanobedbBookResponse {
         private String description;
         private Boolean hidden;
         private Boolean locked;
-        @JsonProperty("release_date")
+        @JsonAttribute(name = "release_date")
         private Long releaseDate;
         private String title;
         private String website;
@@ -127,18 +125,18 @@ public class RanobedbBookResponse {
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Publisher {
         private String lang;
         private Long id;
         private String romaji;
         private String name;
-        @JsonProperty("publisher_type")
+        @JsonAttribute(name = "publisher_type")
         private PublisherType publisherType;
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Series {
         private List<SeriesBook> books;
         private List<Tag> tags;
@@ -146,28 +144,28 @@ public class RanobedbBookResponse {
         private Long id;
         private String romaji;
         private String title;
-        @JsonProperty("title_orig")
+        @JsonAttribute(name = "title_orig")
         private String titleOrig;
-        @JsonProperty("romaji_orig")
+        @JsonAttribute(name = "romaji_orig")
         private String romajiOrig;
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class SeriesBook {
         private Long id;
         private String lang;
         private String romaji;
         private String title;
-        @JsonProperty("title_orig")
+        @JsonAttribute(name = "title_orig")
         private String titleOrig;
-        @JsonProperty("romaji_orig")
+        @JsonAttribute(name = "romaji_orig")
         private String romajiOrig;
         private Image image;
     }
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Tag {
         private Long id;
         private String name;
@@ -177,29 +175,29 @@ public class RanobedbBookResponse {
     // --- Enums for strict typing ---
 
     public enum RoleType {
-        @JsonProperty("editor") EDITOR,
-        @JsonProperty("staff") STAFF,
-        @JsonProperty("author") AUTHOR,
-        @JsonProperty("artist") ARTIST,
-        @JsonProperty("translator") TRANSLATOR,
-        @JsonProperty("narrator") NARRATOR
+        @JsonAttribute(name = "editor") EDITOR,
+        @JsonAttribute(name = "staff") STAFF,
+        @JsonAttribute(name = "author") AUTHOR,
+        @JsonAttribute(name = "artist") ARTIST,
+        @JsonAttribute(name = "translator") TRANSLATOR,
+        @JsonAttribute(name = "narrator") NARRATOR
     }
 
     public enum Format {
-        @JsonProperty("digital") DIGITAL,
-        @JsonProperty("print") PRINT,
-        @JsonProperty("audio") AUDIO
+        @JsonAttribute(name = "digital") DIGITAL,
+        @JsonAttribute(name = "print") PRINT,
+        @JsonAttribute(name = "audio") AUDIO
     }
 
     public enum PublisherType {
-        @JsonProperty("publisher") PUBLISHER,
-        @JsonProperty("imprint") IMPRINT
+        @JsonAttribute(name = "publisher") PUBLISHER,
+        @JsonAttribute(name = "imprint") IMPRINT
     }
 
     public enum TagType {
-        @JsonProperty("tag") TAG,
-        @JsonProperty("content") CONTENT,
-        @JsonProperty("demographic") DEMOGRAPHIC,
-        @JsonProperty("genre") GENRE
+        @JsonAttribute(name = "tag") TAG,
+        @JsonAttribute(name = "content") CONTENT,
+        @JsonAttribute(name = "demographic") DEMOGRAPHIC,
+        @JsonAttribute(name = "genre") GENRE
     }
 }

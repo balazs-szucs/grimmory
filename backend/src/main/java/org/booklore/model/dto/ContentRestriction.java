@@ -1,6 +1,5 @@
 package org.booklore.model.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import org.booklore.model.enums.ContentRestrictionMode;
 import org.booklore.model.enums.ContentRestrictionType;
@@ -12,7 +11,6 @@ import java.time.LocalDateTime;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ContentRestriction {
     private Long id;
     private Long userId;

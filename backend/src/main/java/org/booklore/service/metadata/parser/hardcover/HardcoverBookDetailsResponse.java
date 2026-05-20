@@ -1,14 +1,14 @@
 package org.booklore.service.metadata.parser.hardcover;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dslplatform.json.JsonAttribute;
 import lombok.*;
+import com.dslplatform.json.CompiledJson;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
+@CompiledJson
 public class HardcoverBookDetailsResponse {
     
     private Data data;
@@ -17,9 +17,9 @@ public class HardcoverBookDetailsResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    @CompiledJson
     public static class Data {
-        @JsonProperty("books_by_pk")
+        @JsonAttribute(name = "books_by_pk")
         private HardcoverBookDetails booksByPk;
     }
 }

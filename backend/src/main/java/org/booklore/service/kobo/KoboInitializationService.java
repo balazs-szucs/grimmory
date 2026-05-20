@@ -8,9 +8,9 @@ import org.booklore.util.kobo.KoboUrlBuilder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.node.ObjectNode;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.node.ObjectNode;
 
 import java.util.Map;
 
@@ -42,7 +42,7 @@ public class KoboInitializationService {
         return appSettingService.getAppSettings().getKoboSettings().isForwardToKoboStore();
     }
 
-    public ResponseEntity<KoboResources> initialize(String token) throws JacksonException {
+    public ResponseEntity<KoboResources> initialize(String token) throws JsonException {
         ObjectNode resources = null;
 
         if (isForwardingToKoboStore()) {

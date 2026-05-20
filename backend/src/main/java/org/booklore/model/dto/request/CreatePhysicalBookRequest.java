@@ -1,6 +1,5 @@
 package org.booklore.model.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,7 +12,6 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class CreatePhysicalBookRequest {
     @NotNull(message = "Library ID must not be null.")
     private Long libraryId;

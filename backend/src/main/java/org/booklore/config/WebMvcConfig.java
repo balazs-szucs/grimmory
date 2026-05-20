@@ -61,4 +61,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(komgaCleanInterceptor)
                 .addPathPatterns("/komga/api/**");
     }
+
+    @Override
+    public void extendMessageConverters(java.util.List<org.springframework.http.converter.HttpMessageConverter<?>> converters) {
+        converters.add(0, new DslJsonHttpMessageConverter());
+    }
 }

@@ -9,8 +9,8 @@ import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.entity.CategoryEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -103,7 +103,7 @@ public class BookVectorService {
     public String serializeVector(double[] vector) {
         try {
             return objectMapper.writeValueAsString(vector);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Error serializing vector", e);
             return null;
         }
@@ -115,7 +115,7 @@ public class BookVectorService {
         }
         try {
             return objectMapper.readValue(vectorJson, double[].class);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Error deserializing vector", e);
             return null;
         }

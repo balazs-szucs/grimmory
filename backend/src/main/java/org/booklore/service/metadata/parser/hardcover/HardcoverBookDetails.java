@@ -1,8 +1,8 @@
 package org.booklore.service.metadata.parser.hardcover;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dslplatform.json.JsonAttribute;
 import lombok.*;
+import com.dslplatform.json.CompiledJson;
 
 import java.util.List;
 import java.util.Map;
@@ -11,12 +11,12 @@ import java.util.Map;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
+@CompiledJson
 public class HardcoverBookDetails {
     
     private Integer id;
     private String title;
     
-    @JsonProperty("cached_tags")
+    @JsonAttribute(name = "cached_tags")
     private Map<String, List<HardcoverCachedTag>> cachedTags;
 }

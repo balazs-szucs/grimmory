@@ -1,6 +1,5 @@
 package org.booklore.model.dto.kobo;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,14 +14,12 @@ import java.util.List;
 @AllArgsConstructor
 @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
 @Builder
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class KoboDeals {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class KoboDealEntry {
         private String id;
     }

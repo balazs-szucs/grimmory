@@ -5,8 +5,8 @@ import org.booklore.model.dto.ReleaseNote;
 import org.booklore.model.dto.VersionInfo;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.JsonNode;
+import org.booklore.util.json.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;

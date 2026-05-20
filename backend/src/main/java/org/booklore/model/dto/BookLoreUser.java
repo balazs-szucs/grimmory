@@ -1,7 +1,5 @@
 package org.booklore.model.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -85,7 +83,6 @@ public class BookLoreUser {
         @Builder
         @AllArgsConstructor
         @NoArgsConstructor
-        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class TableColumnPreference {
             private String field;
             private Boolean visible;
@@ -111,8 +108,11 @@ public class BookLoreUser {
             private List<SortCriterion> sortCriteria;
             private String view;
             private Float coverSize;
-            @JsonAlias("seriesCollapse")
             private Boolean seriesCollapsed;
+
+        public void setSeriesCollapse(Boolean seriesCollapse) {
+            this.seriesCollapsed = seriesCollapse;
+        }
             private Boolean overlayBookType;
         }
 
@@ -135,8 +135,11 @@ public class BookLoreUser {
             private String sortDir;
             private List<SortCriterion> sortCriteria;
             private String view;
-            @JsonAlias("seriesCollapse")
             private Boolean seriesCollapsed;
+
+        public void setSeriesCollapse(Boolean seriesCollapse) {
+            this.seriesCollapsed = seriesCollapse;
+        }
             private Boolean overlayBookType;
             private Float coverSize;
         }

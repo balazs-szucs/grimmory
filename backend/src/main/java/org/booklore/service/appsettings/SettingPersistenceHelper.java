@@ -9,9 +9,9 @@ import org.booklore.model.enums.MetadataProvider;
 import org.booklore.model.enums.MetadataReplaceMode;
 import org.booklore.repository.AppSettingsRepository;
 import org.springframework.stereotype.Service;
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.type.TypeReference;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.Map;
 import java.util.Set;
@@ -54,7 +54,7 @@ public class SettingPersistenceHelper {
         if (json != null && !json.isBlank()) {
             try {
                 return deserializer.deserialize(json);
-            } catch (JacksonException e) {
+            } catch (JsonException e) {
                 log.error("Failed to parse JSON for setting key '{}'. Using default value. Error: {}", key, e.getMessage());
                 return defaultValue;
             }
@@ -62,7 +62,7 @@ public class SettingPersistenceHelper {
         if (defaultValue != null && persistDefault) {
             try {
                 saveDefaultSetting(key, objectMapper.writeValueAsString(defaultValue));
-            } catch (JacksonException e) {
+            } catch (JsonException e) {
                 log.error("Failed to persist default value for setting key '{}'. Error: {}", key, e.getMessage());
             }
         }
@@ -71,10 +71,10 @@ public class SettingPersistenceHelper {
 
     @FunctionalInterface
     private interface JsonDeserializer<T> {
-        T deserialize(String json) throws JacksonException;
+        T deserialize(String json) throws JsonException;
     }
 
-    public String serializeSettingValue(AppSettingKey key, Object val) throws JacksonException {
+    public String serializeSettingValue(AppSettingKey key, Object val) throws JsonException {
         if (val == null) {
             return null;
         }

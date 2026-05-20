@@ -3,8 +3,8 @@ package org.booklore.convertor;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import org.booklore.model.dto.kobo.KoboSpanPositionMap;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.ObjectMapper;
 
 @Converter
 public class KoboSpanMapJsonConverter implements AttributeConverter<KoboSpanPositionMap, String> {
@@ -18,7 +18,7 @@ public class KoboSpanMapJsonConverter implements AttributeConverter<KoboSpanPosi
         }
         try {
             return objectMapper.writeValueAsString(attribute);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             throw new IllegalStateException("Failed to serialize Kobo span map to JSON", e);
         }
     }
@@ -30,7 +30,7 @@ public class KoboSpanMapJsonConverter implements AttributeConverter<KoboSpanPosi
         }
         try {
             return objectMapper.readValue(dbData, KoboSpanPositionMap.class);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             throw new IllegalStateException("Failed to deserialize Kobo span map from JSON", e);
         }
     }

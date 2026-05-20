@@ -4,9 +4,9 @@ import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.model.dto.BookRecommendationLite;
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.type.TypeReference;
+import org.booklore.util.json.ObjectMapper;
 
 import java.util.Set;
 
@@ -24,7 +24,7 @@ public class BookRecommendationIdsListConverter implements AttributeConverter<Se
         }
         try {
             return objectMapper.writeValueAsString(recommendations);
-        } catch (JacksonException e) {
+        } catch (JsonException e) {
             log.error("Failed to convert BookRecommendation set to JSON string: {}", recommendations, e);
             throw new RuntimeException("Error converting BookRecommendation list to JSON", e);
         }

@@ -23,8 +23,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import org.booklore.util.json.exception.JsonException;
+import org.booklore.util.json.ObjectMapper;
 
 import java.io.File;
 import java.time.Instant;
@@ -217,10 +217,10 @@ class BookdropMetadataServiceTest {
         when(bookdropFileRepository.findById(1L)).thenReturn(Optional.of(sampleFile));
         when(appSettingService.getAppSettings()).thenReturn(new AppSettings());
         when(objectMapper.readValue(anyString(), eq(BookMetadata.class)))
-                .thenThrow(new JacksonException("Invalid JSON") {
+                .thenThrow(new JsonException("Invalid JSON") {
                 });
 
         assertThatThrownBy(() -> bookdropMetadataService.attachFetchedMetadata(1L))
-                .isInstanceOf(JacksonException.class);
+                .isInstanceOf(JsonException.class);
     }
 }

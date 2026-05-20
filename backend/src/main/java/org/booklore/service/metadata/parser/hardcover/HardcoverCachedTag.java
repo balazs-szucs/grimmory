@@ -1,26 +1,26 @@
 package org.booklore.service.metadata.parser.hardcover;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dslplatform.json.JsonAttribute;
 import lombok.*;
+import com.dslplatform.json.CompiledJson;
 
   @Getter
   @Setter
   @NoArgsConstructor
   @AllArgsConstructor
-  @JsonIgnoreProperties(ignoreUnknown = true)
+  @CompiledJson
   public class HardcoverCachedTag {
       private String tag;
       
-      @JsonProperty("tagSlug")
+      @JsonAttribute(name = "tagSlug")
       private String tagSlug;
       
       private String category;
       
-      @JsonProperty("categorySlug")
+      @JsonAttribute(name = "categorySlug")
       private String categorySlug;
       
-      @JsonProperty("spoilerRatio")
+      @JsonAttribute(name = "spoilerRatio")
       private Double spoilerRatio;
       
       private Integer count;

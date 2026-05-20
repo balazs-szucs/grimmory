@@ -1,26 +1,22 @@
 package org.booklore.model.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.util.List;
 import java.util.Set;
 
 @Data
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class GoogleBooksApiResponse {
     private Integer totalItems;
     private List<Item> items;
 
     @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Item {
         private String id;
         private String selfLink;
         private VolumeInfo volumeInfo;
 
         @Data
-        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class VolumeInfo {
             private String title;
             private String subtitle;
@@ -45,14 +41,12 @@ public class GoogleBooksApiResponse {
         }
 
         @Data
-        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class IndustryIdentifier {
             private String type;
             private String identifier;
         }
 
         @Data
-        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class ImageLinks {
             private String smallThumbnail;
             private String thumbnail;
@@ -63,7 +57,6 @@ public class GoogleBooksApiResponse {
         }
 
         @Data
-        @JsonIgnoreProperties(ignoreUnknown = true)
         public static class SeriesInfo {
             private String kind;
             private String shortSeriesBookTitle;
@@ -71,7 +64,6 @@ public class GoogleBooksApiResponse {
             private List<VolumeSeries> volumeSeries;
 
             @Data
-            @JsonIgnoreProperties(ignoreUnknown = true)
             public static class VolumeSeries {
                 private String seriesId;
                 private String seriesBookType;
