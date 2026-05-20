@@ -20,6 +20,7 @@ import org.booklore.repository.UserBookProgressRepository;
 import org.booklore.service.audit.AuditService;
 import org.booklore.service.metadata.BookCoverService;
 import org.booklore.service.progress.ReadingProgressService;
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -210,7 +211,7 @@ public class BookFileDetachmentService {
 
         UserBookProgressEntity userProgress = userBookProgressRepository.findByUserIdAndBookId(user.getId(), bookId)
                 .orElse(new UserBookProgressEntity());
-        UserBookFileProgressEntity fileProgress = readingProgressService
+        UserBookFileProgressProjection fileProgress = readingProgressService
                 .fetchUserFileProgress(user.getId(), Set.of(bookId))
                 .get(bookId);
 

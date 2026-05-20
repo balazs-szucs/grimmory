@@ -5,6 +5,7 @@ import org.booklore.model.dto.CompletionTimelineDto;
 import org.booklore.model.dto.ProgressPercentDto;
 import org.booklore.model.dto.RatingDistributionDto;
 import org.booklore.model.dto.StatusDistributionDto;
+import org.booklore.repository.projection.UserBookProgressProjection;
 import org.booklore.model.entity.UserBookProgressEntity;
 import org.booklore.model.enums.ReadStatus;
 import org.springframework.data.domain.Pageable;
@@ -39,6 +40,30 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
     );
 
     List<UserBookProgressEntity> findByUserIdAndBookIdIn(Long userId, Set<Long> bookIds);
+
+    @Query("""
+        SELECT ubp.book.id as bookId,
+               ubp.readStatus as readStatus,
+               ubp.dateFinished as dateFinished,
+               ubp.personalRating as personalRating,
+               ubp.lastReadTime as lastReadTime,
+               ubp.koboProgressPercent as koboProgressPercent,
+               ubp.koreaderProgressPercent as koreaderProgressPercent,
+               ubp.epubProgress as epubProgress,
+               ubp.epubProgressHref as epubProgressHref,
+               ubp.epubProgressPercent as epubProgressPercent,
+               ubp.pdfProgress as pdfProgress,
+               ubp.pdfProgressPercent as pdfProgressPercent,
+               ubp.cbxProgress as cbxProgress,
+               ubp.cbxProgressPercent as cbxProgressPercent
+        FROM UserBookProgressEntity ubp
+        WHERE ubp.user.id = :userId
+          AND ubp.book.id IN :bookIds
+    """)
+    List<UserBookProgressProjection> findProjectionsByUserIdAndBookIdIn(
+            @Param("userId") Long userId,
+            @Param("bookIds") Set<Long> bookIds
+    );
 
     @EntityGraph(attributePaths = {"book", "book.bookFiles", "book.library", "book.libraryPath"})
     @Query("""

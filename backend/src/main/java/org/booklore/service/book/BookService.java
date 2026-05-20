@@ -14,6 +14,8 @@ import org.booklore.model.entity.*;
 import org.booklore.model.enums.AuditAction;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.*;
+import org.booklore.repository.projection.UserBookProgressProjection;
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.booklore.service.FileStreamingService;
 import org.booklore.service.audit.AuditService;
 import org.booklore.service.metadata.sidecar.SidecarMetadataWriter;
@@ -84,9 +86,9 @@ public class BookService {
         );
 
         Set<Long> bookIds = books.stream().map(Book::getId).collect(Collectors.toSet());
-        Map<Long, UserBookProgressEntity> progressMap =
+        Map<Long, UserBookProgressProjection> progressMap =
                 readingProgressService.fetchUserProgress(user.getId(), bookIds);
-        Map<Long, UserBookFileProgressEntity> fileProgressMap =
+        Map<Long, UserBookFileProgressProjection> fileProgressMap =
                 readingProgressService.fetchUserFileProgress(user.getId(), bookIds);
 
         books.forEach(book -> {
@@ -115,9 +117,9 @@ public class BookService {
         );
 
         Set<Long> bookIds = bookPage.getContent().stream().map(Book::getId).collect(Collectors.toSet());
-        Map<Long, UserBookProgressEntity> progressMap =
+        Map<Long, UserBookProgressProjection> progressMap =
                 readingProgressService.fetchUserProgress(user.getId(), bookIds);
-        Map<Long, UserBookFileProgressEntity> fileProgressMap =
+        Map<Long, UserBookFileProgressProjection> fileProgressMap =
                 readingProgressService.fetchUserFileProgress(user.getId(), bookIds);
 
         bookPage.getContent().forEach(book -> {
@@ -153,9 +155,9 @@ public class BookService {
 
         Set<Long> entityIds = bookEntities.stream().map(BookEntity::getId).collect(Collectors.toSet());
 
-        Map<Long, UserBookProgressEntity> progressMap =
+        Map<Long, UserBookProgressProjection> progressMap =
                 readingProgressService.fetchUserProgress(user.getId(), entityIds);
-        Map<Long, UserBookFileProgressEntity> fileProgressMap =
+        Map<Long, UserBookFileProgressProjection> fileProgressMap =
                 readingProgressService.fetchUserFileProgress(user.getId(), entityIds);
 
         return bookEntities.stream().map(bookEntity -> {
@@ -178,7 +180,7 @@ public class BookService {
                 .orElse(new UserBookProgressEntity());
 
         // Fetch file-level progress for the book (most recent across all files)
-        UserBookFileProgressEntity fileProgress = readingProgressService
+        UserBookFileProgressProjection fileProgress = readingProgressService
                 .fetchUserFileProgress(user.getId(), Set.of(bookId))
                 .get(bookId);
 

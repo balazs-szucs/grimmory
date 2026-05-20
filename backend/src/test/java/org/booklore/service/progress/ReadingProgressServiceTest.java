@@ -14,6 +14,8 @@ import org.booklore.model.enums.BookFileType;
 import org.booklore.model.enums.ReadStatus;
 import org.booklore.model.enums.ResetProgressType;
 import org.booklore.repository.*;
+import org.booklore.repository.projection.UserBookProgressProjection;
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.booklore.service.kobo.KoboReadingStateService;
 import org.booklore.service.hardcover.HardcoverSyncService;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,10 +72,10 @@ class ReadingProgressServiceTest {
         UserBookProgressEntity progress2 = new UserBookProgressEntity();
         progress2.setBook(book2);
 
-        when(userBookProgressRepository.findByUserIdAndBookIdIn(userId, bookIds))
+        when(userBookProgressRepository.findProjectionsByUserIdAndBookIdIn(userId, bookIds))
                 .thenReturn(List.of(progress1, progress2));
 
-        Map<Long, UserBookProgressEntity> result = readingProgressService.fetchUserProgress(userId, bookIds);
+        Map<Long, UserBookProgressProjection> result = readingProgressService.fetchUserProgress(userId, bookIds);
 
         assertEquals(2, result.size());
         assertEquals(progress1, result.get(1L));
@@ -82,11 +84,11 @@ class ReadingProgressServiceTest {
 
     @Test
     void fetchUserFileProgress_emptyBookIds_shouldReturnEmptyMap() {
-        Map<Long, UserBookFileProgressEntity> result =
+        Map<Long, UserBookFileProgressProjection> result =
                 readingProgressService.fetchUserFileProgress(1L, Collections.emptySet());
 
         assertTrue(result.isEmpty());
-        verify(userBookFileProgressRepository, never()).findByUserIdAndBookFileBookIdIn(anyLong(), anySet());
+        verify(userBookFileProgressRepository, never()).findProjectionsByUserIdAndBookFileBookIdIn(anyLong(), anySet());
     }
 
     @Test
@@ -111,10 +113,10 @@ class ReadingProgressServiceTest {
         progress2.setBookFile(bookFile2);
         progress2.setLastReadTime(Instant.now());
 
-        when(userBookFileProgressRepository.findByUserIdAndBookFileBookIdIn(userId, bookIds))
+        when(userBookFileProgressRepository.findProjectionsByUserIdAndBookFileBookIdIn(userId, bookIds))
                 .thenReturn(List.of(progress1, progress2));
 
-        Map<Long, UserBookFileProgressEntity> result =
+        Map<Long, UserBookFileProgressProjection> result =
                 readingProgressService.fetchUserFileProgress(userId, bookIds);
 
         assertEquals(1, result.size());

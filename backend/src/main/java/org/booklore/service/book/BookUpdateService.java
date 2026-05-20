@@ -11,6 +11,8 @@ import org.booklore.model.entity.*;
 import org.booklore.model.enums.ReadStatus;
 import org.booklore.model.enums.UserPermission;
 import org.booklore.repository.*;
+import org.booklore.repository.projection.UserBookProgressProjection;
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.booklore.service.progress.ReadingProgressService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -301,8 +303,8 @@ public class BookUpdateService {
 
     private List<Book> buildBooksWithProgress(List<BookEntity> bookEntities, Long userId) {
         Set<Long> bookIds = bookEntities.stream().map(BookEntity::getId).collect(Collectors.toSet());
-        Map<Long, UserBookProgressEntity> progressMap = readingProgressService.fetchUserProgress(userId, bookIds);
-        Map<Long, UserBookFileProgressEntity> fileProgressMap = readingProgressService.fetchUserFileProgress(userId, bookIds);
+        Map<Long, UserBookProgressProjection> progressMap = readingProgressService.fetchUserProgress(userId, bookIds);
+        Map<Long, UserBookFileProgressProjection> fileProgressMap = readingProgressService.fetchUserFileProgress(userId, bookIds);
 
         return bookEntities.stream()
                 .map(bookEntity -> buildBook(bookEntity, userId, progressMap, fileProgressMap))
@@ -310,8 +312,8 @@ public class BookUpdateService {
     }
 
     private Book buildBook(BookEntity bookEntity, Long userId,
-                           Map<Long, UserBookProgressEntity> progressMap,
-                           Map<Long, UserBookFileProgressEntity> fileProgressMap) {
+                           Map<Long, UserBookProgressProjection> progressMap,
+                           Map<Long, UserBookFileProgressProjection> fileProgressMap) {
         Book book = bookMapper.toBook(bookEntity);
         book.setShelves(filterShelvesByUserId(book.getShelves(), userId));
         readingProgressService.enrichBookWithProgress(

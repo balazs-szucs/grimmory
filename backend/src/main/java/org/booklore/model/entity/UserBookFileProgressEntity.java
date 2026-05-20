@@ -13,7 +13,7 @@ import java.time.Instant;
 @AllArgsConstructor
 @Table(name = "user_book_file_progress",
         uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "book_file_id"}))
-public class UserBookFileProgressEntity {
+public class UserBookFileProgressEntity implements org.booklore.repository.projection.UserBookFileProgressProjection {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,4 +44,14 @@ public class UserBookFileProgressEntity {
 
     @Column(name = "last_read_time")
     private Instant lastReadTime;
+
+    @Override
+    public Long getBookId() {
+        return bookFile != null && bookFile.getBook() != null ? bookFile.getBook().getId() : null;
+    }
+
+    @Override
+    public org.booklore.model.enums.BookFileType getBookFileType() {
+        return bookFile != null ? bookFile.getBookType() : null;
+    }
 }

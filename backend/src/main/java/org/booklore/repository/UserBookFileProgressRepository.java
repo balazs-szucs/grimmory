@@ -1,5 +1,6 @@
 package org.booklore.repository;
 
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.booklore.model.entity.UserBookFileProgressEntity;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -60,6 +61,24 @@ public interface UserBookFileProgressRepository extends JpaRepository<UserBookFi
           AND ubfp.bookFile.book.id IN :bookIds
     """)
     List<UserBookFileProgressEntity> findByUserIdAndBookFileBookIdIn(
+            @Param("userId") Long userId,
+            @Param("bookIds") Iterable<Long> bookIds
+    );
+
+    @Query("""
+        SELECT ubfp.bookFile.book.id as bookId,
+               ubfp.bookFile.bookType as bookFileType,
+               ubfp.positionData as positionData,
+               ubfp.positionHref as positionHref,
+               ubfp.contentSourceProgressPercent as contentSourceProgressPercent,
+               ubfp.progressPercent as progressPercent,
+               ubfp.ttsPositionCfi as ttsPositionCfi,
+               ubfp.lastReadTime as lastReadTime
+        FROM UserBookFileProgressEntity ubfp
+        WHERE ubfp.user.id = :userId
+          AND ubfp.bookFile.book.id IN :bookIds
+    """)
+    List<UserBookFileProgressProjection> findProjectionsByUserIdAndBookFileBookIdIn(
             @Param("userId") Long userId,
             @Param("bookIds") Iterable<Long> bookIds
     );

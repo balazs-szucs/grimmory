@@ -3,6 +3,7 @@ package org.booklore.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.booklore.model.enums.ReadStatus;
+import org.booklore.repository.projection.UserBookProgressProjection;
 
 import java.time.Instant;
 
@@ -13,7 +14,7 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "user_book_progress")
-public class UserBookProgressEntity {
+public class UserBookProgressEntity implements UserBookProgressProjection {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -106,4 +107,9 @@ public class UserBookProgressEntity {
 
     @Column(name = "personal_rating")
     private Integer personalRating;
+
+    @Override
+    public Long getBookId() {
+        return book != null ? book.getId() : null;
+    }
 }

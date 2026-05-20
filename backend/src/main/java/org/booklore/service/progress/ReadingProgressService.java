@@ -18,6 +18,8 @@ import org.booklore.model.enums.ReadStatus;
 import org.booklore.model.enums.ResetProgressType;
 import org.booklore.model.enums.UserPermission;
 import org.booklore.repository.*;
+import org.booklore.repository.projection.UserBookProgressProjection;
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.booklore.service.hardcover.HardcoverSyncService;
 import org.booklore.service.kobo.KoboReadingStateService;
 import lombok.RequiredArgsConstructor;
@@ -50,22 +52,25 @@ public class ReadingProgressService {
 
     // ==================== Methods from UserProgressService ====================
 
-    public Map<Long, UserBookProgressEntity> fetchUserProgress(Long userId, Set<Long> bookIds) {
-        return userBookProgressRepository.findByUserIdAndBookIdIn(userId, bookIds).stream()
-                .collect(Collectors.toMap(p -> p.getBook().getId(), p -> p));
+    public Map<Long, UserBookProgressProjection> fetchUserProgress(Long userId, Set<Long> bookIds) {
+        if (bookIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return userBookProgressRepository.findProjectionsByUserIdAndBookIdIn(userId, bookIds).stream()
+                .collect(Collectors.toMap(UserBookProgressProjection::getBookId, p -> p));
     }
 
-    public Map<Long, UserBookFileProgressEntity> fetchUserFileProgress(Long userId, Set<Long> bookIds) {
+    public Map<Long, UserBookFileProgressProjection> fetchUserFileProgress(Long userId, Set<Long> bookIds) {
         if (bookIds.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        List<UserBookFileProgressEntity> fileProgressList =
-                userBookFileProgressRepository.findByUserIdAndBookFileBookIdIn(userId, bookIds);
+        List<UserBookFileProgressProjection> fileProgressList =
+                userBookFileProgressRepository.findProjectionsByUserIdAndBookFileBookIdIn(userId, bookIds);
 
         return fileProgressList.stream()
                 .collect(Collectors.toMap(
-                        p -> p.getBookFile().getBook().getId(),
+                        UserBookFileProgressProjection::getBookId,
                         p -> p,
                         (existing, replacement) -> {
                             if (existing.getLastReadTime() == null) return replacement;
@@ -82,12 +87,12 @@ public class ReadingProgressService {
 
     // ==================== Methods from BookProgressUtil ====================
 
-    public void enrichBookWithProgress(Book book, UserBookProgressEntity progress) {
+    public void enrichBookWithProgress(Book book, UserBookProgressProjection progress) {
         enrichBookWithProgress(book, progress, null);
     }
 
-    public void enrichBookWithProgress(Book book, UserBookProgressEntity progress,
-                                        UserBookFileProgressEntity fileProgress) {
+    public void enrichBookWithProgress(Book book, UserBookProgressProjection progress,
+                                        UserBookFileProgressProjection fileProgress) {
         if (progress != null) {
             book.setReadStatus(progress.getReadStatus() == null ?
                     String.valueOf(ReadStatus.UNSET) : String.valueOf(progress.getReadStatus()));
@@ -108,7 +113,7 @@ public class ReadingProgressService {
         }
     }
 
-    private void setBookProgress(Book book, UserBookProgressEntity progress) {
+    private void setBookProgress(Book book, UserBookProgressProjection progress) {
         if (progress.getKoboProgressPercent() != null) {
             book.setKoboProgress(KoboProgress.builder()
                     .percentage(roundToOneDecimal(progress.getKoboProgressPercent()))
@@ -144,8 +149,8 @@ public class ReadingProgressService {
         }
     }
 
-    private void setBookProgressFromFileProgress(Book book, UserBookFileProgressEntity fileProgress) {
-        BookFileType type = fileProgress.getBookFile() != null ? fileProgress.getBookFile().getBookType() : null;
+    private void setBookProgressFromFileProgress(Book book, UserBookFileProgressProjection fileProgress) {
+        BookFileType type = fileProgress.getBookFileType();
         if (type == null) return;
 
         switch (type) {
