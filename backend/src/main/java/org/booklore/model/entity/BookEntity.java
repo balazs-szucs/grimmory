@@ -96,7 +96,7 @@ public class BookEntity {
     @Builder.Default
     private List<BookFileEntity> bookFiles = new ArrayList<>();
 
-    @BatchSize(size = 20)
+    @BatchSize(size = 500)
     @OneToMany(mappedBy = "book", fetch = FetchType.LAZY)
     @Builder.Default
     private List<UserBookProgressEntity> userBookProgress = new ArrayList<>();
