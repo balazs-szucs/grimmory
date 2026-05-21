@@ -51,7 +51,7 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     // Minimal graph for summary mapping: metadata (OneToOne), library (ManyToOne), bookFiles (OneToMany).
     // metadata.authors is intentionally excluded — @BatchSize on BookMetadataEntity.authors
     // triggers a batched query when first accessed, so no N+1 occurs.
-    @EntityGraph(attributePaths = { "metadata", "library", "bookFiles" })
+    @EntityGraph(attributePaths = { "metadata", "metadata.comicMetadata", "libraryPath", "library", "bookFiles" })
     @Query("SELECT b FROM BookEntity b WHERE b.id IN :bookIds AND (b.deleted IS NULL OR b.deleted = false)")
     List<BookEntity> findAllForSummaryByIds(@Param("bookIds") Collection<Long> bookIds);
 

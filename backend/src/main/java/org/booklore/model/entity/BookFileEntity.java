@@ -6,6 +6,8 @@ import org.booklore.convertor.AudioFileChapterListConverter;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.util.ArchiveUtils;
 
+import org.hibernate.annotations.LazyGroup;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -91,6 +93,8 @@ public class BookFileEntity {
     @Column(name = "chapter_count")
     private Integer chapterCount;
 
+    @Basic(fetch = FetchType.LAZY)
+    @LazyGroup("chapters")
     @Convert(converter = AudioFileChapterListConverter.class)
     @Column(name = "chapters_json", columnDefinition = "TEXT")
     private List<AudioFileChapter> chapters;

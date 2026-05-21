@@ -73,6 +73,8 @@ public class BookUpdateService {
         updateExistingProgress(user.getId(), existingProgressBookIds, readStatus, now, dateFinished);
         createNewProgress(user.getId(), bookIds, existingProgressBookIds, readStatus, now, dateFinished);
 
+        bookQueryService.evictBookListCache();
+
         return buildStatusUpdateResponses(bookIds, readStatus, now, dateFinished);
     }
 
@@ -87,6 +89,8 @@ public class BookUpdateService {
 
         createProgressForRating(user.getId(), bookIds, existingProgressBookIds, rating);
 
+        bookQueryService.evictBookListCache();
+
         return buildRatingUpdateResponses(bookIds, rating);
     }
 
@@ -98,6 +102,8 @@ public class BookUpdateService {
         if (!existingProgressBookIds.isEmpty()) {
             userBookProgressRepository.bulkUpdatePersonalRating(user.getId(), new ArrayList<>(existingProgressBookIds), null);
         }
+
+        bookQueryService.evictBookListCache();
 
         return buildRatingUpdateResponses(bookIds, null);
     }
@@ -114,6 +120,8 @@ public class BookUpdateService {
 
         updateBookShelves(bookEntities, shelvesToAssign, shelfIdsToUnassign);
         bookRepository.saveAll(bookEntities);
+
+        bookQueryService.evictBookListCache();
 
         return buildBooksWithProgress(bookEntities, user.getId());
     }

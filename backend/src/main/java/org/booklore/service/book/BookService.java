@@ -268,6 +268,7 @@ public class BookService {
     @Transactional
     public void updateReadProgress(ReadProgressRequest request) {
         readingProgressService.updateReadProgress(request);
+        bookQueryService.evictBookListCache();
     }
 
     @Transactional
@@ -463,6 +464,7 @@ public class BookService {
         }
 
         bookRepository.deleteAllInBatch(books);
+        bookQueryService.evictBookListCache();
         auditService.log(AuditAction.BOOK_DELETED, "Deleted " + ids.size() + " book(s)");
         BookDeletionResponse response = new BookDeletionResponse(ids, failedFileDeletions);
         return failedFileDeletions.isEmpty()

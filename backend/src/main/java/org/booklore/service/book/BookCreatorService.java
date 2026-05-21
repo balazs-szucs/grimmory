@@ -9,6 +9,7 @@ import org.booklore.model.enums.ComicCreatorRole;
 import org.booklore.repository.*;
 import org.booklore.service.file.FileFingerprint;
 import org.booklore.util.FileUtils;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +60,7 @@ public class BookCreatorService {
         this.comicCreatorRepository = comicCreatorRepository;
     }
 
+    @CacheEvict(value = "bookList", allEntries = true)
     public BookEntity createShellBook(LibraryFile libraryFile, BookFileType bookFileType) {
         Optional<BookEntity> existing = bookRepository.findFirstByLibraryIdAndLibraryPathIdAndFileSubPathAndFileName(
                 libraryFile.getLibraryEntity().getId(),
@@ -182,6 +184,7 @@ public class BookCreatorService {
     }
 
     @Transactional
+    @CacheEvict(value = "bookList", allEntries = true)
     public void saveConnections(BookEntity bookEntity) {
         if (bookEntity.getMetadata().getAuthors() != null && !bookEntity.getMetadata().getAuthors().isEmpty()) {
             authorRepository.saveAll(bookEntity.getMetadata().getAuthors());

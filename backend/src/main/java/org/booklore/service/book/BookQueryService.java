@@ -12,6 +12,18 @@ import org.booklore.service.restriction.ContentRestrictionService;
 import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.booklore.model.dto.BookFile;
+import org.booklore.model.dto.progress.EpubProgress;
+import org.booklore.model.dto.progress.PdfProgress;
+import org.booklore.model.dto.progress.CbxProgress;
+import org.booklore.model.dto.progress.KoboProgress;
+import org.booklore.model.enums.BookFileType;
+import org.booklore.model.dto.BookListItemDTO;
+import org.booklore.model.dto.BookLoreUser;
+import org.booklore.model.dto.Library;
+import org.booklore.repository.BookListRepository;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +40,8 @@ public class BookQueryService {
     private final BookRepository bookRepository;
     private final BookMapperV2 bookMapperV2;
     private final ContentRestrictionService contentRestrictionService;
+    private final BookListRepository bookListRepository;
+    private final CacheManager cacheManager;
 
     public List<Book> getAllBooks(boolean includeDescription, boolean stripForListView) {
         List<BookEntity> books = bookRepository.findAllWithMetadata();
@@ -202,36 +216,11 @@ public class BookQueryService {
             m.setAgeRatingLocked(null);
             m.setContentRatingLocked(null);
 
-            // Strip external IDs
-            m.setAsin(null);
-            m.setGoodreadsId(null);
-            m.setComicvineId(null);
-            m.setHardcoverId(null);
-            m.setHardcoverBookId(null);
-            m.setGoogleId(null);
-            m.setLubimyczytacId(null);
-            m.setRanobedbId(null);
-            m.setAudibleId(null);
-            m.setDoubanId(null);
-
-            // Strip unused detail fields
-            m.setSubtitle(null);
-            m.setSeriesTotal(null);
-            m.setAbridged(null);
-            m.setExternalUrl(null);
-            m.setThumbnailUrl(null);
-            m.setProvider(null);
+            // Strip only heavy fields (chapters, reviews)
             if (m.getAudiobookMetadata() != null) {
                 m.getAudiobookMetadata().setChapters(null);
             }
             m.setBookReviews(null);
-
-            // Strip unused ratings
-            m.setDoubanRating(null);
-            m.setDoubanReviewCount(null);
-            m.setAudibleRating(null);
-            m.setAudibleReviewCount(null);
-            m.setLubimyczytacRating(null);
 
             // Strip empty metadata collections
             if (m.getMoods() != null && m.getMoods().isEmpty()) m.setMoods(null);
@@ -267,22 +256,6 @@ public class BookQueryService {
                 cm.setCharactersLocked(null);
                 cm.setTeamsLocked(null);
                 cm.setLocationsLocked(null);
-
-                // Strip non-filter detail fields
-                cm.setIssueNumber(null);
-                cm.setVolumeName(null);
-                cm.setVolumeNumber(null);
-                cm.setStoryArc(null);
-                cm.setStoryArcNumber(null);
-                cm.setAlternateSeries(null);
-                cm.setAlternateIssue(null);
-                cm.setImprint(null);
-                cm.setFormat(null);
-                cm.setBlackAndWhite(null);
-                cm.setManga(null);
-                cm.setReadingDirection(null);
-                cm.setWebLink(null);
-                cm.setNotes(null);
             }
         }
 
@@ -321,5 +294,105 @@ public class BookQueryService {
             }
         }
         return hasAnyLock;
+    }
+
+    @Cacheable(
+        value = "bookList",
+        key = "#currentUser.id + '_' + #currentUser.assignedLibraries.hashCode()"
+    )
+    public List<BookListItemDTO> getBooksForListView(BookLoreUser currentUser) {
+        List<Long> libraryIds = currentUser.getAssignedLibraries()
+                .stream()
+                .map(Library::getId)
+                .toList();
+
+        if (libraryIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return bookListRepository.findBooksForListView(
+                currentUser.getId(),
+                libraryIds
+        );
+    }
+
+    public void evictBookListCache() {
+        var cache = cacheManager.getCache("bookList");
+        if (cache != null) {
+            cache.clear();
+        }
+    }
+
+    public List<Book> getBooksMappedForListView(BookLoreUser currentUser) {
+        List<BookListItemDTO> items = getBooksForListView(currentUser);
+        return items.stream()
+                .map(this::mapListItemToBook)
+                .toList();
+    }
+
+    private Book mapListItemToBook(BookListItemDTO dto) {
+        Book book = Book.builder()
+                .id(dto.id())
+                .libraryId(dto.libraryId())
+                .libraryName(dto.libraryName())
+                .isPhysical(dto.isPhysical())
+                .readStatus(dto.readStatus())
+                .lastReadTime(dto.lastReadTime())
+                .build();
+
+        if (dto.primaryBookType() != null) {
+            try {
+                BookFileType fileType = BookFileType.valueOf(dto.primaryBookType());
+                book.setPrimaryFile(BookFile.builder().bookType(fileType).build());
+            } catch (Exception ignored) {}
+        }
+
+        BookMetadata metadata = new BookMetadata();
+        metadata.setTitle(dto.title());
+        metadata.setSubtitle(dto.subtitle());
+        metadata.setSeriesName(dto.seriesName());
+        if (dto.seriesNumber() != null) {
+            metadata.setSeriesNumber(dto.seriesNumber().floatValue());
+        }
+        metadata.setPublisher(dto.publisher());
+        metadata.setPublishedDate(dto.publishedDate());
+        metadata.setLanguage(dto.language());
+        if (dto.rating() != null) {
+            metadata.setRating(dto.rating());
+        }
+
+        if (dto.authors() != null && !dto.authors().isBlank()) {
+            metadata.setAuthors(Arrays.asList(dto.authors().split(", ")));
+        }
+        if (dto.categories() != null && !dto.categories().isBlank()) {
+            metadata.setCategories(new HashSet<>(Arrays.asList(dto.categories().split(", "))));
+        }
+        if (dto.tags() != null && !dto.tags().isBlank()) {
+            metadata.setTags(new HashSet<>(Arrays.asList(dto.tags().split(", "))));
+        }
+        book.setMetadata(metadata);
+
+        if (dto.epubProgressPercent() != null) {
+            EpubProgress epub = new EpubProgress();
+            epub.setPercentage(dto.epubProgressPercent().floatValue());
+            book.setEpubProgress(epub);
+        }
+        if (dto.pdfProgressPercent() != null) {
+            PdfProgress pdf = new PdfProgress();
+            pdf.setPercentage(dto.pdfProgressPercent().floatValue());
+            book.setPdfProgress(pdf);
+        }
+        if (dto.cbxProgressPercent() != null) {
+            CbxProgress cbx = new CbxProgress();
+            cbx.setPercentage(dto.cbxProgressPercent().floatValue());
+            book.setCbxProgress(cbx);
+        }
+        if (dto.koboProgressPercent() != null) {
+            KoboProgress kobo = new KoboProgress();
+            kobo.setPercentage(dto.koboProgressPercent().floatValue());
+            book.setKoboProgress(kobo);
+        }
+
+        return book;
     }
 }

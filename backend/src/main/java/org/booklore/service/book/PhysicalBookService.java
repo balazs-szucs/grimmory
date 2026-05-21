@@ -18,6 +18,7 @@ import org.booklore.util.BookCoverUtils;
 import org.booklore.util.FileService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ public class PhysicalBookService {
     private final FileService fileService;
 
     @Transactional
+    @CacheEvict(value = "bookList", allEntries = true)
     public Book createPhysicalBook(CreatePhysicalBookRequest request) {
         LibraryEntity library = libraryRepository.findById(request.getLibraryId())
                 .orElseThrow(() -> new APIException("Library not found with id: " + request.getLibraryId(), HttpStatus.NOT_FOUND));
@@ -151,6 +153,7 @@ public class PhysicalBookService {
     }
 
     @Transactional
+    @CacheEvict(value = "bookList", allEntries = true)
     public Book togglePhysicalFlag(long bookId, boolean physical) {
         BookEntity book = bookRepository.findByIdWithBookFiles(bookId)
                 .orElseThrow(() -> ApiError.BOOK_NOT_FOUND.createException(bookId));

@@ -258,16 +258,19 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
      * Returns book IDs for in-progress reading (non-audiobook), ordered by most recently read.
      */
     @Query("""
-            SELECT DISTINCT ubp.book.id FROM UserBookProgressEntity ubp
+            SELECT ubp.book.id FROM UserBookProgressEntity ubp
             JOIN ubp.book b
-            JOIN b.bookFiles bf
             WHERE ubp.user.id = :userId
               AND ubp.readStatus IN (org.booklore.model.enums.ReadStatus.READING, org.booklore.model.enums.ReadStatus.RE_READING)
               AND (b.deleted IS NULL OR b.deleted = false)
-              AND bf.isBookFormat = true
-              AND bf.bookType <> org.booklore.model.enums.BookFileType.AUDIOBOOK
               AND b.library.id IN :libraryIds
               AND ubp.lastReadTime IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM BookFileEntity bf
+                  WHERE bf.book.id = b.id
+                    AND bf.isBookFormat = true
+                    AND bf.bookType <> org.booklore.model.enums.BookFileType.AUDIOBOOK
+              )
             ORDER BY ubp.lastReadTime DESC
             """)
     List<Long> findTopContinueReadingBookIds(
@@ -279,16 +282,19 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
      * Returns book IDs for in-progress listening (audiobook), ordered by most recently read.
      */
     @Query("""
-            SELECT DISTINCT ubp.book.id FROM UserBookProgressEntity ubp
+            SELECT ubp.book.id FROM UserBookProgressEntity ubp
             JOIN ubp.book b
-            JOIN b.bookFiles bf
             WHERE ubp.user.id = :userId
               AND ubp.readStatus IN (org.booklore.model.enums.ReadStatus.READING, org.booklore.model.enums.ReadStatus.RE_READING)
               AND (b.deleted IS NULL OR b.deleted = false)
-              AND bf.isBookFormat = true
-              AND bf.bookType = org.booklore.model.enums.BookFileType.AUDIOBOOK
               AND b.library.id IN :libraryIds
               AND ubp.lastReadTime IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM BookFileEntity bf
+                  WHERE bf.book.id = b.id
+                    AND bf.isBookFormat = true
+                    AND bf.bookType = org.booklore.model.enums.BookFileType.AUDIOBOOK
+              )
             ORDER BY ubp.lastReadTime DESC
             """)
     List<Long> findTopContinueListeningBookIds(

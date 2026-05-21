@@ -26,6 +26,10 @@ import org.booklore.service.book.PhysicalBookService;
 import org.booklore.service.metadata.BookMetadataService;
 import org.booklore.service.progress.ReadingProgressService;
 import org.booklore.service.recommender.BookRecommendationService;
+import org.booklore.model.dto.BookListItemDTO;
+import org.booklore.model.dto.BookLoreUser;
+import org.booklore.service.book.BookQueryService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -65,6 +69,15 @@ public class BookController {
     private final ReadingProgressService readingProgressService;
     private final PhysicalBookService physicalBookService;
     private final DuplicateDetectionService duplicateDetectionService;
+    private final BookQueryService bookQueryService;
+
+    @Operation(summary = "Get optimized book list DTOs", description = "Retrieve a flat, optimized list of books using projections and aggregated collections.")
+    @ApiResponse(responseCode = "200", description = "Optimized list of books returned successfully")
+    @GetMapping("/list")
+    public ResponseEntity<List<Book>> getBookList(
+            @AuthenticationPrincipal BookLoreUser currentUser) {
+        return ResponseEntity.ok(bookQueryService.getBooksMappedForListView(currentUser));
+    }
 
     @Operation(summary = "Get all books", description = "Retrieve a list of all books. Optionally include descriptions.")
     @ApiResponse(responseCode = "200", description = "List of books returned successfully")

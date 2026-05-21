@@ -162,6 +162,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("com.nimbusds:nimbus-jose-jwt:10.9")
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // --- Reactive Streams ---
     implementation("io.projectreactor:reactor-core")
