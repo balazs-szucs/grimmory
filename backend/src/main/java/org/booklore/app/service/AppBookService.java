@@ -25,6 +25,7 @@ import org.booklore.repository.BookRepository;
 import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserBookFileProgressRepository;
 import org.booklore.repository.UserBookProgressRepository;
+import org.booklore.repository.projection.UserBookProgressProjection;
 import org.booklore.service.book.BookService;
 import org.booklore.service.opds.MagicShelfBookService;
 import org.springframework.data.domain.Page;
@@ -269,7 +270,7 @@ public class AppBookService {
 
         if (topIds.isEmpty()) return Collections.emptyList();
 
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMap(userId, new HashSet<>(topIds));
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, new HashSet<>(topIds));
 
         Map<Long, BookEntity> enrichedMap = bookRepository.findAllById(topIds)
                 .stream().collect(Collectors.toMap(BookEntity::getId, b -> b));
@@ -292,7 +293,7 @@ public class AppBookService {
 
         if (topIds.isEmpty()) return Collections.emptyList();
 
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMap(userId, new HashSet<>(topIds));
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, new HashSet<>(topIds));
 
         Map<Long, BookEntity> enrichedMap = bookRepository.findAllById(topIds)
                 .stream().collect(Collectors.toMap(BookEntity::getId, b -> b));
@@ -319,7 +320,7 @@ public class AppBookService {
 
         Pageable pageable = PageRequest.of(0, maxItems, Sort.by(Sort.Direction.DESC, "addedOn"));
         Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMapForBooks(userId, bookPage.getContent());
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, bookPage.getContent());
 
         return bookPage.getContent().stream()
                 .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
@@ -341,7 +342,7 @@ public class AppBookService {
 
         Pageable pageable = PageRequest.of(0, maxItems, Sort.by(Sort.Direction.DESC, "scannedOn"));
         Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMapForBooks(userId, bookPage.getContent());
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, bookPage.getContent());
 
         return bookPage.getContent().stream()
                 .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
@@ -400,7 +401,7 @@ public class AppBookService {
 
         Map<Long, BookEntity> bookEntitiesById = bookRepository.findAllById(orderedBookIds).stream()
                 .collect(Collectors.toMap(BookEntity::getId, Function.identity()));
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMap(userId, bookEntitiesById.keySet());
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, bookEntitiesById.keySet());
 
         List<AppBookSummary> summaries = orderedBookIds.stream()
                 .map(bookEntitiesById::get)
@@ -783,13 +784,13 @@ public class AppBookService {
                 .collect(Collectors.toSet());
     }
 
-    private Map<Long, UserBookProgressEntity> getProgressMap(Long userId, Set<Long> bookIds) {
+    private Map<Long, UserBookProgressProjection> getProgressMap(Long userId, Set<Long> bookIds) {
         if (bookIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        return userBookProgressRepository.findByUserIdAndBookIdIn(userId, bookIds).stream()
+        return userBookProgressRepository.findProjectionsByUserIdAndBookIdIn(userId, bookIds).stream()
                 .collect(Collectors.toMap(
-                        p -> p.getBook().getId(),
+                        UserBookProgressProjection::getBookId,
                         Function.identity()
                 ));
     }
@@ -1129,7 +1130,7 @@ public class AppBookService {
             int pageSize) {
 
         List<BookEntity> books = bookPage.getContent();
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMapForBooks(userId, books);
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, books);
 
         List<AppBookSummary> summaries = books.stream()
                 .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
@@ -1139,7 +1140,7 @@ public class AppBookService {
     }
 
 
-    private Map<Long, UserBookProgressEntity> getProgressMapForBooks(Long userId, List<BookEntity> books) {
+    private Map<Long, UserBookProgressProjection> getProgressMapForBooks(Long userId, List<BookEntity> books) {
         if (books.isEmpty()) {
             return Collections.emptyMap();
         }

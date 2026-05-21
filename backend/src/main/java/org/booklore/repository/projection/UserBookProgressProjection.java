@@ -18,4 +18,7 @@ public interface UserBookProgressProjection {
     Float getPdfProgressPercent();
     Integer getCbxProgress();
     Float getCbxProgressPercent();
+    String getKoreaderDevice();
+    String getKoreaderDeviceId();
+    Instant getKoreaderLastSyncTime();
 }

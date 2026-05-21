@@ -13,6 +13,7 @@ import org.booklore.model.dto.Library;
 import org.booklore.model.entity.*;
 import org.booklore.repository.BookRepository;
 import org.booklore.repository.UserBookProgressRepository;
+import org.booklore.repository.projection.UserBookProgressProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -277,7 +278,7 @@ public class AppSeriesService {
         Set<Long> bookIds = bookPage.getContent().stream()
                 .map(BookEntity::getId)
                 .collect(Collectors.toSet());
-        Map<Long, UserBookProgressEntity> progressMap = getProgressMap(userId, bookIds);
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, bookIds);
 
         List<AppBookSummary> summaries = bookPage.getContent().stream()
                 .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
@@ -376,13 +377,13 @@ public class AppSeriesService {
         return AppBookSpecification.combine(specs.toArray(Specification[]::new));
     }
 
-    private Map<Long, UserBookProgressEntity> getProgressMap(Long userId, Set<Long> bookIds) {
+    private Map<Long, UserBookProgressProjection> getProgressMap(Long userId, Set<Long> bookIds) {
         if (bookIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        return userBookProgressRepository.findByUserIdAndBookIdIn(userId, bookIds).stream()
+        return userBookProgressRepository.findProjectionsByUserIdAndBookIdIn(userId, bookIds).stream()
                 .collect(Collectors.toMap(
-                        p -> p.getBook().getId(),
+                        UserBookProgressProjection::getBookId,
                         Function.identity()
                 ));
     }

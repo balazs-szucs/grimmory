@@ -8,6 +8,8 @@ import org.booklore.app.dto.AppLibrarySummary;
 import org.booklore.app.dto.AppMagicShelfSummary;
 import org.booklore.app.dto.AppShelfSummary;
 import org.booklore.model.entity.*;
+import org.booklore.repository.projection.UserBookProgressProjection;
+import org.booklore.repository.projection.UserBookFileProgressProjection;
 import org.booklore.model.enums.BookFileType;
 import org.mapstruct.*;
 
@@ -62,7 +64,7 @@ public interface AppBookMapper {
     @Mapping(target = "audibleRating", source = "book.metadata.audibleRating")
     @Mapping(target = "audibleReviewCount", source = "book.metadata.audibleReviewCount")
     @Mapping(target = "allMetadataLocked", source = "book.metadata", qualifiedByName = "mapAllMetadataLocked")
-    AppBookSummary toSummary(BookEntity book, UserBookProgressEntity progress);
+    AppBookSummary toSummary(BookEntity book, UserBookProgressProjection progress);
 
     @Mapping(target = "id", source = "book.id")
     @Mapping(target = "title", source = "book.metadata.title")
@@ -99,9 +101,9 @@ public interface AppBookMapper {
     @Mapping(target = "cbxProgress", source = "progress", qualifiedByName = "mapCbxProgress")
     @Mapping(target = "audiobookProgress", source = "fileProgress", qualifiedByName = "mapAudiobookProgress")
     @Mapping(target = "koreaderProgress", source = "progress", qualifiedByName = "mapKoreaderProgress")
-    AppBookDetail toDetail(BookEntity book, UserBookProgressEntity progress, UserBookFileProgressEntity fileProgress);
+    AppBookDetail toDetail(BookEntity book, UserBookProgressProjection progress, UserBookFileProgressProjection fileProgress);
 
-    default AppBookProgressResponse toProgressResponse(UserBookProgressEntity progress, UserBookFileProgressEntity fileProgress) {
+    default AppBookProgressResponse toProgressResponse(UserBookProgressProjection progress, UserBookFileProgressProjection fileProgress) {
         return AppBookProgressResponse.builder()
                 .readProgress(mapReadProgress(progress))
                 .readStatus(progress != null && progress.getReadStatus() != null
@@ -212,7 +214,7 @@ public interface AppBookMapper {
     }
 
     @Named("mapReadProgress")
-    default Float mapReadProgress(UserBookProgressEntity progress) {
+    default Float mapReadProgress(UserBookProgressProjection progress) {
         if (progress == null) {
             return null;
         }
@@ -235,7 +237,7 @@ public interface AppBookMapper {
     }
 
     @Named("mapEpubProgress")
-    default AppBookDetail.EpubProgress mapEpubProgress(UserBookProgressEntity progress) {
+    default AppBookDetail.EpubProgress mapEpubProgress(UserBookProgressProjection progress) {
         if (progress == null || progress.getEpubProgress() == null) {
             return null;
         }
@@ -248,7 +250,7 @@ public interface AppBookMapper {
     }
 
     @Named("mapPdfProgress")
-    default AppBookDetail.PdfProgress mapPdfProgress(UserBookProgressEntity progress) {
+    default AppBookDetail.PdfProgress mapPdfProgress(UserBookProgressProjection progress) {
         if (progress == null || progress.getPdfProgress() == null) {
             return null;
         }
@@ -260,7 +262,7 @@ public interface AppBookMapper {
     }
 
     @Named("mapCbxProgress")
-    default AppBookDetail.CbxProgress mapCbxProgress(UserBookProgressEntity progress) {
+    default AppBookDetail.CbxProgress mapCbxProgress(UserBookProgressProjection progress) {
         if (progress == null || progress.getCbxProgress() == null) {
             return null;
         }
@@ -272,7 +274,7 @@ public interface AppBookMapper {
     }
 
     @Named("mapKoreaderProgress")
-    default AppBookDetail.KoreaderProgress mapKoreaderProgress(UserBookProgressEntity progress) {
+    default AppBookDetail.KoreaderProgress mapKoreaderProgress(UserBookProgressProjection progress) {
         if (progress == null || progress.getKoreaderProgressPercent() == null) {
             return null;
         }
@@ -285,10 +287,9 @@ public interface AppBookMapper {
     }
 
     @Named("mapAudiobookProgress")
-    default AppBookDetail.AudiobookProgress mapAudiobookProgress(UserBookFileProgressEntity fileProgress) {
+    default AppBookDetail.AudiobookProgress mapAudiobookProgress(UserBookFileProgressProjection fileProgress) {
         if (fileProgress == null) return null;
-        if (fileProgress.getBookFile() == null ||
-            fileProgress.getBookFile().getBookType() != BookFileType.AUDIOBOOK) {
+        if (fileProgress.getBookFileType() != BookFileType.AUDIOBOOK) {
             return null;
         }
 
