@@ -1,7 +1,9 @@
 import { computed, signal, WritableSignal } from '@angular/core';
+import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MessageService } from 'primeng/api';
 
 import { getTranslocoModule } from '../../../core/testing/transloco-testing';
 import { BookDialogHelperService } from '../../../features/book/components/book-browser/book-dialog-helper.service';
@@ -24,25 +26,6 @@ import { DialogLauncherService } from '../../services/dialog-launcher.service';
 import { LayoutService } from '../layout.service';
 
 import { AppSidebarComponent } from './app.sidebar.component';
-
-interface PopoverOverlay {
-  container: HTMLElement;
-  toggle: (event: MouseEvent) => void;
-}
-
-function createRect(top: number, bottom: number, left: number): DOMRect {
-  return {
-    x: left,
-    y: top,
-    top,
-    bottom,
-    left,
-    right: left + 40,
-    width: 40,
-    height: bottom - top,
-    toJSON: () => ({}),
-  } as DOMRect;
-}
 
 interface TestUser {
   name: string;
@@ -104,13 +87,13 @@ describe('AppSidebarComponent', () => {
         {
           provide: DialogLauncherService,
           useValue: {
-            openLibraryCreateDialog: vi.fn(),
-            openMagicShelfCreateDialog: vi.fn(),
-            openFileUploadDialog: vi.fn(),
+            openLibraryCreateDialog: vi.fn(() => Promise.resolve(null)),
+            openMagicShelfCreateDialog: vi.fn(() => Promise.resolve(null)),
+            openFileUploadDialog: vi.fn(() => Promise.resolve(null)),
           },
         },
         { provide: CommandPaletteService, useValue: commandPaletteService },
-        { provide: BookDialogHelperService, useValue: { openShelfCreatorDialog: vi.fn() } },
+        { provide: BookDialogHelperService, useValue: { openShelfCreatorDialog: vi.fn(() => Promise.resolve(null)) } },
         { provide: AuthService, useValue: { logout: vi.fn() } },
         { provide: MetadataProgressService, useValue: { activeTasks$, progressUpdates$ } },
         { provide: BookdropFileService, useValue: { hasPendingFiles$ } },
@@ -120,6 +103,7 @@ describe('AppSidebarComponent', () => {
         { provide: MagicShelfService, useValue: { shelves: signal([]), bookCountByMagicShelfId: signal(new Map()) } },
         { provide: SeriesDataService, useValue: { allSeries: signal([]) } },
         { provide: AuthorService, useValue: { allAuthors: signal([]) } },
+        { provide: MessageService, useValue: { add: vi.fn() } },
       ],
     });
 
@@ -129,10 +113,6 @@ describe('AppSidebarComponent', () => {
     component = fixture.componentInstance;
     layoutService.isDesktop.set(true);
     layoutService.closeMobileSidebar.mockReset();
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback): number => {
-      callback(0);
-      return 0;
-    });
   });
 
   afterEach(() => {
@@ -152,33 +132,33 @@ describe('AppSidebarComponent', () => {
     expect(layoutService.closeMobileSidebar).toHaveBeenCalled();
   });
 
-  it('anchors above-placement overlays from the trigger top edge when the sidebar is expanded', () => {
-    const trigger = document.createElement('button');
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(createRect(100, 148, 40));
-    const container = document.createElement('div');
-    const overlay = { container, toggle: vi.fn() };
-    const popoverHarness = component as unknown as { applySidebarOverlayPosition(overlay: PopoverOverlay): void };
+  it('opens the notifications overlay from the selected origin', () => {
+    const origin = {} as CdkOverlayOrigin;
+    const sidebar = component as unknown as {
+      notificationsOpen: () => boolean;
+      notificationPopoverOrigin: () => CdkOverlayOrigin | null;
+      toggleFooterNotificationsPopover(origin: CdkOverlayOrigin): void;
+    };
 
-    component.openSidebarOverlay({ currentTarget: trigger } as unknown as MouseEvent, overlay as never, 'above');
-    popoverHarness.applySidebarOverlayPosition(overlay);
+    sidebar.toggleFooterNotificationsPopover(origin);
 
-    expect(overlay.toggle).toHaveBeenCalled();
-    expect(container.style.getPropertyValue('--sidebar-popover-top')).toBe('92px');
-    expect(container.style.getPropertyValue('--sidebar-popover-left')).toBe('40px');
+    expect(sidebar.notificationsOpen()).toBe(true);
+    expect(sidebar.notificationPopoverOrigin()).toBe(origin);
   });
 
-  it('anchors below-placement overlays from the trigger bottom edge', () => {
-    const trigger = document.createElement('button');
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(createRect(220, 260, 24));
-    const container = document.createElement('div');
-    const overlay = { container, toggle: vi.fn() };
-    const popoverHarness = component as unknown as { applySidebarOverlayPosition(overlay: PopoverOverlay): void };
+  it('closes the notifications overlay when the same origin is toggled again', () => {
+    const origin = {} as CdkOverlayOrigin;
+    const sidebar = component as unknown as {
+      notificationsOpen: () => boolean;
+      notificationPopoverOrigin: () => CdkOverlayOrigin | null;
+      toggleFooterNotificationsPopover(origin: CdkOverlayOrigin): void;
+    };
 
-    component.openSidebarOverlay({ currentTarget: trigger } as unknown as MouseEvent, overlay as never, 'below');
-    popoverHarness.applySidebarOverlayPosition(overlay);
+    sidebar.toggleFooterNotificationsPopover(origin);
+    sidebar.toggleFooterNotificationsPopover(origin);
 
-    expect(container.style.getPropertyValue('--sidebar-popover-top')).toBe('268px');
-    expect(container.style.getPropertyValue('--sidebar-popover-left')).toBe('');
+    expect(sidebar.notificationsOpen()).toBe(false);
+    expect(sidebar.notificationPopoverOrigin()).toBeNull();
   });
 
   it('derives user initials from a multi-part display name', () => {
@@ -231,21 +211,40 @@ describe('AppSidebarComponent', () => {
     expect(sidebar.updateAvailable()).toBe(true);
   });
 
-  it('anchors notifications above the trigger and keeps them inside the viewport on mobile', () => {
-    layoutService.isDesktop.set(false);
+  it('moves the notifications overlay when another origin is selected', () => {
+    const firstOrigin = {} as CdkOverlayOrigin;
+    const secondOrigin = {} as CdkOverlayOrigin;
+    const sidebar = component as unknown as {
+      notificationsOpen: () => boolean;
+      notificationPopoverOrigin: () => CdkOverlayOrigin | null;
+      toggleFooterNotificationsPopover(origin: CdkOverlayOrigin): void;
+      toggleHeaderNotificationsPopover(origin: CdkOverlayOrigin): void;
+    };
 
-    const trigger = document.createElement('button');
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(createRect(220, 260, 980));
-    const container = document.createElement('div');
-    Object.defineProperty(container, 'offsetWidth', { value: 120, configurable: true });
-    const overlay = { container, toggle: vi.fn() };
-    const popoverHarness = component as unknown as { applySidebarOverlayPosition(overlay: PopoverOverlay): void };
+    sidebar.toggleFooterNotificationsPopover(firstOrigin);
+    sidebar.toggleHeaderNotificationsPopover(secondOrigin);
 
-    component.openSidebarOverlay({ currentTarget: trigger } as unknown as MouseEvent, overlay as never, 'above');
-    popoverHarness.applySidebarOverlayPosition(overlay);
+    expect(sidebar.notificationsOpen()).toBe(true);
+    expect(sidebar.notificationPopoverOrigin()).toBe(secondOrigin);
+  });
 
-    expect(container.style.getPropertyValue('--sidebar-popover-top')).toBe('212px');
-    expect(container.style.getPropertyValue('--sidebar-popover-left')).toBe(`${window.innerWidth - 128}px`);
+  it('closes the notifications overlay when Escape is pressed inside the dialog', () => {
+    const origin = {} as CdkOverlayOrigin;
+    const event = new KeyboardEvent('keydown', { key: 'Escape' });
+    const preventDefault = vi.spyOn(event, 'preventDefault');
+    const sidebar = component as unknown as {
+      notificationsOpen: () => boolean;
+      notificationPopoverOrigin: () => CdkOverlayOrigin | null;
+      toggleFooterNotificationsPopover(origin: CdkOverlayOrigin): void;
+      onNotificationsPopoverKeydown(event: KeyboardEvent): void;
+    };
+
+    sidebar.toggleFooterNotificationsPopover(origin);
+    sidebar.onNotificationsPopoverKeydown(event);
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(sidebar.notificationsOpen()).toBe(false);
+    expect(sidebar.notificationPopoverOrigin()).toBeNull();
   });
 
   it('aggregates metadata tasks and pending bookdrop files into the sidebar badge count', () => {
