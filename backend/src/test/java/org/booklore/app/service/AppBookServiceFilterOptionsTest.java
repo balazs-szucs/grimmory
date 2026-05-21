@@ -237,24 +237,8 @@ class AppBookServiceFilterOptionsTest {
         Specification<BookEntity> mockSpec = mock(Specification.class);
         when(magicShelfBookService.toSpecification(eq(userId), eq(magicShelfId)))
                 .thenReturn(mockSpec);
-
-        Predicate mockPredicate = mock(Predicate.class);
-        CriteriaBuilder cb = mock(CriteriaBuilder.class);
-        CriteriaQuery<Long> cq = mock(CriteriaQuery.class);
-        Root<BookEntity> root = mock(Root.class);
-        Path<Long> idPath = mock(Path.class);
-        TypedQuery<Long> typedQuery = mock(TypedQuery.class);
-
-        when(entityManager.getCriteriaBuilder()).thenReturn(cb);
-        when(cb.createQuery(Long.class)).thenReturn(cq);
-        when(cq.from(BookEntity.class)).thenReturn(root);
-        when(root.get("id")).thenReturn((Path) idPath);
-        when(cq.select(idPath)).thenReturn(cq);
-        when(mockSpec.toPredicate(root, cq, cb)).thenReturn(mockPredicate);
-        when(cq.where(mockPredicate)).thenReturn(cq);
-        when(entityManager.createQuery(cq)).thenReturn(typedQuery);
-        when(typedQuery.setMaxResults(anyInt())).thenReturn(typedQuery);
-        when(typedQuery.getResultList()).thenReturn(bookIds);
+        when(bookRepository.findBy(eq(mockSpec), any(java.util.function.Function.class)))
+                .thenReturn(new java.util.HashSet<>(bookIds));
     }
 
     @SuppressWarnings("unchecked")

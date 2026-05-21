@@ -25,6 +25,7 @@ import org.booklore.repository.BookRepository;
 import org.booklore.repository.ShelfRepository;
 import org.booklore.repository.UserBookFileProgressRepository;
 import org.booklore.repository.UserBookProgressRepository;
+import org.booklore.repository.projection.BookIdProjection;
 import org.booklore.repository.projection.UserBookProgressProjection;
 import org.booklore.service.book.BookService;
 import org.booklore.service.opds.MagicShelfBookService;
@@ -70,6 +71,7 @@ public class AppBookService {
     private final Cache<String, AppFilterOptions> filterOptionsCache = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofSeconds(30))
             .maximumSize(50)
+            .recordStats()
             .build();
 
     public AppBookService(BookRepository bookRepository,
@@ -100,6 +102,10 @@ public class AppBookService {
 
         int pageNum = req.page() != null && req.page() >= 0 ? req.page() : 0;
         int pageSize = req.size() != null && req.size() > 0 ? Math.min(req.size(), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, 0L);
+        }
 
         // Handle magic shelf: compose the DB-side specification directly (no IN-list)
         if (req.magicShelfId() != null) {
@@ -137,6 +143,10 @@ public class AppBookService {
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         Specification<BookEntity> spec = buildSpecification(accessibleLibraryIds, userId, req);
 
         if (req.magicShelfId() != null) {
@@ -147,16 +157,9 @@ public class AppBookService {
             spec = spec.and(AppBookSpecification.unshelved());
         }
 
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<Long> cq = cb.createQuery(Long.class);
-        Root<BookEntity> root = cq.from(BookEntity.class);
-        cq.select(root.get("id"));
-
-        if (spec != null) {
-            cq.where(spec.toPredicate(root, cq, cb));
-        }
-
-        return entityManager.createQuery(cq).getResultList();
+        return bookRepository.findBy(spec, q -> q.as(BookIdProjection.class).stream()
+                .map(BookIdProjection::getId)
+                .toList());
     }
 
     public AppBookDetail getBookDetail(Long bookId) {
@@ -263,6 +266,10 @@ public class AppBookService {
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         int maxItems = validateLimit(limit, 10);
 
         List<Long> topIds = userBookProgressRepository.findTopContinueReadingBookIds(
@@ -272,7 +279,7 @@ public class AppBookService {
 
         Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, new HashSet<>(topIds));
 
-        Map<Long, BookEntity> enrichedMap = bookRepository.findAllById(topIds)
+        Map<Long, BookEntity> enrichedMap = bookRepository.findAllForSummaryByIds(topIds)
                 .stream().collect(Collectors.toMap(BookEntity::getId, b -> b));
 
         return topIds.stream()
@@ -286,6 +293,10 @@ public class AppBookService {
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         int maxItems = validateLimit(limit, 10);
 
         List<Long> topIds = userBookProgressRepository.findTopContinueListeningBookIds(
@@ -295,7 +306,7 @@ public class AppBookService {
 
         Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, new HashSet<>(topIds));
 
-        Map<Long, BookEntity> enrichedMap = bookRepository.findAllById(topIds)
+        Map<Long, BookEntity> enrichedMap = bookRepository.findAllForSummaryByIds(topIds)
                 .stream().collect(Collectors.toMap(BookEntity::getId, b -> b));
 
         return topIds.stream()
@@ -309,6 +320,10 @@ public class AppBookService {
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
 
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         int maxItems = validateLimit(limit, 10);
 
         Specification<BookEntity> spec = AppBookSpecification.combine(
@@ -320,10 +335,21 @@ public class AppBookService {
 
         Pageable pageable = PageRequest.of(0, maxItems, Sort.by(Sort.Direction.DESC, "addedOn"));
         Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
-        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, bookPage.getContent());
+        List<BookEntity> books = bookPage.getContent();
+        if (books.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        return bookPage.getContent().stream()
-                .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
+        List<Long> bookIds = books.stream().map(BookEntity::getId).toList();
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, books);
+
+        Map<Long, BookEntity> enrichedMap = bookRepository.findAllForSummaryByIds(bookIds).stream()
+                .collect(Collectors.toMap(BookEntity::getId, Function.identity()));
+
+        return books.stream()
+                .map(BookEntity::getId)
+                .filter(enrichedMap::containsKey)
+                .map(id -> mobileBookMapper.toSummary(enrichedMap.get(id), progressMap.get(id)))
                 .toList();
     }
 
@@ -331,6 +357,10 @@ public class AppBookService {
         BookLoreUser user = authenticationService.getAuthenticatedUser();
         Long userId = user.getId();
         Set<Long> accessibleLibraryIds = getAccessibleLibraryIds(user);
+
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         int maxItems = validateLimit(limit, 10);
 
@@ -342,10 +372,21 @@ public class AppBookService {
 
         Pageable pageable = PageRequest.of(0, maxItems, Sort.by(Sort.Direction.DESC, "scannedOn"));
         Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
-        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, bookPage.getContent());
+        List<BookEntity> books = bookPage.getContent();
+        if (books.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        return bookPage.getContent().stream()
-                .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
+        List<Long> bookIds = books.stream().map(BookEntity::getId).toList();
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, books);
+
+        Map<Long, BookEntity> enrichedMap = bookRepository.findAllForSummaryByIds(bookIds).stream()
+                .collect(Collectors.toMap(BookEntity::getId, Function.identity()));
+
+        return books.stream()
+                .map(BookEntity::getId)
+                .filter(enrichedMap::containsKey)
+                .map(id -> mobileBookMapper.toSummary(enrichedMap.get(id), progressMap.get(id)))
                 .toList();
     }
 
@@ -360,6 +401,10 @@ public class AppBookService {
 
         int pageNum = validatePageNumber(page);
         int pageSize = validatePageSize(size);
+
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, 0L);
+        }
 
         Specification<BookEntity> spec = buildBaseSpecification(accessibleLibraryIds, libraryId);
 
@@ -399,7 +444,7 @@ public class AppBookService {
             return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, 0L);
         }
 
-        Map<Long, BookEntity> bookEntitiesById = bookRepository.findAllById(orderedBookIds).stream()
+        Map<Long, BookEntity> bookEntitiesById = bookRepository.findAllForSummaryByIds(orderedBookIds).stream()
                 .collect(Collectors.toMap(BookEntity::getId, Function.identity()));
         Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, bookEntitiesById.keySet());
 
@@ -434,6 +479,10 @@ public class AppBookService {
 
         // Cache lookup avoid re-running 26+ aggregate queries within the TTL window
         String cacheKey = userId + ":" + libraryId + ":" + shelfId + ":" + magicShelfId;
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return emptyFilterOptions(cacheKey);
+        }
+
         AppFilterOptions cached = filterOptionsCache.getIfPresent(cacheKey);
         if (cached != null) {
             return cached;
@@ -1130,10 +1179,20 @@ public class AppBookService {
             int pageSize) {
 
         List<BookEntity> books = bookPage.getContent();
+        if (books.isEmpty()) {
+            return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, bookPage.getTotalElements());
+        }
+
+        List<Long> bookIds = books.stream().map(BookEntity::getId).toList();
         Map<Long, UserBookProgressProjection> progressMap = getProgressMapForBooks(userId, books);
 
+        Map<Long, BookEntity> enrichedMap = bookRepository.findAllForSummaryByIds(bookIds).stream()
+                .collect(Collectors.toMap(BookEntity::getId, Function.identity()));
+
         List<AppBookSummary> summaries = books.stream()
-                .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
+                .map(BookEntity::getId)
+                .filter(enrichedMap::containsKey)
+                .map(id -> mobileBookMapper.toSummary(enrichedMap.get(id), progressMap.get(id)))
                 .toList();
 
         return AppPageResponse.of(summaries, pageNum, pageSize, bookPage.getTotalElements());
@@ -1192,13 +1251,9 @@ public class AppBookService {
     }
 
     private Set<Long> resolveMagicShelfBookIds(Specification<BookEntity> spec) {
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<Long> cq = cb.createQuery(Long.class);
-        Root<BookEntity> root = cq.from(BookEntity.class);
-        cq.select(root.get("id"));
-        cq.where(spec.toPredicate(root, cq, cb));
-        return new HashSet<>(entityManager.createQuery(cq)
-                .getResultList());
+        return bookRepository.findBy(spec, q -> q.as(BookIdProjection.class).stream()
+                .map(BookIdProjection::getId)
+                .collect(Collectors.toSet()));
     }
 
     private List<AppFilterOptions.CountedOption> queryReadStatusCounts(

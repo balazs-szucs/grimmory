@@ -435,6 +435,7 @@ class AppSeriesServiceTest {
     private void mockBookPage(List<BookEntity> books, long total) {
         var page = new PageImpl<>(books, Pageable.ofSize(20), total);
         when(bookRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(bookRepository.findAllForSummaryByIds(any())).thenReturn(books);
     }
 
     private void mockProgress(List<UserBookProgressEntity> progressList) {

@@ -62,6 +62,10 @@ public class AppSeriesService {
         int pageNum = page != null && page >= 0 ? page : 0;
         int pageSize = size != null && size > 0 ? Math.min(size, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
 
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, 0L);
+        }
+
         // Build WHERE clause fragments
         String libraryClause = buildLibraryClause(accessibleLibraryIds, libraryId);
         String searchClause = (search != null && !search.trim().isEmpty())
@@ -173,10 +177,12 @@ public class AppSeriesService {
                 .map(t -> t.get(0, String.class))
                 .toList();
 
-        // Phase 2: Fetch books for enrichment (only ToOne joins; collections loaded via @BatchSize)
+        // Phase 2: Fetch books for enrichment (eagerly fetch metadata, library, and bookFiles to avoid N+1 queries during mapping)
         String libraryClause = buildLibraryClause(accessibleLibraryIds, libraryId);
-        String booksQuery = "SELECT b FROM BookEntity b"
+        String booksQuery = "SELECT DISTINCT b FROM BookEntity b"
                 + " JOIN FETCH b.metadata m"
+                + " JOIN FETCH b.library l"
+                + " LEFT JOIN FETCH b.bookFiles bf"
                 + " WHERE m.seriesName IN :seriesNames"
                 + " AND (b.deleted IS NULL OR b.deleted = false)"
                 + " AND (b.bookFiles IS NOT EMPTY OR b.isPhysical = true)"
@@ -268,6 +274,10 @@ public class AppSeriesService {
         int pageNum = page != null && page >= 0 ? page : 0;
         int pageSize = size != null && size > 0 ? Math.min(size, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
 
+        if (accessibleLibraryIds != null && accessibleLibraryIds.isEmpty()) {
+            return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, 0L);
+        }
+
         Sort sort = buildBookSort(sortBy, sortDir);
         Pageable pageable = PageRequest.of(pageNum, pageSize, sort);
 
@@ -275,13 +285,21 @@ public class AppSeriesService {
 
         Page<BookEntity> bookPage = bookRepository.findAll(spec, pageable);
 
-        Set<Long> bookIds = bookPage.getContent().stream()
-                .map(BookEntity::getId)
-                .collect(Collectors.toSet());
-        Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, bookIds);
+        List<BookEntity> books = bookPage.getContent();
+        if (books.isEmpty()) {
+            return AppPageResponse.of(Collections.emptyList(), pageNum, pageSize, bookPage.getTotalElements());
+        }
 
-        List<AppBookSummary> summaries = bookPage.getContent().stream()
-                .map(book -> mobileBookMapper.toSummary(book, progressMap.get(book.getId())))
+        List<Long> bookIds = books.stream().map(BookEntity::getId).toList();
+        Map<Long, UserBookProgressProjection> progressMap = getProgressMap(userId, new HashSet<>(bookIds));
+
+        Map<Long, BookEntity> enrichedMap = bookRepository.findAllForSummaryByIds(bookIds).stream()
+                .collect(Collectors.toMap(BookEntity::getId, Function.identity()));
+
+        List<AppBookSummary> summaries = books.stream()
+                .map(BookEntity::getId)
+                .filter(enrichedMap::containsKey)
+                .map(id -> mobileBookMapper.toSummary(enrichedMap.get(id), progressMap.get(id)))
                 .toList();
 
         return AppPageResponse.of(summaries, pageNum, pageSize, bookPage.getTotalElements());

@@ -361,15 +361,10 @@ public class ReadingSessionService {
 
         if (!bookIdsToFetch.isEmpty()) {
             Map<Long, List<String>> bookCategories = new HashMap<>();
-            bookRepository.findAllWithMetadataByIds(bookIdsToFetch).forEach(book -> {
-                List<String> categories = book.getMetadata() != null && book.getMetadata().getCategories() != null
-                        ? book.getMetadata().getCategories().stream()
-                        .map(CategoryEntity::getName)
-                        .sorted()
-                        .toList()
-                        : List.of();
-                bookCategories.put(book.getId(), categories);
+            bookRepository.findCategoriesByBookIds(bookIdsToFetch).forEach(proj -> {
+                bookCategories.computeIfAbsent(proj.getBookId(), k -> new ArrayList<>()).add(proj.getCategoryName());
             });
+            bookCategories.values().forEach(Collections::sort);
             responses.forEach(r -> r.setCategories(bookCategories.getOrDefault(r.getBookId(), List.of())));
         }
 

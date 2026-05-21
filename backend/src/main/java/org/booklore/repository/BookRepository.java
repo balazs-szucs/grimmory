@@ -1,5 +1,6 @@
 package org.booklore.repository;
 
+import org.booklore.repository.projection.BookCategoryProjection;
 import org.booklore.repository.projection.BookEmbeddingProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -53,6 +54,14 @@ public interface BookRepository extends JpaRepository<BookEntity, Long>, JpaSpec
     @EntityGraph(attributePaths = { "metadata", "library", "bookFiles" })
     @Query("SELECT b FROM BookEntity b WHERE b.id IN :bookIds AND (b.deleted IS NULL OR b.deleted = false)")
     List<BookEntity> findAllForSummaryByIds(@Param("bookIds") Collection<Long> bookIds);
+
+    @Query("""
+            SELECT b.id AS bookId, c.name AS categoryName
+            FROM BookEntity b
+            JOIN b.metadata.categories c
+            WHERE b.id IN :bookIds
+            """)
+    List<BookCategoryProjection> findCategoriesByBookIds(@Param("bookIds") Collection<Long> bookIds);
 
     @EntityGraph(attributePaths = {"bookFiles", "metadata", "library", "libraryPath"})
     @Query("SELECT b FROM BookEntity b JOIN b.bookFiles bf WHERE bf.currentHash = :currentHash AND bf.isBookFormat = true AND (b.deleted IS NULL OR b.deleted = false)")
