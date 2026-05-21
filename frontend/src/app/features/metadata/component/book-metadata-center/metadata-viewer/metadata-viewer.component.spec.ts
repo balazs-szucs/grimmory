@@ -260,7 +260,7 @@ describe('MetadataViewerComponent', () => {
           }
         },
         {provide: LibraryService, useValue: {findLibraryById}},
-        {provide: BookMetadataManageService, useValue: {supportsDualCovers: signal(false)}},
+        {provide: BookMetadataManageService, useValue: {supportsDualCovers: vi.fn(() => false)}},
         {provide: AudiobookService, useValue: {}},
         {
           provide: BookDialogHelperService,

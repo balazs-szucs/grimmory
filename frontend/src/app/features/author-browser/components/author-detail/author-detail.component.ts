@@ -1,4 +1,4 @@
-import { AfterViewChecked, Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import { AfterViewChecked, Component, computed, ElementRef, OnInit, afterNextRender, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from 'primeng/tabs';
@@ -57,6 +57,12 @@ export class AuthorDetailComponent implements OnInit, AfterViewChecked {
   private pageTitle = inject(PageTitleService);
   private t = inject(TranslocoService);
 
+  constructor() {
+    afterNextRender(() => {
+      this.isFirstRender.set(false);
+    });
+  }
+
   readonly descriptionContentRef = viewChild<ElementRef<HTMLElement>>('descriptionContent');
   private readonly scrollElement = viewChild<ElementRef<HTMLElement>>('scrollElement');
   protected readonly isFirstRender = signal(true);
@@ -114,7 +120,6 @@ export class AuthorDetailComponent implements OnInit, AfterViewChecked {
   }
 
   ngAfterViewChecked(): void {
-    this.isFirstRender.set(false);
     const descriptionContent = this.descriptionContentRef();
     this.updateDescriptionOverflow(descriptionContent?.nativeElement);
   }

@@ -25,7 +25,7 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {Tooltip} from "primeng/tooltip";
 import {Divider} from "primeng/divider";
 import {TagComponent} from "../../../../shared/components/tag/tag.component";
-import {AfterViewChecked, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, signal, viewChild} from '@angular/core';
+import {AfterViewChecked, ChangeDetectionStrategy, Component, afterNextRender, computed, effect, ElementRef, inject, signal, viewChild} from '@angular/core';
 import {BookCardOverlayPreferenceService} from '../book-browser/book-card-overlay-preference.service';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {CoverPlaceholderComponent} from '../../../../shared/components/cover-generator/cover-generator.component';
@@ -371,6 +371,10 @@ export class SeriesPageComponent implements AfterViewChecked {
   });
 
   constructor() {
+    afterNextRender(() => {
+      this.isFirstRender.set(false);
+    });
+
     effect(() => {
       const user = this.currentUser();
       if (!user) {
@@ -488,7 +492,6 @@ export class SeriesPageComponent implements AfterViewChecked {
   }
 
   ngAfterViewChecked(): void {
-    this.isFirstRender.set(false);
     if (!this.isExpanded()) {
       const el = this.descriptionContentRef()?.nativeElement;
       if (!el) return;
