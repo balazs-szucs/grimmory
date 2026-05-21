@@ -26,7 +26,12 @@ import java.util.Set;
 @Repository
 public interface UserBookProgressRepository extends JpaRepository<UserBookProgressEntity, Long> {
 
-    Optional<UserBookProgressEntity> findByUserIdAndBookId(Long userId, Long bookId);
+    @Query("""
+        SELECT ubp FROM UserBookProgressEntity ubp
+        WHERE ubp.user.id = :userId
+          AND ubp.book.id = :bookId
+    """)
+    Optional<UserBookProgressEntity> findByUserIdAndBookId(@Param("userId") Long userId, @Param("bookId") Long bookId);
 
     @EntityGraph(attributePaths = {"book", "book.bookFiles", "book.library", "book.libraryPath"})
     @Query("""
@@ -39,7 +44,12 @@ public interface UserBookProgressRepository extends JpaRepository<UserBookProgre
             @Param("bookId") Long bookId
     );
 
-    List<UserBookProgressEntity> findByUserIdAndBookIdIn(Long userId, Set<Long> bookIds);
+    @Query("""
+        SELECT ubp FROM UserBookProgressEntity ubp
+        WHERE ubp.user.id = :userId
+          AND ubp.book.id IN :bookIds
+    """)
+    List<UserBookProgressEntity> findByUserIdAndBookIdIn(@Param("userId") Long userId, @Param("bookIds") Set<Long> bookIds);
 
     @Query("""
         SELECT ubp.book.id as bookId,
