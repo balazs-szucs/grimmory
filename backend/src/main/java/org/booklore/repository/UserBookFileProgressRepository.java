@@ -82,8 +82,6 @@ public interface UserBookFileProgressRepository extends JpaRepository<UserBookFi
             @Param("userId") Long userId,
             @Param("bookIds") Iterable<Long> bookIds
     );
-
-    @EntityGraph(attributePaths = {"bookFile", "bookFile.book"})
     @Query("""
         SELECT ubfp FROM UserBookFileProgressEntity ubfp
         WHERE ubfp.user.id = :userId
