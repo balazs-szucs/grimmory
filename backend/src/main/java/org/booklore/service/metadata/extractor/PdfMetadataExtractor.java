@@ -12,6 +12,13 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.Year;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import static java.time.temporal.ChronoField.*;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -19,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.function.DoubleConsumer;
@@ -30,6 +38,18 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     private static final Pattern COMMA_AMPERSAND_PATTERN = Pattern.compile("[,&]");
     private static final Pattern ISBN_CLEANUP_PATTERN = Pattern.compile("[^0-9Xx]");
+    private static final Pattern SERIES_INDEX_PATTERN = Pattern.compile("<series_index>([^<]+)</series_index>");
+
+    private static String toPascalCase(String name) {
+        return name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
+    }
+
+    private static Set<String> splitSemicolon(String value) {
+        return Arrays.stream(value.split(";"))
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
 
     @Override
     public byte[] extractCover(File file) {
@@ -87,15 +107,13 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
             // Moods and Tags (List/Bag with semicolon fallback)
             Set<String> moodsSet = new LinkedHashSet<>(findCustomListField(xmp, "moods"));
             if (moodsSet.isEmpty()) {
-                findCustomField(xmp, "moods").ifPresent(m ->
-                        Arrays.stream(m.split(";")).map(String::trim).filter(StringUtils::isNotBlank).forEach(moodsSet::add));
+                findCustomField(xmp, "moods").map(PdfMetadataExtractor::splitSemicolon).ifPresent(moodsSet::addAll);
             }
             if (!moodsSet.isEmpty()) metadataBuilder.moods(moodsSet);
 
             Set<String> tagsSet = new LinkedHashSet<>(findCustomListField(xmp, "tags"));
             if (tagsSet.isEmpty()) {
-                findCustomField(xmp, "tags").ifPresent(t ->
-                        Arrays.stream(t.split(";")).map(String::trim).filter(StringUtils::isNotBlank).forEach(tagsSet::add));
+                findCustomField(xmp, "tags").map(PdfMetadataExtractor::splitSemicolon).ifPresent(tagsSet::addAll);
             }
             if (!tagsSet.isEmpty()) metadataBuilder.tags(tagsSet);
 
@@ -113,32 +131,35 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
             // Calibre & Series
             xmp.calibreSeries().or(() -> doc.metadata("Series")).ifPresent(metadataBuilder::seriesName);
-            xmp.calibreSeriesIndex().map(Double::floatValue)
+            Optional<Float> seriesNumber = xmp.calibreSeriesIndex().map(Double::floatValue)
                     .or(() -> doc.metadata("SeriesNumber").flatMap(val -> {
                         try { return Optional.of(Float.parseFloat(val)); } catch (Exception _) { return Optional.empty(); }
-                    }))
-                    .ifPresent(metadataBuilder::seriesNumber);
+                    }));
 
             // Calibre fallback for un-prefixed series_index (legacy)
-            if (metadataBuilder.build().getSeriesNumber() == null) {
+            if (seriesNumber.isEmpty()) {
                 String xmpStr = doc.xmpMetadataString();
-                Matcher siMatcher = Pattern.compile("<series_index>([^<]+)</series_index>").matcher(xmpStr);
+                Matcher siMatcher = SERIES_INDEX_PATTERN.matcher(xmpStr);
                 if (siMatcher.find()) {
-                    try { metadataBuilder.seriesNumber(Float.parseFloat(siMatcher.group(1).trim())); } catch (Exception _) {}
+                    try { seriesNumber = Optional.of(Float.parseFloat(siMatcher.group(1).trim())); } catch (Exception _) {}
                 }
             }
 
             // Booklore Custom Fields
             findCustomField(xmp, "seriesName").ifPresent(metadataBuilder::seriesName);
-            findCustomField(xmp, "seriesNumber").ifPresent(val -> {
-                try { metadataBuilder.seriesNumber(Float.parseFloat(val)); } catch (Exception _) {}
+            Optional<Float> bookloreSeriesNumber = findCustomField(xmp, "seriesNumber").flatMap(val -> {
+                try { return Optional.of(Float.parseFloat(val)); } catch (Exception _) { return Optional.empty(); }
             });
+            if (bookloreSeriesNumber.isPresent()) seriesNumber = bookloreSeriesNumber;
+
+            seriesNumber.ifPresent(metadataBuilder::seriesNumber);
+
             findCustomField(xmp, "seriesTotal").ifPresent(val -> {
                 try { metadataBuilder.seriesTotal(Integer.parseInt(val)); } catch (Exception _) {}
             });
             findCustomField(xmp, "subtitle").or(() -> doc.metadata("Subtitle")).ifPresent(metadataBuilder::subtitle);
 
-            // Identifiers (Low priority fallbacks first)
+            // Identifiers
             xmp.findField("isbn13").ifPresent(val -> metadataBuilder.isbn13(cleanIsbn(val)));
             xmp.findField("isbn10").ifPresent(val -> metadataBuilder.isbn10(cleanIsbn(val)));
             xmp.findField("googleId").ifPresent(metadataBuilder::googleId);
@@ -153,7 +174,7 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
             doc.metadata("ISBN").ifPresent(val -> mapIsbn(val, metadataBuilder));
 
-            // High priority Identifiers (xmp:Identifier and derived)
+            // Identifiers (xmp:Identifier and derived)
             xmp.isbns().forEach(val -> mapIsbn(val, metadataBuilder));
             xmp.xmpIdentifier("isbn").ifPresent(val -> mapIsbn(val, metadataBuilder));
             xmp.xmpIdentifier("isbn13").ifPresent(val -> metadataBuilder.isbn13(cleanIsbn(val)));
@@ -185,56 +206,75 @@ public class PdfMetadataExtractor implements FileMetadataExtractor {
 
     private void mapIsbn(String value, BookMetadata.BookMetadataBuilder builder) {
         String cleaned = cleanIsbn(value);
-        if (cleaned.length() == 13) builder.isbn13(cleaned);
-        else if (cleaned.length() == 10) builder.isbn10(cleaned);
-        else builder.isbn13(cleaned);
+        switch (cleaned.length()) {
+            case 13 -> builder.isbn13(cleaned);
+            case 10 -> builder.isbn10(cleaned);
+            default -> log.debug("Unrecognized ISBN format (length={}): {}", cleaned.length(), cleaned);
+        }
     }
 
 
     private Optional<String> findCustomField(XmpMetadata xmp, String name) {
-        Optional<String> val = xmp.findField(name);
-        if (val.isPresent()) return val;
-        // Try PascalCase
-        String pascal = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
-        return xmp.findField(pascal);
+        return xmp.findField(name)
+                .or(() -> xmp.findField(toPascalCase(name)));
     }
 
     private List<String> findCustomListField(XmpMetadata xmp, String name) {
         List<String> values = xmp.findListField(name);
-        if (!values.isEmpty()) {
-            return values;
-        }
-
-        String pascal = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
-        return xmp.findListField(pascal);
+        return values.isEmpty() ? xmp.findListField(toPascalCase(name)) : values;
     }
 
     private static String cleanIsbn(String value) {
         return ISBN_CLEANUP_PATTERN.matcher(value).replaceAll("");
     }
 
-    /**
-     * Parses PDF date strings in the standard D:YYYYMMDDHHmmSS format.
-     */
+    private static final DateTimeFormatter PDF_DATE_FORMATTER = new DateTimeFormatterBuilder()
+            .optionalStart().appendLiteral("D:").optionalEnd()
+            .appendValue(YEAR, 4)
+            .optionalStart().appendValue(MONTH_OF_YEAR, 2)
+            .optionalStart().appendValue(DAY_OF_MONTH, 2)
+            .optionalStart().appendValue(HOUR_OF_DAY, 2)
+            .optionalStart().appendValue(MINUTE_OF_HOUR, 2)
+            .optionalStart().appendValue(SECOND_OF_MINUTE, 2)
+            .optionalStart().appendOffset("+HHmm", "Z").optionalEnd()
+            .optionalStart().appendOffset("+HH:mm", "Z").optionalEnd()
+            .optionalEnd().optionalEnd().optionalEnd().optionalEnd().optionalEnd()
+            .toFormatter();
+
     private LocalDate parsePdfDate(String pdfDate) {
         if (pdfDate == null || pdfDate.isBlank()) return null;
+        String cleaned = pdfDate.replace("'", "").trim();
         try {
-            String s = pdfDate.startsWith("D:") ? pdfDate.substring(2) : pdfDate;
-            if (s.matches("\\d{4}-\\d{2}-\\d{2}")) {
-                return LocalDate.parse(s);
-            }
-            if (s.length() >= 8 && s.substring(0, 8).matches("\\d{8}")) {
-                int year = Integer.parseInt(s.substring(0, 4));
-                int month = Integer.parseInt(s.substring(4, 6));
-                int day = Integer.parseInt(s.substring(6, 8));
-                return LocalDate.of(year, month, day);
-            }
-            if (s.length() >= 4 && s.substring(0, 4).matches("\\d{4}")) {
-                return LocalDate.of(Integer.parseInt(s.substring(0, 4)), 1, 1);
-            }
+            return switch (PDF_DATE_FORMATTER.parseBest(
+                    cleaned,
+                    LocalDate::from,
+                    LocalDateTime::from,
+                    OffsetDateTime::from,
+                    YearMonth::from,
+                    Year::from)) {
+                case LocalDate ld          -> ld;
+                case LocalDateTime ldt     -> ldt.toLocalDate();
+                case OffsetDateTime odt    -> odt.toLocalDate();
+                case YearMonth ym          -> ym.atDay(1);
+                case Year y                -> y.atDay(1);
+                default                    -> null;
+            };
         } catch (Exception _) {
+            // Try ISO format as fallback
+            try {
+                return OffsetDateTime.parse(cleaned).toLocalDate();
+            } catch (Exception _) {
+                try {
+                    return LocalDateTime.parse(cleaned).toLocalDate();
+                } catch (Exception _) {
+                    try {
+                        return LocalDate.parse(cleaned);
+                    } catch (Exception _) {
+                        return null;
+                    }
+                }
+            }
         }
-        return null;
     }
 
     private void mapRating(XmpMetadata xmp, String name, String fallbackName, DoubleConsumer setter) {
